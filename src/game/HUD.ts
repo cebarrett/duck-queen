@@ -32,10 +32,14 @@ export class HUD {
   }
 
   private render(): void {
-    const line1 =
-      this.mode === 'fly'
-        ? '🦆 FLY  ·  WASD move · hold Space to rise, release to descend'
-        : '🦆 WADDLE  ·  WASD move · Space to take off'
+    let line1: string
+    if (this.mode === 'fly') {
+      line1 = '🦆 FLY  ·  WASD move · hold Space to rise, release to descend'
+    } else if (this.mode === 'swim') {
+      line1 = '🦆 SWIM  ·  WASD paddle · Space to take off'
+    } else {
+      line1 = '🦆 WADDLE  ·  WASD move · Space to take off'
+    }
     const line2 = `👑 Subjects: ${this.subjects}  ·  press Q to quack`
 
     // Two lines via <br>. The values are our own strings + an integer, so there's

@@ -3,10 +3,11 @@ import type { Input } from './Input'
 import type { ThirdPersonCamera } from './ThirdPersonCamera'
 import type { Duck } from './Duck'
 import type { Collider } from './World'
+import type { Pond } from './Water'
 import { approachAngle } from './mathUtils'
 
-// The two ways the Queen gets around. Exported so the HUD can label it.
-export type DuckMode = 'waddle' | 'fly'
+// The ways the Queen gets around. Exported so the HUD can label it.
+export type DuckMode = 'waddle' | 'fly' | 'swim'
 
 // --- Waddle (ground) tuning ------------------------------------------------
 const MAX_SPEED = 6 // top waddle speed (units/second)
@@ -22,6 +23,12 @@ const FLY_FALL_SPEED = 3 // gentle downward drift when Space is released
 const FLY_RESPONSIVENESS = 3 // lower than waddle => more inertia, less floaty-twitchy
 const FLY_LEAN = 0.25 // how far she pitches nose-down while cruising (radians)
 const MAX_ALTITUDE = 60 // ceiling so she can't fly off into the fog forever
+
+// --- Swim tuning: slow and buoyant -----------------------------------------
+const SWIM_SPEED = 3.5 // top paddling speed (slower than waddling)
+const SWIM_RESPONSIVENESS = 2.5 // very glidey — she drifts on the water
+const SWIM_BOB = 0.05 // gentle vertical bob, always going (water never holds still)
+const SWIM_ROLL = 0.06 // slight side-to-side sway
 
 // --- Wing flap (fly only) --------------------------------------------------
 const FLAP_SPEED = 14 // how fast the phase advances (radians/sec)
@@ -39,11 +46,12 @@ const STEP_UP = 0.6 // surfaces within this height of her feet are floors she ca
 const GROUND_EPS = 0.05 // how far above her floor counts as "in the air"
 
 /**
- * DuckController moves the Queen in one of two modes:
- *   - waddle: stuck to the ground, hops + tilts as she walks.
- *   - fly:    free in 3D; Space/Shift change altitude; she leans into the glide.
+ * DuckController moves the Queen in one of three modes, chosen by her situation:
+ *   - waddle: on the ground; hops + tilts as she walks.
+ *   - fly:    above her floor or pressing Space; free in 3D, leans into the glide.
+ *   - swim:   over the pond at rest; floats at the waterline, paddles slowly.
  *
- * Both modes share the same "ease toward a target velocity" core (see Step 4):
+ * All three share the same "ease toward a target velocity" core (see Step 4):
  * a slow ease gives heavy, weighty motion instead of instant stop/start.
  */
 export class DuckController {
@@ -59,6 +67,7 @@ export class DuckController {
   // top of a rock/tree she's standing on). Recomputed every frame after she
   // moves. This is her "floor".
   private groundHeight = 0
+  private overWater = false // is she currently over the pond?
   private flapPhase = 0 // drives the wing flap sine wave while flying
   private flapIntensity = 0 // 0 = gliding (still wings), 1 = flapping hard
 
@@ -69,6 +78,7 @@ export class DuckController {
     private readonly input: Input,
     private readonly camera: ThirdPersonCamera,
     private readonly colliders: Collider[],
+    private readonly pond: Pond,
   ) {}
 
   getMode(): DuckMode {
@@ -110,9 +120,11 @@ export class DuckController {
       dirZ /= len
     }
 
-    // --- Mode-specific velocity (horizontal for both, vertical for fly) ----
+    // --- Mode-specific horizontal velocity (vertical handled below) --------
     if (this.mode === 'fly') {
       this.updateFly(delta, dirX, dirZ)
+    } else if (this.mode === 'swim') {
+      this.updateSwim(delta, dirX, dirZ)
     } else {
       this.updateWaddle(delta, dirX, dirZ)
     }
@@ -123,10 +135,15 @@ export class DuckController {
     this.resolveWalls()
 
     // --- Vertical: find the floor under her new position and settle onto it -
-    // (Doing this AFTER the horizontal move means landing on a rock she just
-    // flew over works correctly.)
+    // Over the pond her "floor" is the waterline (so she floats on the surface);
+    // otherwise it's the ground or a rock/tree top she's standing on. Doing this
+    // AFTER the horizontal move means crossing the shoreline (or landing on a
+    // rock she just flew over) resolves correctly.
     const pos = this.duck.group.position
-    this.groundHeight = this.supportHeightAt(pos.x, pos.z, this.altitude)
+    this.overWater = this.pond.isWater(pos.x, pos.z)
+    this.groundHeight = this.overWater
+      ? this.pond.floatLine
+      : this.supportHeightAt(pos.x, pos.z, this.altitude)
     this.updateAltitude(delta)
 
     // --- Face the way she's moving (horizontal only) -----------------------
@@ -254,12 +271,15 @@ export class DuckController {
   }
 
   private updateMode(): void {
-    // No toggle key: she's flying whenever she's above her floor OR pressing
-    // Space to take off. Otherwise (resting on the ground or a rock) she waddles.
-    // So tapping Space launches her, and she returns to waddling once she lands.
+    // No toggle keys — her mode follows her situation:
+    //   above the floor OR pressing Space -> fly (Space launches her)
+    //   else over the pond               -> swim
+    //   else                             -> waddle
     const airborne = this.altitude > this.groundHeight + GROUND_EPS
     const wantsUp = this.input.isDown('Space')
-    this.mode = airborne || wantsUp ? 'fly' : 'waddle'
+    if (wantsUp || airborne) this.mode = 'fly'
+    else if (this.overWater) this.mode = 'swim'
+    else this.mode = 'waddle'
   }
 
   private updateWaddle(delta: number, dirX: number, dirZ: number): void {
@@ -267,6 +287,16 @@ export class DuckController {
     const targetX = dirX * MAX_SPEED
     const targetZ = dirZ * MAX_SPEED
     const t = 1 - Math.exp(-RESPONSIVENESS * delta)
+    this.velocity.x += (targetX - this.velocity.x) * t
+    this.velocity.z += (targetZ - this.velocity.z) * t
+  }
+
+  private updateSwim(delta: number, dirX: number, dirZ: number): void {
+    // Like waddling, but slower and much glidier — she coasts across the water.
+    // Vertical settling to the waterline is handled in updateAltitude.
+    const targetX = dirX * SWIM_SPEED
+    const targetZ = dirZ * SWIM_SPEED
+    const t = 1 - Math.exp(-SWIM_RESPONSIVENESS * delta)
     this.velocity.x += (targetX - this.velocity.x) * t
     this.velocity.z += (targetZ - this.velocity.z) * t
   }
@@ -297,8 +327,14 @@ export class DuckController {
       this.waddlePhase += delta * (6 + speed) // steps come quicker when faster
       bob = Math.abs(Math.sin(this.waddlePhase)) * WADDLE_BOB * moveFactor
       roll = Math.sin(this.waddlePhase) * WADDLE_ROLL * moveFactor
+    } else if (this.mode === 'swim') {
+      // Float: a slow, gentle bob + sway that runs even when she's still — the
+      // water's always moving her a little.
+      this.waddlePhase += delta * 2.5
+      bob = Math.sin(this.waddlePhase) * SWIM_BOB
+      roll = Math.sin(this.waddlePhase * 0.7) * SWIM_ROLL
     } else {
-      // Cruising: lean nose-down with horizontal speed; nose-up while rising.
+      // Flying: lean nose-down with horizontal speed; nose-up while rising.
       const fwdFactor = Math.min(speed / FLY_SPEED, 1)
       pitch = -FLY_LEAN * fwdFactor + this.velocity.y * 0.04
     }

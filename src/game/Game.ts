@@ -73,7 +73,13 @@ export class Game {
     // every frame, so we no longer set camera.position by hand.
     this.input = new Input(this.renderer.domElement)
     this.cameraRig = new ThirdPersonCamera(this.camera, this.input, this.duck.group)
-    this.duckController = new DuckController(this.duck, this.input, this.cameraRig, world.colliders)
+    this.duckController = new DuckController(
+      this.duck,
+      this.input,
+      this.cameraRig,
+      world.colliders,
+      world.pond,
+    )
 
     // The duck subjects. The Flock spawns and updates them; it needs Input (to
     // hear the Queen's quack) and the Queen's Group (to know where she is).
