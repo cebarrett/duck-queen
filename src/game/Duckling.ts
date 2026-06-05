@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { buildDuckModel } from './duckModel'
 import { approachAngle, randRange } from './mathUtils'
 import type { Pond } from './Water'
-import type { Food } from './Food'
+import type { Food, FoodItem } from './Food'
 
 // Subjects are smaller than the Queen and duckling-yellow so they read as "hers"
 // at a glance (vs. her white).
@@ -44,10 +44,13 @@ const SWIM_BOB = 0.04 // gentle float bob — no waddle hop
 const SWIM_SWAY = 0.05 // very slight side sway (much less than the waddle wiggle)
 
 // --- Foraging --------------------------------------------------------------
-const EAT_RADIUS = 1.0 // a follower eats any plant it comes this close to
+const EAT_RADIUS = 1.0 // close enough to a plant to eat it
+const FORAGE_RADIUS = 5 // how far a follower will notice a plant and go for it
+const FORAGE_RATE = 0.7 // per second: chance to peel off for an in-range plant
+const FORAGE_SPEED = 3 // eager amble toward a snack (quicker than idle wander)
 
 // A duckling is always in exactly one of these.
-type DucklingState = 'pausing' | 'wandering' | 'following' | 'distracted'
+type DucklingState = 'pausing' | 'wandering' | 'following' | 'distracted' | 'foraging'
 
 /** What a following duckling needs to know about the world each frame: where the
  *  Queen is, and who its flockmates are (so it can avoid bunching up). */
@@ -80,6 +83,7 @@ export class Duckling {
   private distractTimer = 0 // counts down a distraction
   private targetX = 0
   private targetZ = 0
+  private targetFood: FoodItem | null = null // the plant she's foraging toward
 
   constructor(
     x: number,
@@ -102,14 +106,21 @@ export class Duckling {
     this.timer = randRange(0, PAUSE_MAX) // stagger their first move
   }
 
-  /** Is she one of the Queen's — following, or just temporarily distracted?
-   *  (A distracted duck still counts as a subject; she'll come back.) */
+  /** Is she one of the Queen's — following, off foraging, or briefly distracted?
+   *  (All three still count as subjects; she'll return.) */
   get isSubject(): boolean {
-    return this.state === 'following' || this.state === 'distracted'
+    return this.state === 'following' || this.state === 'distracted' || this.state === 'foraging'
   }
 
-  /** Called when the Queen quacks within range: fall in behind her. */
+  /** Called when the Queen quacks a NEW duck in range: fall in behind her. */
   recruit(): void {
+    this.state = 'following'
+  }
+
+  /** The Queen quacked her existing flock: snap back to following, dropping any
+   *  foraging or distraction. This is the "to me!" recall. */
+  rally(): void {
+    this.targetFood = null
     this.state = 'following'
   }
 
@@ -117,9 +128,15 @@ export class Duckling {
     switch (this.state) {
       case 'following':
         if (this.checkLost(ctx)) break // stranded too far — gives up
-        // Every so often a duck gets distracted and wanders off for a bit.
+        // Notice a nearby plant and peel off to go gather it...
+        if (Math.random() < FORAGE_RATE * delta && this.tryForage()) break
+        // ...or, less usefully, get distracted and wander off for a bit.
         if (Math.random() < DISTRACT_RATE * delta) this.startDistraction()
         else this.followQueen(delta, ctx)
+        break
+      case 'foraging':
+        if (this.checkLost(ctx)) break
+        this.forage(delta)
         break
       case 'distracted':
         if (this.checkLost(ctx)) break
@@ -251,6 +268,40 @@ export class Duckling {
       return
     }
     const speed = dist < ARRIVE_RADIUS ? WANDER_SPEED * (dist / ARRIVE_RADIUS) : WANDER_SPEED
+    this.ease((dx / dist) * speed, (dz / dist) * speed, delta)
+  }
+
+  /** Look for a plant within FORAGE_RADIUS; if there's one, target it and switch
+   *  to foraging. Returns whether she's now off to forage. */
+  private tryForage(): boolean {
+    const pos = this.group.position
+    const plant = this.food.nearestUncollected(pos.x, pos.z, FORAGE_RADIUS)
+    if (!plant) return false
+    this.targetFood = plant
+    this.state = 'foraging'
+    return true
+  }
+
+  /** Head to the targeted plant and eat it, then rejoin the flock. If the plant
+   *  vanished (another duck ate it), just go back to following. */
+  private forage(delta: number): void {
+    const plant = this.targetFood
+    if (!plant || plant.collected) {
+      this.targetFood = null
+      this.state = 'following'
+      return
+    }
+    const pos = this.group.position
+    const dx = plant.x - pos.x
+    const dz = plant.z - pos.z
+    const dist = Math.hypot(dx, dz)
+    if (dist < EAT_RADIUS) {
+      this.food.collect(plant) // nom
+      this.targetFood = null
+      this.state = 'following'
+      return
+    }
+    const speed = dist < ARRIVE_RADIUS ? FORAGE_SPEED * (dist / ARRIVE_RADIUS) : FORAGE_SPEED
     this.ease((dx / dist) * speed, (dz / dist) * speed, delta)
   }
 

@@ -57,7 +57,9 @@ export class Flock {
     }
   }
 
-  /** On a fresh Q press, recruit every not-yet-following duck within range. */
+  /** On a fresh Q press: recall the existing flock (interrupting any foraging /
+   *  distraction so they fall back in behind her), AND recruit any new ducks in
+   *  range. So a quack is both "come here" to strangers and "to me!" to her own. */
   private handleQuack(): void {
     const down = this.input.isDown('KeyQ')
     if (down && !this.wasQuackDown) {
@@ -66,9 +68,12 @@ export class Flock {
       const qx = this.queen.position.x
       const qz = this.queen.position.z
       for (const d of this.ducklings) {
-        if (d.isSubject) continue // already hers (following or distracted)
-        const dist = Math.hypot(d.group.position.x - qx, d.group.position.z - qz)
-        if (dist <= QUACK_RANGE) d.recruit()
+        if (d.isSubject) {
+          d.rally() // already hers — snap her back to following
+        } else {
+          const dist = Math.hypot(d.group.position.x - qx, d.group.position.z - qz)
+          if (dist <= QUACK_RANGE) d.recruit()
+        }
       }
     }
     this.wasQuackDown = down
