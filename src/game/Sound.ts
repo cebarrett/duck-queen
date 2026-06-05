@@ -47,6 +47,44 @@ export class Sound {
     this.synthQuack(ctx)
   }
 
+  /**
+   * A little water splash. `strength` (~0–6, roughly how fast she hit the water)
+   * scales the volume. It's a short burst of white noise pushed through a
+   * lowpass that sweeps downward — that "ploosh, fading to a low gurgle" shape
+   * is what reads as water rather than static.
+   */
+  splash(strength = 1): void {
+    const ctx = this.getContext()
+    if (!ctx) return
+
+    const now = ctx.currentTime
+    const dur = 0.28
+
+    // A buffer of white noise (random samples) is the raw material of a splash.
+    const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate)
+    const data = buffer.getChannelData(0)
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1
+    const src = ctx.createBufferSource()
+    src.buffer = buffer
+
+    const lp = ctx.createBiquadFilter()
+    lp.type = 'lowpass'
+    lp.frequency.setValueAtTime(1800, now)
+    lp.frequency.exponentialRampToValueAtTime(350, now + dur)
+
+    const gain = ctx.createGain()
+    const vol = Math.min(0.5, 0.16 + strength * 0.05)
+    gain.gain.setValueAtTime(0.0001, now)
+    gain.gain.exponentialRampToValueAtTime(vol, now + 0.012)
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + dur)
+
+    src.connect(lp)
+    lp.connect(gain)
+    gain.connect(ctx.destination)
+    src.start(now)
+    src.stop(now + dur)
+  }
+
   // --- Recorded-file path ----------------------------------------------------
 
   private async fetchQuackFile(): Promise<void> {

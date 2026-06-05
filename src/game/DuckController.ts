@@ -30,6 +30,11 @@ const SWIM_RESPONSIVENESS = 2.5 // very glidey — she drifts on the water
 const SWIM_BOB = 0.05 // gentle vertical bob, always going (water never holds still)
 const SWIM_ROLL = 0.06 // slight side-to-side sway
 
+// --- Water splash (takeoff / landing) --------------------------------------
+const TAKEOFF_POP = 4 // upward kick when launching off the water (a crisp exit)
+const SPLASH_MIN_SPEED = 0.8 // ignore gentle settling; only splash on a real impact
+const TAKEOFF_SPLASH = 2 // splash strength when launching off the water
+
 // --- Wing flap (fly only) --------------------------------------------------
 const FLAP_SPEED = 14 // how fast the phase advances (radians/sec)
 const FLAP_AMPLITUDE = 0.5 // half the up/down swing (radians)
@@ -72,6 +77,8 @@ export class DuckController {
   private flapIntensity = 0 // 0 = gliding (still wings), 1 = flapping hard
 
   private mode: DuckMode = 'waddle'
+  private prevMode: DuckMode = 'waddle' // last frame's mode, for spotting transitions
+  private pendingSplash = 0 // >0 = she just landed in water this hard; fire a splash
 
   constructor(
     private readonly duck: Duck,
@@ -79,6 +86,9 @@ export class DuckController {
     private readonly camera: ThirdPersonCamera,
     private readonly colliders: Collider[],
     private readonly pond: Pond,
+    // Called when she breaks the water surface (x, z, strength) so Game can play
+    // the splash sound + ripple. The controller decides WHEN; Game decides WHAT.
+    private readonly onSplash: (x: number, z: number, strength: number) => void,
   ) {}
 
   getMode(): DuckMode {
@@ -87,6 +97,10 @@ export class DuckController {
 
   update(delta: number): void {
     this.updateMode()
+
+    // She "takes off" the instant she leaves the water for flight (was swimming
+    // over water last frame, flying now). Captured here before velocities change.
+    const tookOff = this.overWater && this.prevMode === 'swim' && this.mode === 'fly'
 
     // --- Camera-relative ground directions (same as Step 4) ----------------
     const yaw = this.camera.getYaw()
@@ -129,6 +143,9 @@ export class DuckController {
       this.updateWaddle(delta, dirX, dirZ)
     }
 
+    // Give takeoff off the water a crisp upward pop instead of a slow ooze up.
+    if (tookOff) this.velocity.y = Math.max(this.velocity.y, TAKEOFF_POP)
+
     // --- Apply horizontal movement, then push out of obstacle SIDES --------
     this.duck.group.position.x += this.velocity.x * delta
     this.duck.group.position.z += this.velocity.z * delta
@@ -145,6 +162,15 @@ export class DuckController {
       ? this.pond.floatLine
       : this.supportHeightAt(pos.x, pos.z, this.altitude)
     this.updateAltitude(delta)
+
+    // --- Splash when she breaks the surface (landing from air, or taking off) -
+    if (this.pendingSplash > 0) {
+      this.onSplash(pos.x, pos.z, this.pendingSplash) // splashdown from flight
+      this.pendingSplash = 0
+    } else if (tookOff) {
+      this.onSplash(pos.x, pos.z, TAKEOFF_SPLASH) // launching off the water
+    }
+    this.prevMode = this.mode
 
     // --- Face the way she's moving (horizontal only) -----------------------
     const speed = Math.hypot(this.velocity.x, this.velocity.z)
@@ -258,7 +284,11 @@ export class DuckController {
     if (this.mode === 'fly') {
       this.altitude += this.velocity.y * delta
       if (this.altitude <= this.groundHeight) {
-        this.altitude = this.groundHeight // landed on the floor (ground/rock top)
+        // Coming down onto water fast enough? Remember it so we make a splash.
+        if (this.overWater && this.velocity.y < -SPLASH_MIN_SPEED) {
+          this.pendingSplash = -this.velocity.y
+        }
+        this.altitude = this.groundHeight // landed on the floor (ground/rock/water)
         if (this.velocity.y < 0) this.velocity.y = 0
       } else if (this.altitude >= MAX_ALTITUDE) {
         this.altitude = MAX_ALTITUDE

@@ -6,6 +6,7 @@ import { ThirdPersonCamera } from './ThirdPersonCamera'
 import { DuckController } from './DuckController'
 import { Flock } from './Flock'
 import { Sound } from './Sound'
+import { Splash } from './Splash'
 import { HUD } from './HUD'
 
 /**
@@ -36,6 +37,7 @@ export class Game {
   private readonly duckController: DuckController
   private readonly flock: Flock
   private readonly sound = new Sound()
+  private readonly splashFx: Splash
   private readonly hud = new HUD()
 
   constructor() {
@@ -73,12 +75,18 @@ export class Game {
     // every frame, so we no longer set camera.position by hand.
     this.input = new Input(this.renderer.domElement)
     this.cameraRig = new ThirdPersonCamera(this.camera, this.input, this.duck.group)
+    // Splash effects live on the water surface; a splash plays a sound + ripple.
+    this.splashFx = new Splash(this.scene, world.pond.surfaceY)
     this.duckController = new DuckController(
       this.duck,
       this.input,
       this.cameraRig,
       world.colliders,
       world.pond,
+      (x, z, strength) => {
+        this.sound.splash(strength)
+        this.splashFx.spawn(x, z, strength)
+      },
     )
 
     // The duck subjects. The Flock spawns and updates them; it needs Input (to
@@ -114,6 +122,7 @@ export class Game {
     // Move the duck first, then let the camera follow her new position.
     this.duckController.update(delta)
     this.flock.update(delta)
+    this.splashFx.update(delta)
     this.cameraRig.update(delta)
 
     // Keep the HUD in sync (both only redraw on change).
