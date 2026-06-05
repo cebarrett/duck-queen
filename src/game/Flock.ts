@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { Duckling, type FlockContext } from './Duckling'
 import type { Input } from './Input'
 import type { Sound } from './Sound'
+import type { Pond } from './Water'
 
 const DUCKLING_COUNT = 8
 const QUACK_RANGE = 12 // a quack recruits idle ducks within this distance
@@ -20,11 +21,12 @@ export class Flock {
     private readonly input: Input,
     private readonly queen: THREE.Object3D,
     private readonly sound: Sound,
+    pond: Pond,
   ) {
     for (let i = 0; i < DUCKLING_COUNT; i++) {
       const angle = Math.random() * Math.PI * 2
       const radius = 6 + Math.random() * 8
-      const duckling = new Duckling(Math.cos(angle) * radius, Math.sin(angle) * radius)
+      const duckling = new Duckling(Math.cos(angle) * radius, Math.sin(angle) * radius, pond)
       this.ducklings.push(duckling)
       scene.add(duckling.group)
     }

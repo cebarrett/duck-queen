@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { buildDuckModel } from './duckModel'
 import { approachAngle, randRange } from './mathUtils'
+import type { Pond } from './Water'
 
 // Subjects are smaller than the Queen and duckling-yellow so they read as "hers"
 // at a glance (vs. her white).
@@ -37,6 +38,10 @@ const TURN_SPEED = 8 // how fast she rotates to face travel direction
 const BOB_HEIGHT = 0.05 // little waddle hop
 const ROLL = 0.18 // side-to-side waddle tilt (radians)
 
+// --- Swimming (when over the pond) -----------------------------------------
+const SWIM_BOB = 0.04 // gentle float bob — no waddle hop
+const SWIM_SWAY = 0.05 // very slight side sway (much less than the waddle wiggle)
+
 // A duckling is always in exactly one of these.
 type DucklingState = 'pausing' | 'wandering' | 'following' | 'distracted'
 
@@ -72,7 +77,11 @@ export class Duckling {
   private targetX = 0
   private targetZ = 0
 
-  constructor(x: number, z: number) {
+  constructor(
+    x: number,
+    z: number,
+    private readonly pond: Pond,
+  ) {
     const model = buildDuckModel({
       featherColor: DUCKLING_COLOR,
       crown: false,
@@ -132,11 +141,20 @@ export class Duckling {
       const targetHeading = Math.atan2(-this.velX, -this.velZ) // she faces -Z at 0
       this.heading = approachAngle(this.heading, targetHeading, TURN_SPEED * delta)
     }
-    const moveFactor = Math.min(speed / WANDER_SPEED, 1)
-    this.bobPhase += delta * (6 + speed * 2)
-    pos.y = Math.abs(Math.sin(this.bobPhase)) * BOB_HEIGHT * moveFactor
+    if (this.pond.isWater(pos.x, pos.z)) {
+      // Over the pond: float like the Queen — settle at the (scaled) waterline
+      // with a slow, gentle bob and sway, and NO waddle hop / side-wiggle.
+      this.bobPhase += delta * 3
+      pos.y = this.pond.floatLine * DUCKLING_SCALE + Math.sin(this.bobPhase) * SWIM_BOB
+      this.group.rotation.z = Math.sin(this.bobPhase * 0.7) * SWIM_SWAY
+    } else {
+      // On land: the little waddle hop + side-to-side tilt, scaled by speed.
+      const moveFactor = Math.min(speed / WANDER_SPEED, 1)
+      this.bobPhase += delta * (6 + speed * 2)
+      pos.y = Math.abs(Math.sin(this.bobPhase)) * BOB_HEIGHT * moveFactor
+      this.group.rotation.z = Math.sin(this.bobPhase) * ROLL * moveFactor
+    }
     this.group.rotation.y = this.heading
-    this.group.rotation.z = Math.sin(this.bobPhase) * ROLL * moveFactor
   }
 
   /** Seek the Queen, settling into a ring around her, while pushing apart from

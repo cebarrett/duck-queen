@@ -83,7 +83,7 @@ export class Game {
 
     // The duck subjects. The Flock spawns and updates them; it needs Input (to
     // hear the Queen's quack) and the Queen's Group (to know where she is).
-    this.flock = new Flock(this.scene, this.input, this.duck.group, this.sound)
+    this.flock = new Flock(this.scene, this.input, this.duck.group, this.sound, world.pond)
 
     // Keep the camera/canvas correct when the window resizes.
     window.addEventListener('resize', this.onResize)
