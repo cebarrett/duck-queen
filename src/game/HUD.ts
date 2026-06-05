@@ -1,14 +1,18 @@
 import type { DuckMode } from './DuckController'
 
 /**
- * HUD owns the on-screen overlay text (the #hud div from index.html). For now
- * it just shows the current movement mode and its controls. Keeping it in its
- * own module means the rest of the game says "HUD, show this mode" without
- * knowing anything about the DOM.
+ * HUD owns the on-screen overlay text (the #hud div from index.html). It shows
+ * the current movement mode + controls on one line and the subject count on a
+ * second. Keeping it in its own module means the rest of the game just says
+ * "HUD, the mode is X" / "the count is N" without touching the DOM itself.
  */
 export class HUD {
   private readonly element: HTMLElement
-  private lastText = '' // remember what we drew so we only touch the DOM on change
+  private lastHtml = '' // remember what we drew so we only touch the DOM on change
+
+  // We store the pieces and re-render whenever either changes.
+  private mode: DuckMode = 'waddle'
+  private subjects = 0
 
   constructor() {
     const el = document.getElementById('hud')
@@ -18,15 +22,28 @@ export class HUD {
   }
 
   setMode(mode: DuckMode): void {
-    const text =
-      mode === 'fly'
+    this.mode = mode
+    this.render()
+  }
+
+  setSubjects(count: number): void {
+    this.subjects = count
+    this.render()
+  }
+
+  private render(): void {
+    const line1 =
+      this.mode === 'fly'
         ? '🦆 FLY  ·  WASD move · hold Space to rise, release to descend'
         : '🦆 WADDLE  ·  WASD move · Space to take off'
+    const line2 = `👑 Subjects: ${this.subjects}  ·  press Q to quack`
 
-    // Writing to the DOM every frame is wasteful; only update when it changed.
-    if (text !== this.lastText) {
-      this.element.textContent = text
-      this.lastText = text
+    // Two lines via <br>. The values are our own strings + an integer, so there's
+    // nothing untrusted going into innerHTML here.
+    const html = `${line1}<br>${line2}`
+    if (html !== this.lastHtml) {
+      this.element.innerHTML = html
+      this.lastHtml = html
     }
   }
 }

@@ -4,6 +4,8 @@ import { Duck } from './Duck'
 import { Input } from './Input'
 import { ThirdPersonCamera } from './ThirdPersonCamera'
 import { DuckController } from './DuckController'
+import { Flock } from './Flock'
+import { Sound } from './Sound'
 import { HUD } from './HUD'
 
 /**
@@ -32,6 +34,8 @@ export class Game {
   private readonly input: Input
   private readonly cameraRig: ThirdPersonCamera
   private readonly duckController: DuckController
+  private readonly flock: Flock
+  private readonly sound = new Sound()
   private readonly hud = new HUD()
 
   constructor() {
@@ -46,8 +50,9 @@ export class Game {
 
     // --- Scene ------------------------------------------------------------
     this.scene = new THREE.Scene()
-    // World adds the ground, sky, fog, and lights to the scene.
-    new World(this.scene)
+    // World adds the ground, sky, fog, lights, and scenery to the scene, and
+    // exposes the scenery's colliders so the duck can bump into them.
+    const world = new World(this.scene)
 
     // --- Camera -----------------------------------------------------------
     // PerspectiveCamera(fov, aspect, near, far):
@@ -68,7 +73,11 @@ export class Game {
     // every frame, so we no longer set camera.position by hand.
     this.input = new Input(this.renderer.domElement)
     this.cameraRig = new ThirdPersonCamera(this.camera, this.input, this.duck.group)
-    this.duckController = new DuckController(this.duck, this.input, this.cameraRig)
+    this.duckController = new DuckController(this.duck, this.input, this.cameraRig, world.colliders)
+
+    // The duck subjects. The Flock spawns and updates them; it needs Input (to
+    // hear the Queen's quack) and the Queen's Group (to know where she is).
+    this.flock = new Flock(this.scene, this.input, this.duck.group, this.sound)
 
     // Keep the camera/canvas correct when the window resizes.
     window.addEventListener('resize', this.onResize)
@@ -88,14 +97,22 @@ export class Game {
   private update = (): void => {
     // delta = seconds since the last frame, so everything is frame-rate
     // independent (see the camera's smoothing and Step 4's movement).
-    const delta = this.clock.getDelta()
+    //
+    // We CLAMP it to 0.1s. Normally delta is ~0.016s (60fps). But if the tab is
+    // backgrounded or the game hitches, the next frame's delta can be huge —
+    // which would teleport the duck a giant distance in one step (flinging her
+    // off the map, or tunnelling straight through a tree before collision can
+    // catch it). Capping the step keeps a hiccup from breaking the simulation.
+    const delta = Math.min(this.clock.getDelta(), 0.1)
 
     // Move the duck first, then let the camera follow her new position.
     this.duckController.update(delta)
+    this.flock.update(delta)
     this.cameraRig.update(delta)
 
-    // Keep the HUD in sync with the current mode (it only redraws on change).
+    // Keep the HUD in sync (both only redraw on change).
     this.hud.setMode(this.duckController.getMode())
+    this.hud.setSubjects(this.flock.subjectCount)
 
     this.renderer.render(this.scene, this.camera)
   }
