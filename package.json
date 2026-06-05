@@ -1,0 +1,19 @@
+{
+  "name": "duck-queen",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "three": "^0.184.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.184.1",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.16"
+  }
+}
