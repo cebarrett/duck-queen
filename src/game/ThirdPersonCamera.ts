@@ -8,6 +8,8 @@ const SENSITIVITY = 0.0025 // radians of orbit per pixel of mouse movement
 const PITCH_MIN = -0.2 // how far we can look up from below (radians)
 const PITCH_MAX = 1.2 // how far we can look down from above
 const FOLLOW_SPEED = 8 // higher = the camera chases the duck more snappily
+const MIN_HEIGHT = 0.4 // keep the camera above the ground (y=0) so we never see
+//                        through the single-sided ground plane from below
 
 /**
  * A third-person camera that orbits a target (the duck) with the mouse and
@@ -65,9 +67,14 @@ export class ThirdPersonCamera {
     const offsetZ = DISTANCE * cosPitch * Math.cos(this.yaw)
     const offsetY = DISTANCE * Math.sin(this.pitch)
 
+    // Clamp the camera's height so it can't dip below the ground (which would
+    // show the ground plane's invisible underside). This only bites when she's
+    // near the ground — up in the air the camera is nowhere near y=0.
+    const camY = Math.max(this.smoothedTarget.y + offsetY, MIN_HEIGHT)
+
     this.camera.position.set(
       this.smoothedTarget.x + offsetX,
-      this.smoothedTarget.y + offsetY,
+      camY,
       this.smoothedTarget.z + offsetZ,
     )
     this.camera.lookAt(this.smoothedTarget)
