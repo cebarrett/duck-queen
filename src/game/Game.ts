@@ -5,6 +5,7 @@ import { Input } from './Input'
 import { ThirdPersonCamera } from './ThirdPersonCamera'
 import { DuckController } from './DuckController'
 import { Flock } from './Flock'
+import { Food } from './Food'
 import { Sound } from './Sound'
 import { Splash } from './Splash'
 import { HUD } from './HUD'
@@ -36,6 +37,7 @@ export class Game {
   private readonly cameraRig: ThirdPersonCamera
   private readonly duckController: DuckController
   private readonly flock: Flock
+  private readonly food: Food
   private readonly sound = new Sound()
   private readonly splashFx: Splash
   private readonly hud = new HUD()
@@ -75,6 +77,9 @@ export class Game {
     // every frame, so we no longer set camera.position by hand.
     this.input = new Input(this.renderer.domElement)
     this.cameraRig = new ThirdPersonCamera(this.camera, this.input, this.duck.group)
+    // Scatter edible plants for the flock to forage (land + pond).
+    this.food = new Food(this.scene, world.pond)
+
     // Splash effects live on the water surface; a splash plays a sound + ripple.
     this.splashFx = new Splash(this.scene, world.pond.surfaceY)
     this.duckController = new DuckController(
@@ -91,7 +96,7 @@ export class Game {
 
     // The duck subjects. The Flock spawns and updates them; it needs Input (to
     // hear the Queen's quack) and the Queen's Group (to know where she is).
-    this.flock = new Flock(this.scene, this.input, this.duck.group, this.sound, world.pond)
+    this.flock = new Flock(this.scene, this.input, this.duck.group, this.sound, world.pond, this.food)
 
     // Keep the camera/canvas correct when the window resizes.
     window.addEventListener('resize', this.onResize)
@@ -128,6 +133,7 @@ export class Game {
     // Keep the HUD in sync (both only redraw on change).
     this.hud.setMode(this.duckController.getMode())
     this.hud.setSubjects(this.flock.subjectCount)
+    this.hud.setFood(this.food.total)
 
     this.renderer.render(this.scene, this.camera)
   }

@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { buildDuckModel } from './duckModel'
 import { approachAngle, randRange } from './mathUtils'
 import type { Pond } from './Water'
+import type { Food } from './Food'
 
 // Subjects are smaller than the Queen and duckling-yellow so they read as "hers"
 // at a glance (vs. her white).
@@ -42,6 +43,9 @@ const ROLL = 0.18 // side-to-side waddle tilt (radians)
 const SWIM_BOB = 0.04 // gentle float bob — no waddle hop
 const SWIM_SWAY = 0.05 // very slight side sway (much less than the waddle wiggle)
 
+// --- Foraging --------------------------------------------------------------
+const EAT_RADIUS = 1.0 // a follower eats any plant it comes this close to
+
 // A duckling is always in exactly one of these.
 type DucklingState = 'pausing' | 'wandering' | 'following' | 'distracted'
 
@@ -81,6 +85,7 @@ export class Duckling {
     x: number,
     z: number,
     private readonly pond: Pond,
+    private readonly food: Food,
   ) {
     const model = buildDuckModel({
       featherColor: DUCKLING_COLOR,
@@ -134,6 +139,13 @@ export class Duckling {
     const pos = this.group.position
     pos.x += this.velX * delta
     pos.z += this.velZ * delta
+
+    // Eat any plant we've come within reach of — followers only, for now.
+    // (Step 3 will make them actively seek food out instead of just bumping it.)
+    if (this.state === 'following') {
+      const plant = this.food.nearestUncollected(pos.x, pos.z, EAT_RADIUS)
+      if (plant) this.food.collect(plant)
+    }
 
     // --- Face travel direction + a little waddle ---------------------------
     const speed = Math.hypot(this.velX, this.velZ)

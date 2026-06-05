@@ -10,9 +10,10 @@ export class HUD {
   private readonly element: HTMLElement
   private lastHtml = '' // remember what we drew so we only touch the DOM on change
 
-  // We store the pieces and re-render whenever either changes.
+  // We store the pieces and re-render whenever any of them changes.
   private mode: DuckMode = 'waddle'
   private subjects = 0
+  private food = 0
 
   constructor() {
     const el = document.getElementById('hud')
@@ -31,6 +32,11 @@ export class HUD {
     this.render()
   }
 
+  setFood(count: number): void {
+    this.food = count
+    this.render()
+  }
+
   private render(): void {
     let line1: string
     if (this.mode === 'fly') {
@@ -40,7 +46,7 @@ export class HUD {
     } else {
       line1 = '🦆 WADDLE  ·  WASD move · Space to take off'
     }
-    const line2 = `👑 Subjects: ${this.subjects}  ·  press Q to quack`
+    const line2 = `👑 Subjects: ${this.subjects}   🌿 Food: ${this.food}   ·  press Q to quack`
 
     // Two lines via <br>. The values are our own strings + an integer, so there's
     // nothing untrusted going into innerHTML here.
