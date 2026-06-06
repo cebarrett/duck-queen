@@ -5,6 +5,7 @@ import { Input } from './Input'
 import { ThirdPersonCamera } from './ThirdPersonCamera'
 import { DuckController } from './DuckController'
 import { Flock } from './Flock'
+import { Geese } from './Geese'
 import { Food } from './Food'
 import { Reeds } from './Reeds'
 import { Sound } from './Sound'
@@ -38,6 +39,7 @@ export class Game {
   private readonly cameraRig: ThirdPersonCamera
   private readonly duckController: DuckController
   private readonly flock: Flock
+  private readonly geese: Geese
   private readonly food: Food
   private readonly reeds: Reeds
   private readonly sound = new Sound()
@@ -103,6 +105,9 @@ export class Game {
     // hear the Queen's quack) and the Queen's Group (to know where she is).
     this.flock = new Flock(this.scene, this.input, this.duck.group, this.sound, world.pond, this.food)
 
+    // The rival geese (they wander + honk for now).
+    this.geese = new Geese(this.scene, this.sound)
+
     // Keep the camera/canvas correct when the window resizes.
     window.addEventListener('resize', this.onResize)
   }
@@ -132,6 +137,7 @@ export class Game {
     // Move the duck first, then let the camera follow her new position.
     this.duckController.update(delta)
     this.flock.update(delta)
+    this.geese.update(delta)
     this.splashFx.update(delta)
     this.cameraRig.update(delta)
 

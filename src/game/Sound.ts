@@ -12,6 +12,7 @@
 // Optional recordings. BASE_URL keeps these correct even under a sub-path.
 const QUACK_URL = `${import.meta.env.BASE_URL}quack.mp3`
 const PEEP_URL = `${import.meta.env.BASE_URL}peep.mp3`
+const HONK_URL = `${import.meta.env.BASE_URL}honk.mp3`
 
 /** An optional recorded sound: its bytes (once fetched), the decoded buffer (once
  *  ready), and a flag so we don't decode twice at once. */
@@ -31,10 +32,12 @@ export class Sound {
 
   private readonly quackSample = makeSample(QUACK_URL)
   private readonly peepSample = makeSample(PEEP_URL)
+  private readonly honkSample = makeSample(HONK_URL)
 
   constructor() {
     void this.fetch(this.quackSample) // optional — silently no-ops if absent
     void this.fetch(this.peepSample)
+    void this.fetch(this.honkSample)
 
     const unlock = () => {
       this.getContext() // create + resume inside the gesture
@@ -58,6 +61,14 @@ export class Sound {
     const ctx = this.getContext()
     if (!ctx) return
     this.playSampleOrSynth(ctx, this.peepSample, (c) => this.synthPeep(c, pitch), pitch, 0.5)
+  }
+
+  /** A goose's honk — recorded if available, else synthesized. Lower and harsher
+   *  than a quack. `pitch` (~0.9–1.15) gives each goose its own voice. */
+  honk(pitch = 1): void {
+    const ctx = this.getContext()
+    if (!ctx) return
+    this.playSampleOrSynth(ctx, this.honkSample, (c) => this.synthHonk(c, pitch), pitch, 0.8)
   }
 
   /**
@@ -211,6 +222,38 @@ export class Sound {
     osc.stop(now + dur + 0.02)
   }
 
+  /** A honk — lower, harsher and longer than the quack: a sawtooth that blips up
+   *  ("ho-") then falls ("-onk"), through a low bandpass. `pitch` sets the voice. */
+  private synthHonk(ctx: AudioContext, pitch: number): void {
+    const now = ctx.currentTime
+    const dur = 0.32
+    const base = 300 * pitch
+
+    const osc = ctx.createOscillator()
+    osc.type = 'sawtooth'
+    const f = osc.frequency
+    f.setValueAtTime(base, now)
+    f.linearRampToValueAtTime(base * 1.25, now + 0.06) // "ho-"
+    f.exponentialRampToValueAtTime(base * 0.7, now + dur) // "-onk"
+
+    const band = ctx.createBiquadFilter()
+    band.type = 'bandpass'
+    band.frequency.value = 700
+    band.Q.value = 3
+
+    const gain = ctx.createGain()
+    const g = gain.gain
+    g.setValueAtTime(0.0001, now)
+    g.exponentialRampToValueAtTime(0.4, now + 0.02)
+    g.exponentialRampToValueAtTime(0.0001, now + dur)
+
+    osc.connect(band)
+    band.connect(gain)
+    gain.connect(ctx.destination)
+    osc.start(now)
+    osc.stop(now + dur + 0.02)
+  }
+
   // --- Context plumbing ------------------------------------------------------
 
   private getContext(): AudioContext | null {
@@ -222,6 +265,7 @@ export class Sound {
       this.ctx = new Ctor()
       void this.decode(this.quackSample) // decode anything already fetched
       void this.decode(this.peepSample)
+      void this.decode(this.honkSample)
     }
     if (this.ctx.state === 'suspended') void this.ctx.resume()
     return this.ctx
