@@ -5,7 +5,7 @@ import type { Duck } from './Duck'
 import { type Collider, resolveWalls, floorHeightAt } from './collision'
 import type { Pond } from './Water'
 import type { Reeds } from './Reeds'
-import { approachAngle } from './mathUtils'
+import { faceHeading } from './mathUtils'
 
 // The ways the Queen gets around. Exported so the HUD can label it.
 export type DuckMode = 'waddle' | 'fly' | 'swim'
@@ -187,10 +187,8 @@ export class DuckController {
 
     // --- Face the way she's moving (horizontal only) -----------------------
     const speed = Math.hypot(this.velocity.x, this.velocity.z)
-    if (speed > 0.1) {
-      const targetHeading = Math.atan2(-this.velocity.x, -this.velocity.z)
-      this.heading = approachAngle(this.heading, targetHeading, TURN_SPEED * delta)
-    }
+    // minSpeed 0.1: ignore tiny drift so she doesn't twitch her facing at rest.
+    this.heading = faceHeading(this.heading, this.velocity.x, this.velocity.z, TURN_SPEED, delta, 0.1)
 
     // --- Pose: waddle bob/roll on the ground, or a flight lean in the air ---
     this.applyPose(delta, speed)

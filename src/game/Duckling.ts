@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { buildDuckModel } from './duckModel'
-import { approachAngle, randRange } from './mathUtils'
+import { randRange, seekArrive, pointAround, faceHeading, easeFactor } from './mathUtils'
 import { type Collider, resolveWalls } from './collision'
 import type { Pond } from './Water'
 import type { Food, FoodItem } from './Food'
@@ -196,10 +196,7 @@ export class Duckling {
 
     // --- Face travel direction + a little waddle ---------------------------
     const speed = Math.hypot(this.velX, this.velZ)
-    if (speed > 0.05) {
-      const targetHeading = Math.atan2(-this.velX, -this.velZ) // she faces -Z at 0
-      this.heading = approachAngle(this.heading, targetHeading, TURN_SPEED * delta)
-    }
+    this.heading = faceHeading(this.heading, this.velX, this.velZ, TURN_SPEED, delta)
     if (this.pond.isWater(pos.x, pos.z)) {
       // Over the pond: float like the Queen — settle at the (scaled) waterline
       // with a slow, gentle bob and sway, and NO waddle hop / side-wiggle.
@@ -288,17 +285,12 @@ export class Duckling {
    *  curiosity is satisfied and she rejoins the Queen. */
   private beDistracted(delta: number): void {
     this.distractTimer -= delta
-    const pos = this.group.position
-    const dx = this.targetX - pos.x
-    const dz = this.targetZ - pos.z
-    const dist = Math.hypot(dx, dz)
-
-    if (this.distractTimer <= 0 || dist < ARRIVE_STOP) {
+    const s = seekArrive(this.group.position, this.targetX, this.targetZ, WANDER_SPEED, ARRIVE_RADIUS, ARRIVE_STOP)
+    if (this.distractTimer <= 0 || s.arrived) {
       this.state = 'following' // back to her duties
       return
     }
-    const speed = dist < ARRIVE_RADIUS ? WANDER_SPEED * (dist / ARRIVE_RADIUS) : WANDER_SPEED
-    this.ease((dx / dist) * speed, (dz / dist) * speed, delta)
+    this.ease(s.vx, s.vz, delta)
   }
 
   /** Look for a plant within FORAGE_RADIUS; if there's one, target it and switch
@@ -321,48 +313,38 @@ export class Duckling {
       this.state = 'following'
       return
     }
-    const pos = this.group.position
-    const dx = plant.x - pos.x
-    const dz = plant.z - pos.z
-    const dist = Math.hypot(dx, dz)
-    if (dist < EAT_RADIUS) {
+    const s = seekArrive(this.group.position, plant.x, plant.z, FORAGE_SPEED, ARRIVE_RADIUS, EAT_RADIUS)
+    if (s.arrived) {
       this.food.collect(plant) // nom
       this.targetFood = null
       this.state = 'following'
       return
     }
-    const speed = dist < ARRIVE_RADIUS ? FORAGE_SPEED * (dist / ARRIVE_RADIUS) : FORAGE_SPEED
-    this.ease((dx / dist) * speed, (dz / dist) * speed, delta)
+    this.ease(s.vx, s.vz, delta)
   }
 
   /** Seek the current wander target, slowing on arrival, then pause. */
   private seekTarget(delta: number): void {
-    const pos = this.group.position
-    const dx = this.targetX - pos.x
-    const dz = this.targetZ - pos.z
-    const dist = Math.hypot(dx, dz)
-
-    if (dist < ARRIVE_STOP) {
+    const s = seekArrive(this.group.position, this.targetX, this.targetZ, WANDER_SPEED, ARRIVE_RADIUS, ARRIVE_STOP)
+    if (s.arrived) {
       this.state = 'pausing'
       this.timer = randRange(PAUSE_MIN, PAUSE_MAX)
       return
     }
-    const speed = dist < ARRIVE_RADIUS ? WANDER_SPEED * (dist / ARRIVE_RADIUS) : WANDER_SPEED
-    this.ease((dx / dist) * speed, (dz / dist) * speed, delta)
+    this.ease(s.vx, s.vz, delta)
   }
 
   /** Ease the velocity toward a target (vx, vz) — frame-rate-independent. */
   private ease(vx: number, vz: number, delta: number, rate = RESPONSIVENESS): void {
-    const t = 1 - Math.exp(-rate * delta)
+    const t = easeFactor(rate, delta)
     this.velX += (vx - this.velX) * t
     this.velZ += (vz - this.velZ) * t
   }
 
   private pickNewTarget(): void {
-    const angle = Math.random() * Math.PI * 2
-    const radius = Math.random() * WANDER_RADIUS
-    this.targetX = this.homeX + Math.cos(angle) * radius
-    this.targetZ = this.homeZ + Math.sin(angle) * radius
+    const p = pointAround(this.homeX, this.homeZ, WANDER_RADIUS)
+    this.targetX = p.x
+    this.targetZ = p.z
     this.state = 'wandering'
   }
 }

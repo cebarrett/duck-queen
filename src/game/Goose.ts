@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { buildGoose } from './gooseModel'
-import { approachAngle, randRange } from './mathUtils'
+import { approachAngle, randRange, seekArrive, pointAround, faceHeading, easeFactor } from './mathUtils'
 import { type Collider, resolveWalls } from './collision'
 import type { Sound } from './Sound'
 import type { Food, FoodItem } from './Food'
@@ -179,7 +179,7 @@ export class Goose {
     }
     // Deflate back to normal size after a honk-off.
     if (this.puff !== 1) {
-      this.puff += (1 - this.puff) * (1 - Math.exp(-PUFF_EASE * delta))
+      this.puff += (1 - this.puff) * easeFactor(PUFF_EASE, delta)
       if (Math.abs(this.puff - 1) < 0.005) this.puff = 1
       this.group.scale.setScalar(this.puff)
     }
@@ -224,10 +224,7 @@ export class Goose {
 
     // Face travel direction.
     const speed = Math.hypot(this.velX, this.velZ)
-    if (speed > 0.05) {
-      const targetHeading = Math.atan2(-this.velX, -this.velZ) // faces -Z at 0
-      this.heading = approachAngle(this.heading, targetHeading, TURN_SPEED * delta)
-    }
+    this.heading = faceHeading(this.heading, this.velX, this.velZ, TURN_SPEED, delta)
     this.group.rotation.y = this.heading
     this.applyPose(delta, speed)
   }
@@ -327,7 +324,7 @@ export class Goose {
     pos.z += this.velZ * delta
 
     // Puff up + face her, no waddle.
-    this.puff += (PUFF_SCALE - this.puff) * (1 - Math.exp(-PUFF_EASE * delta))
+    this.puff += (PUFF_SCALE - this.puff) * easeFactor(PUFF_EASE, delta)
     this.group.scale.setScalar(this.puff)
     pos.y = 0
     this.group.rotation.y = this.heading
@@ -338,16 +335,14 @@ export class Goose {
 
   /** Run away from the Queen; once it reaches its escape point, calm down. */
   private flee(delta: number): void {
-    const pos = this.group.position
-    const dx = this.targetX - pos.x
-    const dz = this.targetZ - pos.z
-    const dist = Math.hypot(dx, dz)
-    if (dist < ARRIVE_STOP) {
+    // arriveRadius 0 = a flat-out bolt, no easing down as it nears the escape point.
+    const s = seekArrive(this.group.position, this.targetX, this.targetZ, FLEE_SPEED, 0, ARRIVE_STOP)
+    if (s.arrived) {
       this.state = 'pausing'
       this.timer = randRange(PAUSE_MIN, PAUSE_MAX)
       return
     }
-    this.ease((dx / dist) * FLEE_SPEED, (dz / dist) * FLEE_SPEED, delta)
+    this.ease(s.vx, s.vz, delta)
   }
 
   /** Spot the nearest plant in range and head for it (unless it's still cowed). */
@@ -371,11 +366,8 @@ export class Goose {
       this.timer = randRange(PAUSE_MIN, PAUSE_MAX)
       return
     }
-    const pos = this.group.position
-    const dx = plant.x - pos.x
-    const dz = plant.z - pos.z
-    const dist = Math.hypot(dx, dz)
-    if (dist < EAT_RADIUS) {
+    const s = seekArrive(this.group.position, plant.x, plant.z, SPEED, ARRIVE_RADIUS, EAT_RADIUS)
+    if (s.arrived) {
       this.food.steal(plant) // NOT collect() — this denies the Queen the food
       this.sound.honk(this.honkPitch) // a smug honk
       this.targetFood = null
@@ -383,35 +375,29 @@ export class Goose {
       this.timer = randRange(PAUSE_MIN, PAUSE_MAX)
       return
     }
-    const speed = dist < ARRIVE_RADIUS ? SPEED * (dist / ARRIVE_RADIUS) : SPEED
-    this.ease((dx / dist) * speed, (dz / dist) * speed, delta)
+    this.ease(s.vx, s.vz, delta)
   }
 
   private seekTarget(delta: number): void {
-    const pos = this.group.position
-    const dx = this.targetX - pos.x
-    const dz = this.targetZ - pos.z
-    const dist = Math.hypot(dx, dz)
-    if (dist < ARRIVE_STOP) {
+    const s = seekArrive(this.group.position, this.targetX, this.targetZ, SPEED, ARRIVE_RADIUS, ARRIVE_STOP)
+    if (s.arrived) {
       this.state = 'pausing'
       this.timer = randRange(PAUSE_MIN, PAUSE_MAX)
       return
     }
-    const speed = dist < ARRIVE_RADIUS ? SPEED * (dist / ARRIVE_RADIUS) : SPEED
-    this.ease((dx / dist) * speed, (dz / dist) * speed, delta)
+    this.ease(s.vx, s.vz, delta)
   }
 
   private ease(vx: number, vz: number, delta: number): void {
-    const t = 1 - Math.exp(-RESPONSIVENESS * delta)
+    const t = easeFactor(RESPONSIVENESS, delta)
     this.velX += (vx - this.velX) * t
     this.velZ += (vz - this.velZ) * t
   }
 
   private pickNewTarget(): void {
-    const angle = Math.random() * Math.PI * 2
-    const radius = Math.random() * WANDER_RADIUS
-    this.targetX = this.homeX + Math.cos(angle) * radius
-    this.targetZ = this.homeZ + Math.sin(angle) * radius
+    const p = pointAround(this.homeX, this.homeZ, WANDER_RADIUS)
+    this.targetX = p.x
+    this.targetZ = p.z
     this.state = 'wandering'
   }
 }
