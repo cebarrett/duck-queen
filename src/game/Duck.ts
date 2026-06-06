@@ -10,11 +10,13 @@ export class Duck {
   readonly group: THREE.Group
   readonly leftWing: THREE.Group
   readonly rightWing: THREE.Group
+  readonly crown?: THREE.Group
 
   constructor() {
     const model = buildDuckModel({ featherColor: 0xf5f5f5, crown: true })
     this.group = model.group
     this.leftWing = model.leftWing
     this.rightWing = model.rightWing
+    this.crown = model.crown
   }
 }

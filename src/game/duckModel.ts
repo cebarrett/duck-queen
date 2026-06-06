@@ -13,6 +13,7 @@ export interface DuckModel {
   group: THREE.Group
   leftWing: THREE.Group
   rightWing: THREE.Group
+  crown?: THREE.Group
 }
 
 export interface DuckModelOptions {
@@ -64,10 +65,10 @@ export function buildDuckModel(opts: DuckModelOptions = {}): DuckModel {
   const rightWing = makeWing(1, feather)
   group.add(leftWing, rightWing)
 
-  if (withCrown) addCrown(group)
+  const crown = withCrown ? addCrown(group) : undefined
 
   group.scale.setScalar(scale)
-  return { group, leftWing, rightWing }
+  return { group, leftWing, rightWing, crown }
 }
 
 /**
@@ -103,11 +104,15 @@ function makeWing(side: number, feather: number): THREE.Group {
 }
 
 /** The golden crown — a band, three points, and a red jewel. Queen only. */
-function addCrown(group: THREE.Group): void {
+function addCrown(group: THREE.Group): THREE.Group {
+  const crown = new THREE.Group()
   const headTopY = 1.6 // just above the 0.7-tall head centred at y=1.25
-  group.add(box(0.5, 0.18, 0.5, GOLD, [0, headTopY, -0.5]))
+  crown.position.set(0, headTopY, -0.5)
+  crown.add(box(0.5, 0.18, 0.5, GOLD, [0, 0, 0]))
   for (const x of [-0.16, 0, 0.16]) {
-    group.add(box(0.1, 0.16, 0.1, GOLD, [x, headTopY + 0.16, -0.5]))
+    crown.add(box(0.1, 0.16, 0.1, GOLD, [x, 0.16, 0]))
   }
-  group.add(box(0.1, 0.1, 0.06, JEWEL, [0, headTopY, -0.76]))
+  crown.add(box(0.1, 0.1, 0.06, JEWEL, [0, 0, -0.26]))
+  group.add(crown)
+  return crown
 }

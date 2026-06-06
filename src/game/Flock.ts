@@ -9,6 +9,7 @@ import type { Rng } from './rng'
 
 const DUCKLING_COUNT = 8
 const QUACK_RANGE = 12 // a quack recruits idle ducks within this distance
+const SCATTER_RANGE = 10 // subjects this close to conflict briefly scatter
 
 /**
  * The Flock owns all the duck subjects: spawns them, updates them, and turns the
@@ -44,6 +45,34 @@ export class Flock {
     let n = 0
     for (const d of this.ducklings) if (d.isSubject) n++
     return n
+  }
+
+  /** Scatter current subjects near a conflict point. They still count as hers,
+   *  just briefly panic-skitter before following again. */
+  scatterFrom(x: number, z: number): void {
+    for (const d of this.ducklings) {
+      if (!d.isSubject) continue
+      const pos = d.group.position
+      if (Math.hypot(pos.x - x, pos.z - z) <= SCATTER_RANGE) d.scatterFrom(x, z)
+    }
+  }
+
+  /** Ratio of current subjects within `radius` of the Queen. With no subjects,
+   *  treat the flock as fully regrouped so callers don't divide by zero. */
+  regroupedRatio(radius: number): number {
+    const qx = this.queen.position.x
+    const qz = this.queen.position.z
+    let subjects = 0
+    let nearby = 0
+
+    for (const d of this.ducklings) {
+      if (!d.isSubject) continue
+      subjects++
+      const pos = d.group.position
+      if (Math.hypot(pos.x - qx, pos.z - qz) <= radius) nearby++
+    }
+
+    return subjects === 0 ? 1 : nearby / subjects
   }
 
   update(delta: number): void {

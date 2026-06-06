@@ -16,10 +16,13 @@ export class HUD {
   private food = 0
   private reeds = 0
   private stolen = 0
+  private resolveShaken = false
 
   // A centred banner + meter shown only during a honk-off.
   private readonly honkBanner: HTMLElement
   private readonly honkFill: HTMLElement
+  private readonly messageBanner: HTMLElement
+  private messageTimer = 0
 
   constructor() {
     const el = document.getElementById('hud')
@@ -49,12 +52,40 @@ export class HUD {
     document.body.appendChild(banner)
     this.honkBanner = banner
     this.honkFill = fill
+
+    const message = document.createElement('div')
+    message.style.cssText =
+      'position:fixed;top:24%;left:50%;transform:translateX(-50%);' +
+      'color:#fff;font-size:28px;font-weight:800;text-shadow:0 2px 4px rgba(0,0,0,.65);' +
+      'pointer-events:none;user-select:none;display:none;'
+    document.body.appendChild(message)
+    this.messageBanner = message
   }
 
   /** Show/hide the honk-off banner and set the resolve meter (0..1). */
   setHonkOff(active: boolean, resolve: number): void {
     this.honkBanner.style.display = active ? 'block' : 'none'
     if (active) this.honkFill.style.width = `${Math.round(resolve * 100)}%`
+  }
+
+  showMessage(text: string, seconds = 1.6): void {
+    this.messageBanner.textContent = text
+    this.messageBanner.style.display = 'block'
+    this.messageTimer = seconds
+  }
+
+  setResolveShaken(shaken: boolean): void {
+    this.resolveShaken = shaken
+    this.render()
+  }
+
+  update(delta: number): void {
+    if (this.messageTimer <= 0) return
+    this.messageTimer -= delta
+    if (this.messageTimer <= 0) {
+      this.messageTimer = 0
+      this.messageBanner.style.display = 'none'
+    }
   }
 
   setMode(mode: DuckMode): void {
@@ -91,7 +122,8 @@ export class HUD {
     } else {
       line1 = '🦆 WADDLE  ·  WASD move · Space to take off · Q quack'
     }
-    const line2 = `👑 Subjects: ${this.subjects}   🌿 Food: ${this.food}   🌾 Reeds: ${this.reeds}   🪿 Stolen: ${this.stolen}`
+    const shaken = this.resolveShaken ? '   Resolve shaken' : ''
+    const line2 = `👑 Subjects: ${this.subjects}   🌿 Food: ${this.food}   🌾 Reeds: ${this.reeds}   🪿 Stolen: ${this.stolen}${shaken}`
 
     // Two lines via <br>. The values are our own strings + an integer, so there's
     // nothing untrusted going into innerHTML here.

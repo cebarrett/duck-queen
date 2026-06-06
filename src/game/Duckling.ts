@@ -36,6 +36,12 @@ const DISTRACT_MAX = 3.5 // longest distraction
 const DISTRACT_NEAR = 2 // nearest a distraction spot can be
 const DISTRACT_FAR = 4 // farthest a distraction spot can be
 const LOST_DISTANCE = 18 // a subject stranded past this from the Queen gives up
+const SCATTER_NEAR = 3 // closest a startled subject's target can be to trouble
+const SCATTER_FAR = 6 // farthest a startled subject's target can be to trouble
+const SCATTER_MIN = 2.5 // shortest time before a scattered duck regroups
+const SCATTER_MAX = 4.0 // longest time before a scattered duck regroups
+const SCATTER_SPREAD = 1.1 // radians of random fan-out around "away from trouble"
+const SCATTER_SPEED = 4.4 // quick skitter away from conflict, but not a full sprint
 
 // --- Shared waddle ---------------------------------------------------------
 const TURN_SPEED = 8 // how fast she rotates to face travel direction
@@ -54,13 +60,14 @@ const FORAGE_SPEED = 3 // eager amble toward a snack (quicker than idle wander)
 
 // --- Peeping ---------------------------------------------------------------
 const PEEP_RATE = 0.1 // per second: chance to let out a little peep ("now and then")
+const SCATTER_PEEP_RATE = 0.65 // startled subjects complain much more often
 
 // --- World collision -------------------------------------------------------
 const COLLIDE_RADIUS = 0.3 // her footprint vs. trees/rocks — small, she's little
 const COLLIDE_HEIGHT = 0.7 // her height; canopies float well above this (walk under)
 
 // A duckling is always in exactly one of these.
-type DucklingState = 'pausing' | 'wandering' | 'following' | 'distracted' | 'foraging'
+type DucklingState = 'pausing' | 'wandering' | 'following' | 'distracted' | 'foraging' | 'scattered'
 
 /** What a following duckling needs to know about the world each frame: where the
  *  Queen is, and who its flockmates are (so it can avoid bunching up). */
@@ -126,9 +133,9 @@ export class Duckling {
   }
 
   /** Is she one of the Queen's — following, off foraging, or briefly distracted?
-   *  (All three still count as subjects; she'll return.) */
+   *  (These all still count as subjects; she'll return.) */
   get isSubject(): boolean {
-    return this.state === 'following' || this.state === 'distracted' || this.state === 'foraging'
+    return this.state === 'following' || this.state === 'distracted' || this.state === 'foraging' || this.state === 'scattered'
   }
 
   /** Called when the Queen quacks a NEW duck in range: fall in behind her. */
@@ -143,9 +150,30 @@ export class Duckling {
     this.state = 'following'
   }
 
+  /** Startle an existing subject away from a conflict point. Scattered subjects
+   *  still belong to the Queen, but they won't forage until they regroup. */
+  scatterFrom(x: number, z: number): void {
+    if (!this.isSubject) return
+
+    const pos = this.group.position
+    const dx = pos.x - x
+    const dz = pos.z - z
+    const base = Math.hypot(dx, dz) > 0.001 ? Math.atan2(dz, dx) : Math.random() * Math.PI * 2
+    const angle = base + randRange(-SCATTER_SPREAD, SCATTER_SPREAD)
+    const r = randRange(SCATTER_NEAR, SCATTER_FAR)
+
+    this.targetFood = null
+    this.targetX = x + Math.cos(angle) * r
+    this.targetZ = z + Math.sin(angle) * r
+    this.distractTimer = randRange(SCATTER_MIN, SCATTER_MAX)
+    this.state = 'scattered'
+  }
+
   update(delta: number, ctx: FlockContext): void {
-    // A cute little peep now and then (in her own voice).
-    if (Math.random() < PEEP_RATE * delta) this.sound.peep(this.peepPitch)
+    // A cute little peep now and then (in her own voice); startled subjects
+    // complain more often while they scatter.
+    const peepRate = this.state === 'scattered' ? SCATTER_PEEP_RATE : PEEP_RATE
+    if (Math.random() < peepRate * delta) this.sound.peep(this.peepPitch)
 
     switch (this.state) {
       case 'following':
@@ -163,6 +191,10 @@ export class Duckling {
       case 'distracted':
         if (this.checkLost(ctx)) break
         this.beDistracted(delta)
+        break
+      case 'scattered':
+        if (this.checkLost(ctx)) break
+        this.beScattered(delta)
         break
       case 'wandering':
         this.seekTarget(delta)
@@ -291,6 +323,17 @@ export class Duckling {
       return
     }
     this.ease(s.vx, s.vz, delta)
+  }
+
+  /** Skitter to the scatter target; after the panic timer, return to following. */
+  private beScattered(delta: number): void {
+    this.distractTimer -= delta
+    const s = seekArrive(this.group.position, this.targetX, this.targetZ, SCATTER_SPEED, ARRIVE_RADIUS, ARRIVE_STOP)
+    if (this.distractTimer <= 0) {
+      this.state = 'following'
+      return
+    }
+    this.ease(s.vx, s.vz, delta, FOLLOW_RESPONSIVENESS)
   }
 
   /** Look for a plant within FORAGE_RADIUS; if there's one, target it and switch

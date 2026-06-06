@@ -24,6 +24,9 @@ const WALK_SPEED_FREQ = 0.8 // extra cadence per unit of speed
 const WALK_BOB = 0.05 // gentle up/down body bob per stride
 const WALK_ROLL = 0.05 // a little side sway (much less than a duck's waddle)
 const WALK_HEAD_BOB = 0.14 // the neck dips in rhythm as it strides
+const BOLD_WALK_BOB = 0.08 // extra showy bob while strutting after a win
+const BOLD_WALK_ROLL = 0.12 // broad, smug sway while strutting
+const BOLD_HEAD_LIFT = -0.22 // proud neck lift after winning a honk-off
 const IDLE_GAP_MIN = 2.5 // shortest gap between idle fidgets (seconds)
 const IDLE_GAP_MAX = 6.0 // longest gap
 
@@ -44,6 +47,8 @@ const COLLIDE_HEIGHT = 1.2 // collision height; canopies float above this (walk 
 // --- Foraging (the rivalry: geese eat YOUR plants) -------------------------
 const FORAGE_RADIUS = 7 // how far a goose will notice a plant and go for it
 const FORAGE_RATE = 0.5 // per second: chance to spot + go for an in-range plant
+const BOLD_FORAGE_RADIUS = 10 // bold geese scan farther for plants
+const BOLD_FORAGE_RATE = 1.0 // bold geese try to steal more often
 const EAT_RADIUS = 1.1 // close enough to snatch a plant
 
 // --- Posturing (during a honk-off) -----------------------------------------
@@ -52,6 +57,8 @@ const POSTURE_TURN = 10 // how fast it spins to face the Queen
 const POSTURE_HONK_RATE = 1.4 // it honks a LOT during a face-off
 const PUFF_EASE = 8 // how fast it puffs up / deflates
 const HONKOFF_COOLDOWN = 5 // after losing a honk-off (it won), brief no-re-fight gap
+const BOLD_TIME = 12 // after winning a honk-off, it struts and steals harder
+const BOLD_TRIGGER_SCALE = 1.25 // Geese can use this to slightly widen trigger range
 
 // --- Defeat (the Queen won the honk-off) -----------------------------------
 const FLEE_SPEED = 5 // it bolts away fast
@@ -101,6 +108,7 @@ export class Goose {
   private puff = 1
   private cooldown = 0 // seconds until it can be drawn into another honk-off
   private cowed = 0 // seconds it stays rattled after a defeat (won't forage)
+  private bold = 0 // seconds of smug confidence after it wins a honk-off
 
   constructor(
     x: number,
@@ -138,6 +146,16 @@ export class Goose {
     return !this.posturing && this.cooldown <= 0
   }
 
+  /** A bold goose has just won a honk-off and is acting like it owns the pond. */
+  get isBold(): boolean {
+    return this.bold > 0
+  }
+
+  /** Helper for honk-off owners that want bold geese to start from farther away. */
+  honkOffTriggerRange(baseRange: number): number {
+    return this.isBold ? baseRange * BOLD_TRIGGER_SCALE : baseRange
+  }
+
   /** Start a honk-off: square up and puff, dropping whatever it was doing
    *  (including any idle fidget — reset the wings/neck to neutral). */
   startPosturing(): void {
@@ -166,12 +184,14 @@ export class Goose {
       this.state = 'fleeing'
       this.cooldown = COWED_TIME
       this.cowed = COWED_TIME
+      this.bold = 0
     } else {
       // It held its ground: a smug honk, then straight back to its business.
       this.sound.honk(this.honkPitch * 1.1)
       this.state = 'pausing'
       this.timer = randRange(PAUSE_MIN, PAUSE_MAX)
       this.cooldown = HONKOFF_COOLDOWN
+      this.bold = BOLD_TIME
     }
   }
 
@@ -195,12 +215,14 @@ export class Goose {
     }
     if (this.cooldown > 0) this.cooldown -= delta
     if (this.cowed > 0) this.cowed -= delta
+    if (this.bold > 0) this.bold -= delta
 
     // An occasional honk.
     if (Math.random() < HONK_RATE * delta) this.sound.honk(this.honkPitch)
 
     // Only while calmly milling about does it eye your plants (not mid-flee).
-    if ((this.state === 'wandering' || this.state === 'pausing') && Math.random() < FORAGE_RATE * delta) {
+    const forageRate = this.isBold ? BOLD_FORAGE_RATE : FORAGE_RATE
+    if ((this.state === 'wandering' || this.state === 'pausing') && Math.random() < forageRate * delta) {
       this.tryForage()
     }
 
@@ -249,6 +271,11 @@ export class Goose {
       return
     }
 
+    if (this.isBold) {
+      this.applyBoldPose(delta, speed)
+      return
+    }
+
     if (speed > MOVING) {
       // Deliberate stride: gentle body bob + slight sway, and the neck head-bobs
       // in rhythm. Wings stay folded.
@@ -264,6 +291,19 @@ export class Goose {
       this.group.rotation.z = 0
       this.updateIdle(delta)
     }
+  }
+
+  /** A bold goose reads as smug: high neck, showy stride, and cocked wings. */
+  private applyBoldPose(delta: number, speed: number): void {
+    this.idleAction = 'none'
+    this.walkPhase += delta * (WALK_FREQ + Math.max(speed, 1) * 1.25)
+
+    const strut = 0.5 + 0.5 * Math.sin(this.walkPhase)
+    this.group.position.y = Math.abs(Math.sin(this.walkPhase)) * BOLD_WALK_BOB
+    this.group.rotation.z = Math.sin(this.walkPhase) * BOLD_WALK_ROLL
+    this.neck.rotation.set(BOLD_HEAD_LIFT + WALK_HEAD_BOB * strut * 0.4, Math.sin(this.walkPhase * 0.5) * 0.18, 0)
+    this.leftWing.rotation.z = -0.18 - strut * 0.08
+    this.rightWing.rotation.z = 0.18 + strut * 0.08
   }
 
   /** Float on the water: sink to the waterline with a slow bob + sway, wings
@@ -378,7 +418,8 @@ export class Goose {
   private tryForage(): boolean {
     if (this.cowed > 0) return false // too rattled to steal right now
     const pos = this.group.position
-    const plant = this.food.nearestUncollected(pos.x, pos.z, FORAGE_RADIUS)
+    const radius = this.isBold ? BOLD_FORAGE_RADIUS : FORAGE_RADIUS
+    const plant = this.food.nearestUncollected(pos.x, pos.z, radius)
     if (!plant) return false
     this.targetFood = plant
     this.state = 'foraging'

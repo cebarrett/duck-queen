@@ -43,6 +43,18 @@ const FLAP_REST = 0.9 // wings sit spread out this far while flying (radians)
 const FLAP_EASE = 10 // how fast flapping ramps up/down as Space is held/released
 const WING_SETTLE = 8 // how fast wings fold back to vertical on the ground
 
+// --- Panic flee -------------------------------------------------------------
+const PANIC_DURATION = 2.6 // seconds the Queen keeps fleeing after being startled
+const PANIC_SPEED = 8.5 // base flee speed
+const PANIC_STEER_INFLUENCE = 0.35 // how much WASD can bend the flee direction
+const PANIC_RESPONSIVENESS = 9 // how sharply she chases the panic target velocity
+const PANIC_WADDLE_BOB = 0.11 // bigger, faster embarrassed scramble
+const PANIC_WADDLE_ROLL = 0.22
+const PANIC_FLUTTER_SPEED = 24
+const PANIC_FLUTTER_REST = 0.35
+const PANIC_FLUTTER_AMPLITUDE = 0.35
+const PANIC_CROWN_EASE = 8
+
 // --- Shared ----------------------------------------------------------------
 const TURN_SPEED = 10 // how fast she rotates to face travel direction
 const DUCK_RADIUS = 0.5 // her footprint for collision (a circle on the ground)
@@ -81,6 +93,9 @@ export class DuckController {
   private mode: DuckMode = 'waddle'
   private prevMode: DuckMode = 'waddle' // last frame's mode, for spotting transitions
   private pendingSplash = 0 // >0 = she just landed in water this hard; fire a splash
+  private panicTimer = 0
+  private panicFromX = 0
+  private panicFromZ = 0
 
   constructor(
     private readonly duck: Duck,
@@ -97,6 +112,16 @@ export class DuckController {
 
   getMode(): DuckMode {
     return this.mode
+  }
+
+  startPanicFlee(fromX: number, fromZ: number): void {
+    this.panicTimer = PANIC_DURATION
+    this.panicFromX = fromX
+    this.panicFromZ = fromZ
+  }
+
+  isPanicking(): boolean {
+    return this.panicTimer > 0
   }
 
   update(delta: number): void {
@@ -139,7 +164,9 @@ export class DuckController {
     }
 
     // --- Mode-specific horizontal velocity (vertical handled below) --------
-    if (this.mode === 'fly') {
+    if (this.isPanicking()) {
+      this.updatePanicFlee(delta, dirX, dirZ)
+    } else if (this.mode === 'fly') {
       this.updateFly(delta, dirX, dirZ)
     } else if (this.mode === 'swim') {
       this.updateSwim(delta, dirX, dirZ)
@@ -195,9 +222,21 @@ export class DuckController {
 
     // --- Wings: flap while flying, fold back on the ground ------------------
     this.updateWings(delta)
+
+    this.updateCrown(delta)
+    this.panicTimer = Math.max(0, this.panicTimer - delta)
   }
 
   private updateWings(delta: number): void {
+    if (this.isPanicking()) {
+      this.flapIntensity = 0
+      this.flapPhase += delta * PANIC_FLUTTER_SPEED
+      const flutter = PANIC_FLUTTER_REST + Math.abs(Math.sin(this.flapPhase)) * PANIC_FLUTTER_AMPLITUDE
+      this.duck.leftWing.rotation.z = -flutter
+      this.duck.rightWing.rotation.z = flutter
+      return
+    }
+
     // Wings come out only when she's actually flying: above her floor, OR holding
     // Space to take off. Resting on the ground (or on a rock) folds them —
     // otherwise she sits there with her wings stuck out mid-glide.
@@ -257,7 +296,7 @@ export class DuckController {
     //   else over the pond               -> swim
     //   else                             -> waddle
     const airborne = this.altitude > this.groundHeight + GROUND_EPS
-    const wantsUp = this.input.isDown('Space')
+    const wantsUp = this.input.isDown('Space') && !this.isPanicking()
     if (wantsUp || airborne) this.mode = 'fly'
     else if (this.overWater) this.mode = 'swim'
     else this.mode = 'waddle'
@@ -297,12 +336,51 @@ export class DuckController {
     this.velocity.z += (targetZ - this.velocity.z) * t
   }
 
+  private updatePanicFlee(delta: number, dirX: number, dirZ: number): void {
+    const pos = this.duck.group.position
+    let fleeX = pos.x - this.panicFromX
+    let fleeZ = pos.z - this.panicFromZ
+    const fleeLen = Math.hypot(fleeX, fleeZ)
+    if (fleeLen > 0.001) {
+      fleeX /= fleeLen
+      fleeZ /= fleeLen
+    } else {
+      fleeX = -Math.sin(this.heading)
+      fleeZ = -Math.cos(this.heading)
+    }
+
+    let targetX = fleeX + dirX * PANIC_STEER_INFLUENCE
+    let targetZ = fleeZ + dirZ * PANIC_STEER_INFLUENCE
+    const targetLen = Math.hypot(targetX, targetZ)
+    if (targetLen > 0.001) {
+      targetX = (targetX / targetLen) * PANIC_SPEED
+      targetZ = (targetZ / targetLen) * PANIC_SPEED
+    } else {
+      targetX = fleeX * PANIC_SPEED
+      targetZ = fleeZ * PANIC_SPEED
+    }
+
+    const t = 1 - Math.exp(-PANIC_RESPONSIVENESS * delta)
+    this.velocity.x += (targetX - this.velocity.x) * t
+    this.velocity.z += (targetZ - this.velocity.z) * t
+
+    if (this.mode === 'fly') {
+      this.velocity.y += (-FLY_FALL_SPEED - this.velocity.y) * t
+    }
+  }
+
   private applyPose(delta: number, speed: number): void {
     let bob = 0
     let roll = 0
     let pitch = 0
 
-    if (this.mode === 'waddle') {
+    if (this.isPanicking()) {
+      const moveFactor = Math.min(speed / PANIC_SPEED, 1)
+      this.waddlePhase += delta * (12 + speed * 1.4)
+      bob = Math.abs(Math.sin(this.waddlePhase)) * PANIC_WADDLE_BOB * moveFactor
+      roll = Math.sin(this.waddlePhase) * PANIC_WADDLE_ROLL * moveFactor
+      pitch = 0.18
+    } else if (this.mode === 'waddle') {
       // Hop + side-to-side tilt, fading in/out with how fast she's walking.
       const moveFactor = Math.min(speed / MAX_SPEED, 1)
       this.waddlePhase += delta * (6 + speed) // steps come quicker when faster
@@ -324,5 +402,15 @@ export class DuckController {
     this.duck.group.rotation.x = pitch // nose up/down
     this.duck.group.rotation.y = this.heading // turn
     this.duck.group.rotation.z = roll // waddle tilt
+  }
+
+  private updateCrown(delta: number): void {
+    if (!this.duck.crown) return
+
+    const targetX = this.isPanicking() ? 0.28 : 0
+    const targetZ = this.isPanicking() ? Math.sin(this.waddlePhase * 0.5) * 0.22 : 0
+    const t = 1 - Math.exp(-PANIC_CROWN_EASE * delta)
+    this.duck.crown.rotation.x += (targetX - this.duck.crown.rotation.x) * t
+    this.duck.crown.rotation.z += (targetZ - this.duck.crown.rotation.z) * t
   }
 }

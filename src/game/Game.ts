@@ -16,6 +16,10 @@ import { deriveRng } from './rng'
 // The default world seed. A given seed always generates the same layout; pass
 // ?seed=123 in the URL to try another one.
 const DEFAULT_WORLD_SEED = 20260606
+const RESOLVE_SHAKEN_TIME = 20
+const RESOLVE_SHAKEN_PENALTY = 0.15
+const REGROUP_RADIUS = 5
+const REGROUP_CLEAR_RATIO = 0.6
 
 function getWorldSeed(): number {
   const raw = new URLSearchParams(window.location.search).get('seed')
@@ -56,6 +60,7 @@ export class Game {
   private readonly sound = new Sound()
   private readonly splashFx: Splash
   private readonly hud = new HUD()
+  private resolveShakenTimer = 0
 
   constructor() {
     // --- Renderer ---------------------------------------------------------
@@ -133,6 +138,8 @@ export class Game {
       this.duck.group,
       this.flock,
       (active, resolve) => this.hud.setHonkOff(active, resolve),
+      (gooseX, gooseZ) => this.handleQueenLostHonkOff(gooseX, gooseZ),
+      () => this.resolvePenalty(),
       world.colliders,
       deriveRng(seed, 'geese'),
     )
@@ -166,8 +173,10 @@ export class Game {
     // Move the duck first, then let the camera follow her new position.
     this.duckController.update(delta)
     this.flock.update(delta)
+    this.updateResolveShaken(delta)
     this.geese.update(delta)
     this.splashFx.update(delta)
+    this.hud.update(delta)
     this.cameraRig.update(delta)
 
     // Keep the HUD in sync (both only redraw on change).
@@ -178,6 +187,30 @@ export class Game {
     this.hud.setStolen(this.food.stolen)
 
     this.renderer.render(this.scene, this.camera)
+  }
+
+  private handleQueenLostHonkOff(gooseX: number, gooseZ: number): void {
+    this.duckController.startPanicFlee(gooseX, gooseZ)
+    this.flock.scatterFrom(gooseX, gooseZ)
+    this.resolveShakenTimer = RESOLVE_SHAKEN_TIME
+    this.hud.showMessage('OUT-HONKED!')
+    this.hud.setResolveShaken(true)
+  }
+
+  private resolvePenalty(): number {
+    return this.resolveShakenTimer > 0 ? RESOLVE_SHAKEN_PENALTY : 0
+  }
+
+  private updateResolveShaken(delta: number): void {
+    if (this.resolveShakenTimer <= 0) {
+      this.hud.setResolveShaken(false)
+      return
+    }
+    this.resolveShakenTimer = Math.max(0, this.resolveShakenTimer - delta)
+    if (this.flock.subjectCount > 0 && this.flock.regroupedRatio(REGROUP_RADIUS) >= REGROUP_CLEAR_RATIO) {
+      this.resolveShakenTimer = 0
+    }
+    this.hud.setResolveShaken(this.resolveShakenTimer > 0)
   }
 
   private onResize = (): void => {

@@ -18,9 +18,12 @@ const DISENGAGE_RANGE = 9 // backing this far away ends it (counts as a loss)
 const QUACK_GAIN = 0.14 // resolve added per Q press
 const FLOCK_FILL = 0.06 // resolve/sec per following duck (the flock bonus)
 const GOOSE_DRAIN = 0.18 // resolve/sec the goose pushes back
+const MAX_PASSIVE_SUPPORT = GOOSE_DRAIN * 0.75 // support slows losses; Q still wins fights
 
 /** Game wires this to the HUD (active? + how full the resolve meter is, 0..1). */
 type OnHonkOff = (active: boolean, resolve: number) => void
+type OnQueenLost = (gooseX: number, gooseZ: number, queenX: number, queenZ: number) => void
+type ResolvePenalty = () => number
 
 /**
  * Geese owns the rival geese and runs the honk-off — the non-violent standoff.
@@ -46,6 +49,8 @@ export class Geese {
     private readonly queen: THREE.Object3D,
     private readonly flock: Flock,
     private readonly onHonkOff: OnHonkOff,
+    private readonly onQueenLost: OnQueenLost,
+    private readonly resolvePenalty: ResolvePenalty,
     colliders: readonly Collider[],
     rng: Rng,
   ) {
@@ -83,8 +88,10 @@ export class Geese {
       if (qDown && !this.wasQuackDown) this.resolve += QUACK_GAIN
       this.wasQuackDown = qDown
 
-      // Flock backs her up (passive fill); the goose pushes back (passive drain).
-      this.resolve += (FLOCK_FILL * this.flock.subjectCount - GOOSE_DRAIN) * delta
+      // Flock backs her up, but never enough to win by itself; the Queen still
+      // has to quack in the goose's face to push resolve upward.
+      const passiveSupport = Math.min(FLOCK_FILL * this.flock.subjectCount, MAX_PASSIVE_SUPPORT)
+      this.resolve += (passiveSupport - GOOSE_DRAIN) * delta
       this.resolve = Math.max(0, Math.min(1, this.resolve))
       this.onHonkOff(true, this.resolve)
 
@@ -95,10 +102,12 @@ export class Geese {
 
     // No honk-off running — start one if she's squared up to an engageable goose.
     let nearest: Goose | null = null
-    let nearestSq = TRIGGER_RANGE * TRIGGER_RANGE
+    let nearestSq = Infinity
     for (const g of this.geese) {
       if (!g.engageable) continue
+      const range = this.engageRange(g)
       const dSq = (g.group.position.x - qx) ** 2 + (g.group.position.z - qz) ** 2
+      if (dSq >= range * range) continue
       if (dSq < nearestSq) {
         nearestSq = dSq
         nearest = g
@@ -111,15 +120,26 @@ export class Geese {
     this.active = goose
     goose.startPosturing()
     // Head start from the flock — a crowd at your back is intimidating.
-    this.resolve = Math.min(0.6, 0.1 + this.flock.subjectCount * 0.08)
+    const baseResolve = Math.min(0.6, 0.1 + this.flock.subjectCount * 0.08)
+    this.resolve = Math.max(0.05, baseResolve - this.resolvePenalty())
     this.wasQuackDown = this.input.isDown('KeyQ') // don't count an already-held Q
     this.onHonkOff(true, this.resolve)
   }
 
   private end(won: boolean): void {
-    if (this.active) this.active.stopPosturing(won)
+    if (this.active) {
+      const goose = this.active
+      const gp = goose.group.position
+      const qp = this.queen.position
+      goose.stopPosturing(won)
+      if (!won) this.onQueenLost(gp.x, gp.z, qp.x, qp.z)
+    }
     this.active = null
     this.resolve = 0
     this.onHonkOff(false, 0)
+  }
+
+  private engageRange(goose: Goose): number {
+    return goose.honkOffTriggerRange(TRIGGER_RANGE)
   }
 }
