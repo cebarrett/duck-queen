@@ -27,12 +27,20 @@ function makeSample(url: string): Sample {
   return { url, raw: null, buffer: null, decoding: false }
 }
 
+// The quack is monophonic (one at a time) so mashing Q can't stack copies; this
+// is the minimum gap between retriggers, to keep frantic mashing from machine-gunning.
+const MIN_QUACK_GAP = 0.08
+
 export class Sound {
   private ctx: AudioContext | null = null
 
   private readonly quackSample = makeSample(QUACK_URL)
   private readonly peepSample = makeSample(PEEP_URL)
   private readonly honkSample = makeSample(HONK_URL)
+
+  // The currently-playing quack (so a new quack can cut it off) + when it started.
+  private quackVoice: AudioScheduledSourceNode | null = null
+  private lastQuackTime = -1
 
   constructor() {
     void this.fetch(this.quackSample) // optional — silently no-ops if absent
@@ -48,11 +56,40 @@ export class Sound {
     window.addEventListener('keydown', unlock)
   }
 
-  /** The Queen's quack — recorded if available, else synthesized. */
+  /** The Queen's quack — recorded if available, else synthesized. Monophonic:
+   *  mashing Q (e.g. during a honk-off) cuts the previous quack instead of piling
+   *  copies on top of each other, and a short gap throttles frantic retriggers. */
   quack(): void {
     const ctx = this.getContext()
     if (!ctx) return
-    this.playSampleOrSynth(ctx, this.quackSample, (c) => this.synthQuack(c), 1, 0.9)
+
+    const now = ctx.currentTime
+    if (now - this.lastQuackTime < MIN_QUACK_GAP) return // ignore ultra-fast repeats
+    this.lastQuackTime = now
+
+    this.stopQuackVoice() // cut off any still-playing quack first
+
+    let voice: AudioScheduledSourceNode
+    if (this.quackSample.buffer) {
+      voice = this.playBuffer(ctx, this.quackSample.buffer, 1, 0.9)
+    } else {
+      if (this.quackSample.raw) void this.decode(this.quackSample)
+      voice = this.synthQuack(ctx)
+    }
+    this.quackVoice = voice
+    voice.onended = () => {
+      if (this.quackVoice === voice) this.quackVoice = null
+    }
+  }
+
+  private stopQuackVoice(): void {
+    if (!this.quackVoice) return
+    try {
+      this.quackVoice.stop()
+    } catch {
+      // already stopped/ended — fine
+    }
+    this.quackVoice = null
   }
 
   /** A duckling's little peep. `pitch` (~0.85–1.25) gives each duckling its own
@@ -153,7 +190,7 @@ export class Sound {
     }
   }
 
-  private playBuffer(ctx: AudioContext, buffer: AudioBuffer, pitch: number, volume: number): void {
+  private playBuffer(ctx: AudioContext, buffer: AudioBuffer, pitch: number, volume: number): AudioBufferSourceNode {
     const src = ctx.createBufferSource()
     src.buffer = buffer
     src.playbackRate.value = pitch // shift a recording's pitch (per-duckling voice)
@@ -162,12 +199,13 @@ export class Sound {
     src.connect(gain)
     gain.connect(ctx.destination)
     src.start()
+    return src
   }
 
   // --- Synthesized fallbacks -------------------------------------------------
 
   /** A short, nasal, pitch-bent quack built from scratch. */
-  private synthQuack(ctx: AudioContext): void {
+  private synthQuack(ctx: AudioContext): OscillatorNode {
     const now = ctx.currentTime
     const pitch = 1 + (Math.random() * 0.2 - 0.1) // ±10% per quack, for variety
 
@@ -194,6 +232,7 @@ export class Sound {
     gain.connect(ctx.destination)
     osc.start(now)
     osc.stop(now + 0.25)
+    return osc
   }
 
   /** A tiny high chirp — soft triangle wave, a quick up-then-down pitch blip.
