@@ -1,25 +1,12 @@
 import * as THREE from 'three'
 import { Pond } from './Water'
 import type { Rng } from './rng'
+import type { Collider } from './collision'
 
 // A calm sky blue and a grassy green. Defined once so the sky, the fog, and the
 // hemisphere light can all share the same palette (keeps everything cohesive).
 const SKY_COLOR = 0x8ec9ff
 const GROUND_COLOR = 0x88bb55
-
-/**
- * A solid obstacle, described as a vertical cylinder: a circle on the ground
- * (centre x/z + radius) that exists between heights yMin and yMax. The duck is
- * blocked by it only when she's within that height range — so she can fly over
- * the top, or walk under a canopy that floats above her.
- */
-export interface Collider {
-  x: number
-  z: number
-  radius: number
-  yMin: number
-  yMax: number
-}
 
 /**
  * World builds the static environment: the ground, the sky/background, fog,

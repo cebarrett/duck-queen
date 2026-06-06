@@ -4,6 +4,7 @@ import type { Input } from './Input'
 import type { Sound } from './Sound'
 import type { Pond } from './Water'
 import type { Food } from './Food'
+import type { Collider } from './collision'
 import type { Rng } from './rng'
 
 const DUCKLING_COUNT = 8
@@ -25,12 +26,13 @@ export class Flock {
     private readonly sound: Sound,
     pond: Pond,
     food: Food,
+    colliders: readonly Collider[],
     rng: Rng,
   ) {
     for (let i = 0; i < DUCKLING_COUNT; i++) {
       const angle = rng() * Math.PI * 2
       const radius = 6 + rng() * 8
-      const duckling = new Duckling(Math.cos(angle) * radius, Math.sin(angle) * radius, pond, food, this.sound, rng)
+      const duckling = new Duckling(Math.cos(angle) * radius, Math.sin(angle) * radius, pond, food, this.sound, colliders, rng)
       this.ducklings.push(duckling)
       scene.add(duckling.group)
     }

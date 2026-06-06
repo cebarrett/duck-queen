@@ -20,6 +20,21 @@ Randomness that drives *behaviour during play* — a duck deciding to wander, a 
 honking, foraging choices, idle fidget timing — is gameplay, not generation, and may
 freely use `Math.random()`.
 
+### World collision is shared
+Collision against the scenery lives in **[`src/game/collision.ts`](src/game/collision.ts)**
+as two pure functions — `resolveWalls(...)` (push a body out of obstacle sides + slide
+its velocity) and `floorHeightAt(...)` (the surface height under it). The Queen, the
+ducklings, and the geese all use them; don't re-implement the math per creature.
+
+To give a **new ground creature** collision: pass it `World`'s `colliders` array, and
+after you apply its movement call `resolveWalls(pos, vel, radius, feet, height, stepUp,
+colliders)`. Two knobs shape the feel:
+- **`stepUp`** — surfaces within this of the feet are floors (skipped as walls). The
+  Queen passes `STEP_UP` so she can stand on / step onto low rocks; NPCs that don't
+  climb pass `0`, so every obstacle is a solid wall to walk around.
+- **collision `height`** — keep it *below the tree canopies* (the Queen uses `1.7`) so a
+  body bumps trunks and rocks but walks *under* the leaves.
+
 ### Other notes
 - **The blocky art is the intended style**, not a placeholder to replace. Keep new
   models blocky (boxes). Animate via pivot groups (see the duck wings / goose neck).

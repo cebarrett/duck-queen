@@ -120,7 +120,7 @@ export class Game {
 
     // The duck subjects. The Flock spawns and updates them; it needs Input (to
     // hear the Queen's quack) and the Queen's Group (to know where she is).
-    this.flock = new Flock(this.scene, this.input, this.duck.group, this.sound, world.pond, this.food, deriveRng(seed, 'flock'))
+    this.flock = new Flock(this.scene, this.input, this.duck.group, this.sound, world.pond, this.food, world.colliders, deriveRng(seed, 'flock'))
 
     // The rival geese — they wander, honk, forage your plants, and face off with
     // the Queen in honk-offs (which read Input + flock size, and drive the HUD meter).
@@ -132,6 +132,7 @@ export class Game {
       this.duck.group,
       this.flock,
       (active, resolve) => this.hud.setHonkOff(active, resolve),
+      world.colliders,
       deriveRng(seed, 'geese'),
     )
 

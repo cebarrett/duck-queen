@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { buildDuckModel } from './duckModel'
 import { approachAngle, randRange } from './mathUtils'
+import { type Collider, resolveWalls } from './collision'
 import type { Pond } from './Water'
 import type { Food, FoodItem } from './Food'
 import type { Sound } from './Sound'
@@ -54,6 +55,10 @@ const FORAGE_SPEED = 3 // eager amble toward a snack (quicker than idle wander)
 // --- Peeping ---------------------------------------------------------------
 const PEEP_RATE = 0.1 // per second: chance to let out a little peep ("now and then")
 
+// --- World collision -------------------------------------------------------
+const COLLIDE_RADIUS = 0.3 // her footprint vs. trees/rocks — small, she's little
+const COLLIDE_HEIGHT = 0.7 // her height; canopies float well above this (walk under)
+
 // A duckling is always in exactly one of these.
 type DucklingState = 'pausing' | 'wandering' | 'following' | 'distracted' | 'foraging'
 
@@ -100,6 +105,7 @@ export class Duckling {
     private readonly pond: Pond,
     private readonly food: Food,
     private readonly sound: Sound,
+    private readonly colliders: readonly Collider[],
     rng: Rng,
   ) {
     const model = buildDuckModel({
@@ -172,6 +178,14 @@ export class Duckling {
     const pos = this.group.position
     pos.x += this.velX * delta
     pos.z += this.velZ * delta
+
+    // Push out of any tree/rock she walked into. stepUp 0 = she doesn't climb, so
+    // every obstacle is a wall to waddle around. (Wrap velX/velZ in an {x, z} so
+    // the shared resolver can cancel the into-wall velocity, then read it back.)
+    const vel = { x: this.velX, z: this.velZ }
+    resolveWalls(pos, vel, COLLIDE_RADIUS, 0, COLLIDE_HEIGHT, 0, this.colliders)
+    this.velX = vel.x
+    this.velZ = vel.z
 
     // Eat any plant we've come within reach of — followers only, for now.
     // (Step 3 will make them actively seek food out instead of just bumping it.)

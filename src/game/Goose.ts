@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { buildGoose } from './gooseModel'
 import { approachAngle, randRange } from './mathUtils'
+import { type Collider, resolveWalls } from './collision'
 import type { Sound } from './Sound'
 import type { Food, FoodItem } from './Food'
 import { type Rng, rngRange } from './rng'
@@ -26,6 +27,10 @@ const IDLE_GAP_MIN = 2.5 // shortest gap between idle fidgets (seconds)
 const IDLE_GAP_MAX = 6.0 // longest gap
 
 const HONK_RATE = 0.07 // per second: chance to let out a honk now and then
+
+// --- World collision -------------------------------------------------------
+const COLLIDE_RADIUS = 0.6 // its footprint vs. trees/rocks (bigger than a duckling)
+const COLLIDE_HEIGHT = 1.2 // collision height; canopies float above this (walk under)
 
 // --- Foraging (the rivalry: geese eat YOUR plants) -------------------------
 const FORAGE_RADIUS = 7 // how far a goose will notice a plant and go for it
@@ -93,6 +98,7 @@ export class Goose {
     z: number,
     private readonly sound: Sound,
     private readonly food: Food,
+    private readonly colliders: readonly Collider[],
     rng: Rng,
   ) {
     const model = buildGoose()
@@ -209,6 +215,12 @@ export class Goose {
     const pos = this.group.position
     pos.x += this.velX * delta
     pos.z += this.velZ * delta
+
+    // Push out of any tree/rock it walked into (stepUp 0 = it doesn't climb).
+    const vel = { x: this.velX, z: this.velZ }
+    resolveWalls(pos, vel, COLLIDE_RADIUS, 0, COLLIDE_HEIGHT, 0, this.colliders)
+    this.velX = vel.x
+    this.velZ = vel.z
 
     // Face travel direction.
     const speed = Math.hypot(this.velX, this.velZ)

@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import type { Input } from './Input'
 import type { ThirdPersonCamera } from './ThirdPersonCamera'
 import type { Duck } from './Duck'
-import type { Collider } from './World'
+import { type Collider, resolveWalls, floorHeightAt } from './collision'
 import type { Pond } from './Water'
 import type { Reeds } from './Reeds'
 import { approachAngle } from './mathUtils'
@@ -153,7 +153,8 @@ export class DuckController {
     // --- Apply horizontal movement, then push out of obstacle SIDES --------
     this.duck.group.position.x += this.velocity.x * delta
     this.duck.group.position.z += this.velocity.z * delta
-    this.resolveWalls()
+    // STEP_UP lets her step onto / stand on low rocks (they're floors, not walls).
+    resolveWalls(this.duck.group.position, this.velocity, DUCK_RADIUS, this.altitude, DUCK_HEIGHT, STEP_UP, this.colliders)
 
     // --- Vertical: find the floor under her new position and settle onto it -
     // Over the pond her "floor" is the waterline (so she floats on the surface);
@@ -164,7 +165,7 @@ export class DuckController {
     this.overWater = this.pond.isWater(pos.x, pos.z)
     this.groundHeight = this.overWater
       ? this.pond.floatLine
-      : this.supportHeightAt(pos.x, pos.z, this.altitude)
+      : floorHeightAt(pos.x, pos.z, this.altitude, DUCK_RADIUS, STEP_UP, this.colliders)
     this.updateAltitude(delta)
 
     // --- The Queen gathers reeds she comes within reach of, on foot or while
@@ -227,66 +228,6 @@ export class DuckController {
       this.duck.leftWing.rotation.z += (0 - this.duck.leftWing.rotation.z) * t
       this.duck.rightWing.rotation.z += (0 - this.duck.rightWing.rotation.z) * t
     }
-  }
-
-  /**
-   * Horizontal collision: push the duck (a circle of DUCK_RADIUS, DUCK_HEIGHT
-   * tall) out of the SIDES of any obstacle her body intersects, and cancel the
-   * velocity heading into it so she slides along instead of sticking.
-   *
-   * Crucially, we SKIP any obstacle whose top is within STEP_UP of her feet —
-   * those are floors she stands on or steps up onto (handled by the vertical
-   * pass), not walls. That's what stopped her being shoved off a rock's top.
-   */
-  private resolveWalls(): void {
-    const pos = this.duck.group.position
-    const feet = this.altitude
-    const head = feet + DUCK_HEIGHT
-
-    for (const c of this.colliders) {
-      if (head <= c.yMin) continue // her whole body is below it -> walk under
-      if (feet >= c.yMax - STEP_UP) continue // she's on top / stepping up -> floor, not wall
-
-      // Circle-vs-circle on the ground plane.
-      const dx = pos.x - c.x
-      const dz = pos.z - c.z
-      const minDist = c.radius + DUCK_RADIUS
-      const distSq = dx * dx + dz * dz
-      if (distSq >= minDist * minDist) continue // not overlapping
-
-      // Push her out along the line from the obstacle's centre to her.
-      const dist = Math.sqrt(distSq) || 0.0001
-      const nx = dx / dist
-      const nz = dz / dist
-      pos.x = c.x + nx * minDist
-      pos.z = c.z + nz * minDist
-
-      // Remove the velocity component pointing into the obstacle, keeping the
-      // sideways part so she slides around it.
-      const into = this.velocity.x * nx + this.velocity.z * nz
-      if (into < 0) {
-        this.velocity.x -= into * nx
-        this.velocity.z -= into * nz
-      }
-    }
-  }
-
-  /**
-   * The height of the floor under her at (x, z): the highest obstacle-top she's
-   * standing over whose surface is at most STEP_UP above her feet, or 0 (the
-   * ground) if none. The STEP_UP limit means a rock she's descended onto or can
-   * step up to supports her, but a tall treetop far above doesn't yank her up.
-   */
-  private supportHeightAt(x: number, z: number, feet: number): number {
-    let support = 0 // the ground is always there at y = 0
-    for (const c of this.colliders) {
-      const dx = x - c.x
-      const dz = z - c.z
-      const reach = c.radius + DUCK_RADIUS
-      if (dx * dx + dz * dz >= reach * reach) continue // not standing over it
-      if (c.yMax <= feet + STEP_UP) support = Math.max(support, c.yMax)
-    }
-    return support
   }
 
   /** Move her vertically toward/within her floor. In fly she integrates her
