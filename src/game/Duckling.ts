@@ -4,6 +4,7 @@ import { approachAngle, randRange } from './mathUtils'
 import type { Pond } from './Water'
 import type { Food, FoodItem } from './Food'
 import type { Sound } from './Sound'
+import { type Rng, rngRange } from './rng'
 
 // Subjects are smaller than the Queen and duckling-yellow so they read as "hers"
 // at a glance (vs. her white).
@@ -90,8 +91,8 @@ export class Duckling {
   private targetFood: FoodItem | null = null // the plant she's foraging toward
 
   // Each duckling gets its own peep pitch, so the flock sounds like a crowd of
-  // little individuals rather than one cloned voice.
-  private readonly peepPitch = randRange(0.85, 1.25)
+  // little individuals rather than one cloned voice. Seeded (see constructor).
+  private readonly peepPitch: number
 
   constructor(
     x: number,
@@ -99,6 +100,7 @@ export class Duckling {
     private readonly pond: Pond,
     private readonly food: Food,
     private readonly sound: Sound,
+    rng: Rng,
   ) {
     const model = buildDuckModel({
       featherColor: DUCKLING_COLOR,
@@ -110,9 +112,11 @@ export class Duckling {
     this.homeX = x
     this.homeZ = z
 
-    this.heading = Math.random() * Math.PI * 2
+    // Spawn-time values come from the seeded rng so the initial world is stable.
+    this.peepPitch = rngRange(rng, 0.85, 1.25)
+    this.heading = rng() * Math.PI * 2
     this.group.rotation.y = this.heading
-    this.timer = randRange(0, PAUSE_MAX) // stagger their first move
+    this.timer = randRange(0, PAUSE_MAX) // first-move timing — fine to stay unseeded
   }
 
   /** Is she one of the Queen's — following, off foraging, or briefly distracted?

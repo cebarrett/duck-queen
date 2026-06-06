@@ -11,6 +11,17 @@ import { Reeds } from './Reeds'
 import { Sound } from './Sound'
 import { Splash } from './Splash'
 import { HUD } from './HUD'
+import { deriveRng } from './rng'
+
+// The default world seed. A given seed always generates the same layout; pass
+// ?seed=123 in the URL to try another one.
+const DEFAULT_WORLD_SEED = 20260606
+
+function getWorldSeed(): number {
+  const raw = new URLSearchParams(window.location.search).get('seed')
+  const parsed = raw === null ? NaN : Number(raw)
+  return Number.isFinite(parsed) ? parsed : DEFAULT_WORLD_SEED
+}
 
 /**
  * Game is the "conductor". It owns the three core Three.js objects and the
@@ -56,11 +67,17 @@ export class Game {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     document.body.appendChild(this.renderer.domElement)
 
+    // --- World seed -------------------------------------------------------
+    // ONE seed drives all world generation, so a given seed always produces the
+    // exact same layout. Each system gets its own derived stream (see rng.ts).
+    // Override with ?seed=123 in the URL to explore other layouts.
+    const seed = getWorldSeed()
+
     // --- Scene ------------------------------------------------------------
     this.scene = new THREE.Scene()
     // World adds the ground, sky, fog, lights, and scenery to the scene, and
     // exposes the scenery's colliders so the duck can bump into them.
-    const world = new World(this.scene)
+    const world = new World(this.scene, deriveRng(seed, 'scenery'))
 
     // --- Camera -----------------------------------------------------------
     // PerspectiveCamera(fov, aspect, near, far):
@@ -82,9 +99,9 @@ export class Game {
     this.input = new Input(this.renderer.domElement)
     this.cameraRig = new ThirdPersonCamera(this.camera, this.input, this.duck.group)
     // Scatter edible plants for the flock to forage (land + pond).
-    this.food = new Food(this.scene, world.pond)
+    this.food = new Food(this.scene, world.pond, deriveRng(seed, 'food'))
     // Reeds grow on the shoreline — only the Queen gathers these.
-    this.reeds = new Reeds(this.scene, world.pond)
+    this.reeds = new Reeds(this.scene, world.pond, deriveRng(seed, 'reeds'))
 
     // Splash effects live on the water surface; a splash plays a sound + ripple.
     this.splashFx = new Splash(this.scene, world.pond.surfaceY)
@@ -103,7 +120,7 @@ export class Game {
 
     // The duck subjects. The Flock spawns and updates them; it needs Input (to
     // hear the Queen's quack) and the Queen's Group (to know where she is).
-    this.flock = new Flock(this.scene, this.input, this.duck.group, this.sound, world.pond, this.food)
+    this.flock = new Flock(this.scene, this.input, this.duck.group, this.sound, world.pond, this.food, deriveRng(seed, 'flock'))
 
     // The rival geese — they wander, honk, forage your plants, and face off with
     // the Queen in honk-offs (which read Input + flock size, and drive the HUD meter).
@@ -115,6 +132,7 @@ export class Game {
       this.duck.group,
       this.flock,
       (active, resolve) => this.hud.setHonkOff(active, resolve),
+      deriveRng(seed, 'geese'),
     )
 
     // Keep the camera/canvas correct when the window resizes.

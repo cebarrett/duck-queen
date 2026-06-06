@@ -4,6 +4,7 @@ import type { Sound } from './Sound'
 import type { Food } from './Food'
 import type { Input } from './Input'
 import type { Flock } from './Flock'
+import type { Rng } from './rng'
 
 const GOOSE_COUNT = 3
 const AREA_CENTER_Z = -50 // out past the pond (which sits at z = -26)
@@ -42,11 +43,12 @@ export class Geese {
     private readonly queen: THREE.Object3D,
     private readonly flock: Flock,
     private readonly onHonkOff: OnHonkOff,
+    rng: Rng,
   ) {
     for (let i = 0; i < GOOSE_COUNT; i++) {
-      const angle = Math.random() * Math.PI * 2
-      const radius = Math.random() * AREA_RADIUS
-      const goose = new Goose(Math.cos(angle) * radius, AREA_CENTER_Z + Math.sin(angle) * radius, sound, food)
+      const angle = rng() * Math.PI * 2
+      const radius = rng() * AREA_RADIUS
+      const goose = new Goose(Math.cos(angle) * radius, AREA_CENTER_Z + Math.sin(angle) * radius, sound, food, rng)
       this.geese.push(goose)
       scene.add(goose.group)
     }

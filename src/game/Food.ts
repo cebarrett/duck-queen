@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import type { Pond } from './Water'
 import { ResourcePatch, type Collectible } from './ResourcePatch'
+import type { Rng } from './rng'
 
 // Plant palette — greens distinct from the grass/trees, plus bright accents so a
 // plant is easy to spot (and to aim a flock at).
@@ -22,7 +23,7 @@ export type FoodItem = Collectible
  * the pond. The flock's followers gather these (see Duckling).
  */
 export class Food extends ResourcePatch {
-  constructor(scene: THREE.Scene, private readonly pond: Pond) {
+  constructor(scene: THREE.Scene, private readonly pond: Pond, private readonly rng: Rng) {
     super(scene)
     this.scatterLand()
     this.scatterWater()
@@ -31,8 +32,8 @@ export class Food extends ResourcePatch {
   private scatterLand(): void {
     let placed = 0
     for (let guard = 0; placed < LAND_COUNT && guard < 2000; guard++) {
-      const x = (Math.random() * 2 - 1) * LAND_SPREAD
-      const z = (Math.random() * 2 - 1) * LAND_SPREAD
+      const x = (this.rng() * 2 - 1) * LAND_SPREAD
+      const z = (this.rng() * 2 - 1) * LAND_SPREAD
       if (Math.hypot(x, z) < 8) continue // keep the spawn point clear
       if (this.pond.isWater(x, z)) continue // land plants don't go in the pond
       this.plant(makeLandPlant(), x, 0, z)
@@ -42,14 +43,14 @@ export class Food extends ResourcePatch {
 
   private scatterWater(): void {
     for (let i = 0; i < WATER_COUNT; i++) {
-      const angle = Math.random() * Math.PI * 2
-      const r = Math.random() * (this.pond.radius - 1.5) // inside, off the edge
+      const angle = this.rng() * Math.PI * 2
+      const r = this.rng() * (this.pond.radius - 1.5) // inside, off the edge
       this.plant(makeWaterPlant(), this.pond.centerX + Math.cos(angle) * r, this.pond.surfaceY, this.pond.centerZ + Math.sin(angle) * r)
     }
   }
 
   private plant(mesh: THREE.Object3D, x: number, y: number, z: number): void {
-    mesh.rotation.y = Math.random() * Math.PI * 2 // vary the facing
+    mesh.rotation.y = this.rng() * Math.PI * 2 // vary the facing
     this.add(mesh, x, y, z)
   }
 }

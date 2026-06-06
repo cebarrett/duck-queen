@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { Pond } from './Water'
+import type { Rng } from './rng'
 
 // A calm sky blue and a grassy green. Defined once so the sky, the fog, and the
 // hemisphere light can all share the same palette (keeps everything cohesive).
@@ -33,12 +34,12 @@ export class World {
   // ducklings read this to know where they can swim.
   readonly pond = new Pond(0, -26, 10)
 
-  constructor(scene: THREE.Scene) {
+  constructor(scene: THREE.Scene, rng: Rng) {
     this.addSky(scene)
     this.addLights(scene)
     this.addGround(scene)
     scene.add(this.pond.mesh)
-    this.addScenery(scene)
+    this.addScenery(scene, rng)
   }
 
   private addSky(scene: THREE.Scene): void {
@@ -87,10 +88,9 @@ export class World {
    * — a flat plane gives your eye nothing to measure against. Tall trees double
    * as altitude markers when you're flying.
    */
-  private addScenery(scene: THREE.Scene): void {
-    // Same seed every run => the same layout every run (deterministic). Without
-    // this, the scenery would reshuffle on each reload, which is disorienting.
-    const rng = mulberry32(20260604)
+  private addScenery(scene: THREE.Scene, rng: Rng): void {
+    // `rng` is seeded from the one world seed (see rng.ts / Game), so the scenery
+    // layout is identical for a given seed.
 
     // Share ONE material per type instead of making a fresh one for every
     // object. Identical materials can be reused, and it keeps the GPU happy once
@@ -154,20 +154,4 @@ function boxMesh(
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material)
   m.position.set(x, y, z)
   return m
-}
-
-/**
- * A tiny seeded random-number generator (the well-known "mulberry32"). You don't
- * need to follow the bit-twiddling — the point is: same seed in, same stream of
- * 0..1 numbers out, every time. That's what makes the scenery layout stable.
- */
-function mulberry32(seed: number): () => number {
-  let a = seed
-  return () => {
-    a |= 0
-    a = (a + 0x6d2b79f5) | 0
-    let t = Math.imul(a ^ (a >>> 15), 1 | a)
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
 }

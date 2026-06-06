@@ -3,6 +3,7 @@ import { buildGoose } from './gooseModel'
 import { approachAngle, randRange } from './mathUtils'
 import type { Sound } from './Sound'
 import type { Food, FoodItem } from './Food'
+import { type Rng, rngRange } from './rng'
 
 // --- Wander tuning (geese amble a bit faster/heavier than ducklings) -------
 const SPEED = 2.2
@@ -75,8 +76,8 @@ export class Goose {
   private targetZ = 0
   private targetFood: FoodItem | null = null // the plant it's stealing toward
 
-  // Its own honk pitch, so a gaggle sounds like distinct birds.
-  private readonly honkPitch = randRange(0.9, 1.15)
+  // Its own honk pitch, so a gaggle sounds like distinct birds. Seeded (ctor).
+  private readonly honkPitch: number
 
   // Honk-off state: while posturing it ignores its normal behaviour, squares up
   // to face the Queen (aimX/aimZ), and "puffs up" (a swelling scale).
@@ -92,6 +93,7 @@ export class Goose {
     z: number,
     private readonly sound: Sound,
     private readonly food: Food,
+    rng: Rng,
   ) {
     const model = buildGoose()
     this.group = model.group
@@ -101,9 +103,12 @@ export class Goose {
     this.group.position.set(x, 0, z)
     this.homeX = x
     this.homeZ = z
-    this.heading = Math.random() * Math.PI * 2
+
+    // Spawn-time values from the seeded rng so the initial world is stable.
+    this.honkPitch = rngRange(rng, 0.9, 1.15)
+    this.heading = rng() * Math.PI * 2
     this.group.rotation.y = this.heading
-    this.timer = randRange(0, PAUSE_MAX)
+    this.timer = randRange(0, PAUSE_MAX) // first-move timing — fine to stay unseeded
   }
 
   /** Is this goose currently locked in a honk-off? */

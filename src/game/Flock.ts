@@ -4,6 +4,7 @@ import type { Input } from './Input'
 import type { Sound } from './Sound'
 import type { Pond } from './Water'
 import type { Food } from './Food'
+import type { Rng } from './rng'
 
 const DUCKLING_COUNT = 8
 const QUACK_RANGE = 12 // a quack recruits idle ducks within this distance
@@ -24,11 +25,12 @@ export class Flock {
     private readonly sound: Sound,
     pond: Pond,
     food: Food,
+    rng: Rng,
   ) {
     for (let i = 0; i < DUCKLING_COUNT; i++) {
-      const angle = Math.random() * Math.PI * 2
-      const radius = 6 + Math.random() * 8
-      const duckling = new Duckling(Math.cos(angle) * radius, Math.sin(angle) * radius, pond, food, this.sound)
+      const angle = rng() * Math.PI * 2
+      const radius = 6 + rng() * 8
+      const duckling = new Duckling(Math.cos(angle) * radius, Math.sin(angle) * radius, pond, food, this.sound, rng)
       this.ducklings.push(duckling)
       scene.add(duckling.group)
     }
