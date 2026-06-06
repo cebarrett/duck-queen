@@ -1,27 +1,40 @@
 /**
- * Sound plays the game's SFX. For the quack it prefers a real recording dropped
- * in at public/quack.mp3 (served at /quack.mp3); if that file isn't there — or
- * hasn't decoded yet — it falls back to a synthesized quack, so the game always
- * makes a noise on Q.
+ * Sound plays the game's SFX. For voiced sounds (the quack, the ducklings' peep)
+ * it prefers a real recording dropped into public/ — e.g. public/quack.mp3 served
+ * at /quack.mp3 — and falls back to a synthesized version if the file is absent
+ * (or hasn't decoded yet), so the game always makes a noise.
  *
  * Browser autoplay rules: an AudioContext starts "suspended" and can only be
  * resumed from a real user gesture. So we resume it on the first click/keypress,
- * which means by the time a quack actually plays (from the game loop) it's live.
+ * which means by the time a sound actually plays (from the game loop) it's live.
  */
 
-// Where the optional recorded quack lives. BASE_URL keeps it correct even if the
-// game is ever served from a sub-path.
+// Optional recordings. BASE_URL keeps these correct even under a sub-path.
 const QUACK_URL = `${import.meta.env.BASE_URL}quack.mp3`
+const PEEP_URL = `${import.meta.env.BASE_URL}peep.mp3`
+
+/** An optional recorded sound: its bytes (once fetched), the decoded buffer (once
+ *  ready), and a flag so we don't decode twice at once. */
+interface Sample {
+  url: string
+  raw: ArrayBuffer | null
+  buffer: AudioBuffer | null
+  decoding: boolean
+}
+
+function makeSample(url: string): Sample {
+  return { url, raw: null, buffer: null, decoding: false }
+}
 
 export class Sound {
   private ctx: AudioContext | null = null
 
-  private rawQuack: ArrayBuffer | null = null // the file's bytes, pre-fetched
-  private quackBuffer: AudioBuffer | null = null // decoded + ready to play
-  private decoding = false
+  private readonly quackSample = makeSample(QUACK_URL)
+  private readonly peepSample = makeSample(PEEP_URL)
 
   constructor() {
-    void this.fetchQuackFile() // optional — silently does nothing if absent
+    void this.fetch(this.quackSample) // optional — silently no-ops if absent
+    void this.fetch(this.peepSample)
 
     const unlock = () => {
       this.getContext() // create + resume inside the gesture
@@ -32,26 +45,25 @@ export class Sound {
     window.addEventListener('keydown', unlock)
   }
 
-  /** Play the quack: the real recording if we have it, else the synth. */
+  /** The Queen's quack — recorded if available, else synthesized. */
   quack(): void {
     const ctx = this.getContext()
-    if (!ctx) return // no Web Audio support — stay silent
+    if (!ctx) return
+    this.playSampleOrSynth(ctx, this.quackSample, (c) => this.synthQuack(c), 1, 0.9)
+  }
 
-    if (this.quackBuffer) {
-      this.playBuffer(ctx, this.quackBuffer)
-      return
-    }
-    // We have the file bytes but haven't decoded them yet — kick that off, and
-    // use the synth for this one quack so it's not silent.
-    if (this.rawQuack) void this.decodeQuack()
-    this.synthQuack(ctx)
+  /** A duckling's little peep. `pitch` (~0.85–1.25) gives each duckling its own
+   *  voice — it scales the synth frequency, or the recording's playback speed. */
+  peep(pitch = 1): void {
+    const ctx = this.getContext()
+    if (!ctx) return
+    this.playSampleOrSynth(ctx, this.peepSample, (c) => this.synthPeep(c, pitch), pitch, 0.5)
   }
 
   /**
-   * A little water splash. `strength` (~0–6, roughly how fast she hit the water)
-   * scales the volume. It's a short burst of white noise pushed through a
-   * lowpass that sweeps downward — that "ploosh, fading to a low gurgle" shape
-   * is what reads as water rather than static.
+   * A little water splash. `strength` (~0–6) scales the volume. A short burst of
+   * white noise pushed through a downward-sweeping lowpass — that "ploosh, fading
+   * to a low gurgle" shape reads as water rather than static.
    */
   splash(strength = 1): void {
     const ctx = this.getContext()
@@ -59,8 +71,6 @@ export class Sound {
 
     const now = ctx.currentTime
     const dur = 0.28
-
-    // A buffer of white noise (random samples) is the raw material of a splash.
     const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate)
     const data = buffer.getChannelData(0)
     for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1
@@ -85,50 +95,67 @@ export class Sound {
     src.stop(now + dur)
   }
 
-  // --- Recorded-file path ----------------------------------------------------
+  // --- Recorded-file path (shared by quack + peep) ---------------------------
 
-  private async fetchQuackFile(): Promise<void> {
+  private playSampleOrSynth(
+    ctx: AudioContext,
+    sample: Sample,
+    synth: (ctx: AudioContext) => void,
+    pitch: number,
+    volume: number,
+  ): void {
+    if (sample.buffer) {
+      this.playBuffer(ctx, sample.buffer, pitch, volume)
+      return
+    }
+    // Have the bytes but not decoded yet — kick that off and synth for now.
+    if (sample.raw) void this.decode(sample)
+    synth(ctx)
+  }
+
+  private async fetch(sample: Sample): Promise<void> {
     try {
-      const res = await fetch(QUACK_URL)
-      if (!res.ok) return // 404 = no recording yet; that's fine, we use synth
+      const res = await fetch(sample.url)
+      if (!res.ok) return // 404 = no recording; fine, we use the synth
       // Vite's dev server answers a MISSING file with index.html (200, text/html)
-      // rather than a 404, so guard on the type: only accept an actual audio file.
+      // rather than a 404, so only accept an actual audio file.
       const type = res.headers.get('content-type') ?? ''
-      if (type.includes('text/html')) return // no recording present — use synth
-      this.rawQuack = await res.arrayBuffer()
-      if (this.ctx) await this.decodeQuack() // decode now if the context exists
+      if (type.includes('text/html')) return
+      sample.raw = await res.arrayBuffer()
+      if (this.ctx) await this.decode(sample)
     } catch {
-      // Network/parse trouble — just stay on the synth.
+      // Network/parse trouble — stay on the synth.
     }
   }
 
-  private async decodeQuack(): Promise<void> {
-    if (!this.ctx || !this.rawQuack || this.quackBuffer || this.decoding) return
-    this.decoding = true
+  private async decode(sample: Sample): Promise<void> {
+    if (!this.ctx || !sample.raw || sample.buffer || sample.decoding) return
+    sample.decoding = true
     try {
       // decodeAudioData can "detach" the buffer, so decode a copy.
-      this.quackBuffer = await this.ctx.decodeAudioData(this.rawQuack.slice(0))
-      this.rawQuack = null // done with the raw bytes
+      sample.buffer = await this.ctx.decodeAudioData(sample.raw.slice(0))
+      sample.raw = null
     } catch {
-      this.rawQuack = null // undecodable file — fall back to synth for good
+      sample.raw = null // undecodable — fall back to synth for good
     } finally {
-      this.decoding = false
+      sample.decoding = false
     }
   }
 
-  private playBuffer(ctx: AudioContext, buffer: AudioBuffer): void {
+  private playBuffer(ctx: AudioContext, buffer: AudioBuffer, pitch: number, volume: number): void {
     const src = ctx.createBufferSource()
     src.buffer = buffer
+    src.playbackRate.value = pitch // shift a recording's pitch (per-duckling voice)
     const gain = ctx.createGain()
-    gain.gain.value = 0.9 // tweak if your recording is too loud/quiet
+    gain.gain.value = volume
     src.connect(gain)
     gain.connect(ctx.destination)
     src.start()
   }
 
-  // --- Synthesized fallback --------------------------------------------------
+  // --- Synthesized fallbacks -------------------------------------------------
 
-  /** A short, nasal, pitch-bent quack built from scratch (no file needed). */
+  /** A short, nasal, pitch-bent quack built from scratch. */
   private synthQuack(ctx: AudioContext): void {
     const now = ctx.currentTime
     const pitch = 1 + (Math.random() * 0.2 - 0.1) // ±10% per quack, for variety
@@ -154,9 +181,34 @@ export class Sound {
     osc.connect(band)
     band.connect(gain)
     gain.connect(ctx.destination)
-
     osc.start(now)
     osc.stop(now + 0.25)
+  }
+
+  /** A tiny high chirp — soft triangle wave, a quick up-then-down pitch blip.
+   *  High and short reads as "duckling peep". `pitch` sets the voice. */
+  private synthPeep(ctx: AudioContext, pitch: number): void {
+    const now = ctx.currentTime
+    const dur = 0.12
+    const base = 1100 * pitch
+
+    const osc = ctx.createOscillator()
+    osc.type = 'triangle' // softer than a sawtooth, brighter than a sine
+    const f = osc.frequency
+    f.setValueAtTime(base * 0.85, now)
+    f.exponentialRampToValueAtTime(base * 1.25, now + 0.05) // quick chirp up
+    f.exponentialRampToValueAtTime(base * 0.9, now + dur) // settle down
+
+    const gain = ctx.createGain()
+    const g = gain.gain
+    g.setValueAtTime(0.0001, now)
+    g.exponentialRampToValueAtTime(0.14, now + 0.01) // soft — they're little
+    g.exponentialRampToValueAtTime(0.0001, now + dur)
+
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.start(now)
+    osc.stop(now + dur + 0.02)
   }
 
   // --- Context plumbing ------------------------------------------------------
@@ -168,7 +220,8 @@ export class Sound {
         (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
       if (!Ctor) return null
       this.ctx = new Ctor()
-      if (this.rawQuack) void this.decodeQuack() // decode as soon as we can
+      void this.decode(this.quackSample) // decode anything already fetched
+      void this.decode(this.peepSample)
     }
     if (this.ctx.state === 'suspended') void this.ctx.resume()
     return this.ctx

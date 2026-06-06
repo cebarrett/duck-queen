@@ -28,7 +28,7 @@ export class Flock {
     for (let i = 0; i < DUCKLING_COUNT; i++) {
       const angle = Math.random() * Math.PI * 2
       const radius = 6 + Math.random() * 8
-      const duckling = new Duckling(Math.cos(angle) * radius, Math.sin(angle) * radius, pond, food)
+      const duckling = new Duckling(Math.cos(angle) * radius, Math.sin(angle) * radius, pond, food, this.sound)
       this.ducklings.push(duckling)
       scene.add(duckling.group)
     }

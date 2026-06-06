@@ -3,6 +3,7 @@ import { buildDuckModel } from './duckModel'
 import { approachAngle, randRange } from './mathUtils'
 import type { Pond } from './Water'
 import type { Food, FoodItem } from './Food'
+import type { Sound } from './Sound'
 
 // Subjects are smaller than the Queen and duckling-yellow so they read as "hers"
 // at a glance (vs. her white).
@@ -49,6 +50,9 @@ const FORAGE_RADIUS = 5 // how far a follower will notice a plant and go for it
 const FORAGE_RATE = 0.7 // per second: chance to peel off for an in-range plant
 const FORAGE_SPEED = 3 // eager amble toward a snack (quicker than idle wander)
 
+// --- Peeping ---------------------------------------------------------------
+const PEEP_RATE = 0.1 // per second: chance to let out a little peep ("now and then")
+
 // A duckling is always in exactly one of these.
 type DucklingState = 'pausing' | 'wandering' | 'following' | 'distracted' | 'foraging'
 
@@ -85,11 +89,16 @@ export class Duckling {
   private targetZ = 0
   private targetFood: FoodItem | null = null // the plant she's foraging toward
 
+  // Each duckling gets its own peep pitch, so the flock sounds like a crowd of
+  // little individuals rather than one cloned voice.
+  private readonly peepPitch = randRange(0.85, 1.25)
+
   constructor(
     x: number,
     z: number,
     private readonly pond: Pond,
     private readonly food: Food,
+    private readonly sound: Sound,
   ) {
     const model = buildDuckModel({
       featherColor: DUCKLING_COLOR,
@@ -125,6 +134,9 @@ export class Duckling {
   }
 
   update(delta: number, ctx: FlockContext): void {
+    // A cute little peep now and then (in her own voice).
+    if (Math.random() < PEEP_RATE * delta) this.sound.peep(this.peepPitch)
+
     switch (this.state) {
       case 'following':
         if (this.checkLost(ctx)) break // stranded too far — gives up
