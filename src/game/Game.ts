@@ -128,6 +128,7 @@ export class Game {
       this.scene,
       this.sound,
       this.food,
+      world.pond,
       this.input,
       this.duck.group,
       this.flock,

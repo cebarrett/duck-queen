@@ -4,6 +4,7 @@ import type { Sound } from './Sound'
 import type { Food } from './Food'
 import type { Input } from './Input'
 import type { Flock } from './Flock'
+import type { Pond } from './Water'
 import type { Collider } from './collision'
 import type { Rng } from './rng'
 
@@ -40,6 +41,7 @@ export class Geese {
     scene: THREE.Scene,
     sound: Sound,
     food: Food,
+    pond: Pond,
     private readonly input: Input,
     private readonly queen: THREE.Object3D,
     private readonly flock: Flock,
@@ -50,7 +52,7 @@ export class Geese {
     for (let i = 0; i < GOOSE_COUNT; i++) {
       const angle = rng() * Math.PI * 2
       const radius = rng() * AREA_RADIUS
-      const goose = new Goose(Math.cos(angle) * radius, AREA_CENTER_Z + Math.sin(angle) * radius, sound, food, colliders, rng)
+      const goose = new Goose(Math.cos(angle) * radius, AREA_CENTER_Z + Math.sin(angle) * radius, sound, food, pond, colliders, rng)
       this.geese.push(goose)
       scene.add(goose.group)
     }

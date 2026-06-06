@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { buildGoose } from './gooseModel'
 import { approachAngle, randRange, seekArrive, pointAround, faceHeading, easeFactor } from './mathUtils'
 import { type Collider, resolveWalls } from './collision'
+import type { Pond } from './Water'
 import type { Sound } from './Sound'
 import type { Food, FoodItem } from './Food'
 import { type Rng, rngRange } from './rng'
@@ -25,6 +26,14 @@ const WALK_ROLL = 0.05 // a little side sway (much less than a duck's waddle)
 const WALK_HEAD_BOB = 0.14 // the neck dips in rhythm as it strides
 const IDLE_GAP_MIN = 2.5 // shortest gap between idle fidgets (seconds)
 const IDLE_GAP_MAX = 6.0 // longest gap
+
+// --- Swimming (when over the pond) -----------------------------------------
+// The goose's model origin is at its feet with ~0.5-tall legs under the body,
+// so it must sink further than a duck to float convincingly: drop it until the
+// legs are under the surface and the waterline rides up its body.
+const SWIM_FLOAT_Y = -0.6 // body settles to this y while afloat (legs submerged)
+const SWIM_BOB = 0.05 // gentle vertical bob on the water (no walk stride)
+const SWIM_SWAY = 0.06 // slight side-to-side sway
 
 const HONK_RATE = 0.07 // per second: chance to let out a honk now and then
 
@@ -98,6 +107,7 @@ export class Goose {
     z: number,
     private readonly sound: Sound,
     private readonly food: Food,
+    private readonly pond: Pond,
     private readonly colliders: readonly Collider[],
     rng: Rng,
   ) {
@@ -229,9 +239,15 @@ export class Goose {
     this.applyPose(delta, speed)
   }
 
-  /** Either the deliberate walk bob, or — when standing — an idle fidget. */
+  /** Float on the pond, stride deliberately on land, or — when standing — fidget. */
   private applyPose(delta: number, speed: number): void {
     const pos = this.group.position
+
+    // Over the pond it swims: it floats at the waterline instead of walking on it.
+    if (this.pond.isWater(pos.x, pos.z)) {
+      this.swimPose(delta)
+      return
+    }
 
     if (speed > MOVING) {
       // Deliberate stride: gentle body bob + slight sway, and the neck head-bobs
@@ -248,6 +264,18 @@ export class Goose {
       this.group.rotation.z = 0
       this.updateIdle(delta)
     }
+  }
+
+  /** Float on the water: sink to the waterline with a slow bob + sway, wings
+   *  folded and neck neutral — no walk stride, no ground fidgets (it's swimming). */
+  private swimPose(delta: number): void {
+    this.idleAction = 'none'
+    this.walkPhase += delta * 2.5
+    this.group.position.y = SWIM_FLOAT_Y + Math.sin(this.walkPhase) * SWIM_BOB
+    this.group.rotation.z = Math.sin(this.walkPhase * 0.7) * SWIM_SWAY
+    this.neck.rotation.set(0, 0, 0)
+    this.leftWing.rotation.z = 0
+    this.rightWing.rotation.z = 0
   }
 
   /** Stand around, occasionally flapping, looking about, or pecking the ground. */
@@ -323,10 +351,11 @@ export class Goose {
     pos.x += this.velX * delta
     pos.z += this.velZ * delta
 
-    // Puff up + face her, no waddle.
+    // Puff up + face her, no waddle. Hold at the waterline if it's squaring up
+    // while afloat, so it doesn't pop up onto the surface mid-honk-off.
     this.puff += (PUFF_SCALE - this.puff) * easeFactor(PUFF_EASE, delta)
     this.group.scale.setScalar(this.puff)
-    pos.y = 0
+    pos.y = this.pond.isWater(pos.x, pos.z) ? SWIM_FLOAT_Y : 0
     this.group.rotation.y = this.heading
     this.group.rotation.z = 0
 
