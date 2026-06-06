@@ -105,8 +105,8 @@ export class Game {
     // hear the Queen's quack) and the Queen's Group (to know where she is).
     this.flock = new Flock(this.scene, this.input, this.duck.group, this.sound, world.pond, this.food)
 
-    // The rival geese (they wander + honk for now).
-    this.geese = new Geese(this.scene, this.sound)
+    // The rival geese — they wander, honk, and forage your plants.
+    this.geese = new Geese(this.scene, this.sound, this.food)
 
     // Keep the camera/canvas correct when the window resizes.
     window.addEventListener('resize', this.onResize)
@@ -146,6 +146,7 @@ export class Game {
     this.hud.setSubjects(this.flock.subjectCount)
     this.hud.setFood(this.food.total)
     this.hud.setReeds(this.reeds.total)
+    this.hud.setStolen(this.food.stolen)
 
     this.renderer.render(this.scene, this.camera)
   }

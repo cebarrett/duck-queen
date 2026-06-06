@@ -15,6 +15,7 @@ export class HUD {
   private subjects = 0
   private food = 0
   private reeds = 0
+  private stolen = 0
 
   constructor() {
     const el = document.getElementById('hud')
@@ -43,16 +44,21 @@ export class HUD {
     this.render()
   }
 
+  setStolen(count: number): void {
+    this.stolen = count
+    this.render()
+  }
+
   private render(): void {
     let line1: string
     if (this.mode === 'fly') {
-      line1 = '🦆 FLY  ·  WASD move · hold Space to rise, release to descend'
+      line1 = '🦆 FLY  ·  WASD move · hold Space to rise, release to descend · Q quack'
     } else if (this.mode === 'swim') {
-      line1 = '🦆 SWIM  ·  WASD paddle · Space to take off'
+      line1 = '🦆 SWIM  ·  WASD paddle · Space to take off · Q quack'
     } else {
-      line1 = '🦆 WADDLE  ·  WASD move · Space to take off'
+      line1 = '🦆 WADDLE  ·  WASD move · Space to take off · Q quack'
     }
-    const line2 = `👑 Subjects: ${this.subjects}   🌿 Food: ${this.food}   🌾 Reeds: ${this.reeds}   ·  press Q to quack`
+    const line2 = `👑 Subjects: ${this.subjects}   🌿 Food: ${this.food}   🌾 Reeds: ${this.reeds}   🪿 Stolen: ${this.stolen}`
 
     // Two lines via <br>. The values are our own strings + an integer, so there's
     // nothing untrusted going into innerHTML here.

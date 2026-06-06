@@ -18,12 +18,18 @@ export interface Collectible {
 export class ResourcePatch {
   readonly items: Collectible[] = []
   private count = 0
+  private stolenCount = 0
 
   constructor(protected readonly scene: THREE.Scene) {}
 
-  /** How many have been gathered (for the HUD). */
+  /** How many WE have gathered (for the HUD). */
   get total(): number {
     return this.count
+  }
+
+  /** How many a rival (a goose) has taken — food we never got. */
+  get stolen(): number {
+    return this.stolenCount
   }
 
   /** The closest uncollected item within `radius` of (x, z), or null. Plain O(n)
@@ -50,6 +56,17 @@ export class ResourcePatch {
     this.scene.remove(item.mesh)
     disposeObject(item.mesh)
     this.count++
+  }
+
+  /** A rival snatches an item: same removal as collect(), but it counts against
+   *  us (toward `stolen`) instead of crediting our `total`. Same plant, opposite
+   *  outcome — that's the whole rivalry. */
+  steal(item: Collectible): void {
+    if (item.collected) return
+    item.collected = true
+    this.scene.remove(item.mesh)
+    disposeObject(item.mesh)
+    this.stolenCount++
   }
 
   /** Subclasses call this to drop a built mesh into the world at (x, y, z) and

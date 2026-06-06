@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { buildGoose } from './gooseModel'
 import { approachAngle, randRange } from './mathUtils'
 import type { Sound } from './Sound'
+import type { Food, FoodItem } from './Food'
 
 // --- Wander tuning (geese amble a bit faster/heavier than ducklings) -------
 const SPEED = 2.2
@@ -17,8 +18,13 @@ const ROLL = 0.12
 
 const HONK_RATE = 0.07 // per second: chance to let out a honk now and then
 
-// Phase 1 has just the idle states; foraging / posturing / fleeing arrive later.
-type GooseState = 'pausing' | 'wandering'
+// --- Foraging (the rivalry: geese eat YOUR plants) -------------------------
+const FORAGE_RADIUS = 7 // how far a goose will notice a plant and go for it
+const FORAGE_RATE = 0.5 // per second: chance to spot + go for an in-range plant
+const EAT_RADIUS = 1.1 // close enough to snatch a plant
+
+// Posturing / fleeing arrive in later phases.
+type GooseState = 'pausing' | 'wandering' | 'foraging'
 
 /**
  * A rival goose. For now it just wanders its patch and honks occasionally — the
@@ -39,6 +45,7 @@ export class Goose {
   private timer: number
   private targetX = 0
   private targetZ = 0
+  private targetFood: FoodItem | null = null // the plant it's stealing toward
 
   // Its own honk pitch, so a gaggle sounds like distinct birds.
   private readonly honkPitch = randRange(0.9, 1.15)
@@ -47,6 +54,7 @@ export class Goose {
     x: number,
     z: number,
     private readonly sound: Sound,
+    private readonly food: Food,
   ) {
     this.group = buildGoose()
     this.group.position.set(x, 0, z)
@@ -61,12 +69,21 @@ export class Goose {
     // An occasional honk.
     if (Math.random() < HONK_RATE * delta) this.sound.honk(this.honkPitch)
 
-    if (this.state === 'wandering') {
-      this.seekTarget(delta)
-    } else {
-      this.ease(0, 0, delta)
-      this.timer -= delta
-      if (this.timer <= 0) this.pickNewTarget()
+    // While just milling about, it might spot one of your plants and go for it.
+    if (this.state !== 'foraging' && Math.random() < FORAGE_RATE * delta) this.tryForage()
+
+    switch (this.state) {
+      case 'foraging':
+        this.forage(delta)
+        break
+      case 'wandering':
+        this.seekTarget(delta)
+        break
+      case 'pausing':
+        this.ease(0, 0, delta)
+        this.timer -= delta
+        if (this.timer <= 0) this.pickNewTarget()
+        break
     }
 
     // Apply movement.
@@ -85,6 +102,42 @@ export class Goose {
     pos.y = Math.abs(Math.sin(this.bobPhase)) * BOB_HEIGHT * moveFactor
     this.group.rotation.y = this.heading
     this.group.rotation.z = Math.sin(this.bobPhase) * ROLL * moveFactor
+  }
+
+  /** Spot the nearest plant in range and head for it. */
+  private tryForage(): boolean {
+    const pos = this.group.position
+    const plant = this.food.nearestUncollected(pos.x, pos.z, FORAGE_RADIUS)
+    if (!plant) return false
+    this.targetFood = plant
+    this.state = 'foraging'
+    return true
+  }
+
+  /** Go to the targeted plant and STEAL it (denies the player), then pause to
+   *  gloat before wandering on. If another goose got it first, just move on. */
+  private forage(delta: number): void {
+    const plant = this.targetFood
+    if (!plant || plant.collected) {
+      this.targetFood = null
+      this.state = 'pausing'
+      this.timer = randRange(PAUSE_MIN, PAUSE_MAX)
+      return
+    }
+    const pos = this.group.position
+    const dx = plant.x - pos.x
+    const dz = plant.z - pos.z
+    const dist = Math.hypot(dx, dz)
+    if (dist < EAT_RADIUS) {
+      this.food.steal(plant) // NOT collect() — this denies the Queen the food
+      this.sound.honk(this.honkPitch) // a smug honk
+      this.targetFood = null
+      this.state = 'pausing'
+      this.timer = randRange(PAUSE_MIN, PAUSE_MAX)
+      return
+    }
+    const speed = dist < ARRIVE_RADIUS ? SPEED * (dist / ARRIVE_RADIUS) : SPEED
+    this.ease((dx / dist) * speed, (dz / dist) * speed, delta)
   }
 
   private seekTarget(delta: number): void {
