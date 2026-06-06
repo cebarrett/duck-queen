@@ -1,8 +1,9 @@
 import * as THREE from 'three'
 
 // A goose is bigger than the Queen and grey, with a long neck and proper legs —
-// clearly a different, more imposing bird at a glance.
-const GREY = 0x8d949c
+// clearly a different, more imposing bird at a glance. A pale grey, kept distinctly
+// lighter than the rocks (0x8b929c) so the two don't read as the same blocky shape.
+const GREY = 0xc2c9d2
 const ORANGE = 0xff9f1c
 const BLACK = 0x222222
 
