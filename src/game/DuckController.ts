@@ -4,6 +4,7 @@ import type { ThirdPersonCamera } from './ThirdPersonCamera'
 import type { Duck } from './Duck'
 import type { Collider } from './World'
 import type { Pond } from './Water'
+import type { Reeds } from './Reeds'
 import { approachAngle } from './mathUtils'
 
 // The ways the Queen gets around. Exported so the HUD can label it.
@@ -49,6 +50,7 @@ const DUCK_HEIGHT = 1.7 // how tall she is, for "can I fly over this?" checks
 const STEP_UP = 0.6 // surfaces within this height of her feet are floors she can
 //                     stand on / step up onto; taller ones act as solid walls
 const GROUND_EPS = 0.05 // how far above her floor counts as "in the air"
+const REED_REACH = 1.3 // how close the Queen must be to gather a reed
 
 /**
  * DuckController moves the Queen in one of three modes, chosen by her situation:
@@ -86,6 +88,8 @@ export class DuckController {
     private readonly camera: ThirdPersonCamera,
     private readonly colliders: Collider[],
     private readonly pond: Pond,
+    // Reeds only the Queen can gather (the ducklings never touch these).
+    private readonly reeds: Reeds,
     // Called when she breaks the water surface (x, z, strength) so Game can play
     // the splash sound + ripple. The controller decides WHEN; Game decides WHAT.
     private readonly onSplash: (x: number, z: number, strength: number) => void,
@@ -162,6 +166,14 @@ export class DuckController {
       ? this.pond.floatLine
       : this.supportHeightAt(pos.x, pos.z, this.altitude)
     this.updateAltitude(delta)
+
+    // --- The Queen gathers reeds she comes within reach of, on foot or while
+    //     swimming (not from the air). Ducklings never gather reeds — this lives
+    //     on the Queen's controller alone.
+    if (this.mode !== 'fly') {
+      const reed = this.reeds.nearestUncollected(pos.x, pos.z, REED_REACH)
+      if (reed) this.reeds.collect(reed)
+    }
 
     // --- Splash when she breaks the surface (landing from air, or taking off) -
     if (this.pendingSplash > 0) {

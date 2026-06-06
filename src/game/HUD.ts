@@ -14,6 +14,7 @@ export class HUD {
   private mode: DuckMode = 'waddle'
   private subjects = 0
   private food = 0
+  private reeds = 0
 
   constructor() {
     const el = document.getElementById('hud')
@@ -37,6 +38,11 @@ export class HUD {
     this.render()
   }
 
+  setReeds(count: number): void {
+    this.reeds = count
+    this.render()
+  }
+
   private render(): void {
     let line1: string
     if (this.mode === 'fly') {
@@ -46,7 +52,7 @@ export class HUD {
     } else {
       line1 = '🦆 WADDLE  ·  WASD move · Space to take off'
     }
-    const line2 = `👑 Subjects: ${this.subjects}   🌿 Food: ${this.food}   ·  press Q to quack`
+    const line2 = `👑 Subjects: ${this.subjects}   🌿 Food: ${this.food}   🌾 Reeds: ${this.reeds}   ·  press Q to quack`
 
     // Two lines via <br>. The values are our own strings + an integer, so there's
     // nothing untrusted going into innerHTML here.

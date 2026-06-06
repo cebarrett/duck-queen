@@ -6,6 +6,7 @@ import { ThirdPersonCamera } from './ThirdPersonCamera'
 import { DuckController } from './DuckController'
 import { Flock } from './Flock'
 import { Food } from './Food'
+import { Reeds } from './Reeds'
 import { Sound } from './Sound'
 import { Splash } from './Splash'
 import { HUD } from './HUD'
@@ -38,6 +39,7 @@ export class Game {
   private readonly duckController: DuckController
   private readonly flock: Flock
   private readonly food: Food
+  private readonly reeds: Reeds
   private readonly sound = new Sound()
   private readonly splashFx: Splash
   private readonly hud = new HUD()
@@ -79,6 +81,8 @@ export class Game {
     this.cameraRig = new ThirdPersonCamera(this.camera, this.input, this.duck.group)
     // Scatter edible plants for the flock to forage (land + pond).
     this.food = new Food(this.scene, world.pond)
+    // Reeds grow on the shoreline — only the Queen gathers these.
+    this.reeds = new Reeds(this.scene, world.pond)
 
     // Splash effects live on the water surface; a splash plays a sound + ripple.
     this.splashFx = new Splash(this.scene, world.pond.surfaceY)
@@ -88,6 +92,7 @@ export class Game {
       this.cameraRig,
       world.colliders,
       world.pond,
+      this.reeds,
       (x, z, strength) => {
         this.sound.splash(strength)
         this.splashFx.spawn(x, z, strength)
@@ -134,6 +139,7 @@ export class Game {
     this.hud.setMode(this.duckController.getMode())
     this.hud.setSubjects(this.flock.subjectCount)
     this.hud.setFood(this.food.total)
+    this.hud.setReeds(this.reeds.total)
 
     this.renderer.render(this.scene, this.camera)
   }

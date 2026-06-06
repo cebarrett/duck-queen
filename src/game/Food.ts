@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import type { Pond } from './Water'
+import { ResourcePatch, type Collectible } from './ResourcePatch'
 
 // Plant palette — greens distinct from the grass/trees, plus bright accents so a
 // plant is easy to spot (and to aim a flock at).
@@ -13,61 +14,18 @@ const LAND_COUNT = 18
 const WATER_COUNT = 8
 const LAND_SPREAD = 100 // half-width of the area land plants scatter over
 
-/** One edible plant. The ducks read its x/z and `collected` flag; collecting it
- *  removes the mesh and bumps the counter. */
-export interface FoodItem {
-  x: number
-  z: number
-  mesh: THREE.Object3D
-  inWater: boolean
-  collected: boolean
-}
+/** A food plant the ducklings forage. (Alias kept so callers can name the type.) */
+export type FoodItem = Collectible
 
 /**
- * Food owns every plant in the world: it builds + scatters them, and offers the
- * two things the ducks need — find the nearest uncollected plant near a point,
- * and collect one. `total` is how many the flock has gathered (for the HUD).
+ * Food is a ResourcePatch of edible plants — leafy sprouts on land, lily-pads in
+ * the pond. The flock's followers gather these (see Duckling).
  */
-export class Food {
-  readonly items: FoodItem[] = []
-  private collectedCount = 0
-
-  constructor(
-    private readonly scene: THREE.Scene,
-    private readonly pond: Pond,
-  ) {
+export class Food extends ResourcePatch {
+  constructor(scene: THREE.Scene, private readonly pond: Pond) {
+    super(scene)
     this.scatterLand()
     this.scatterWater()
-  }
-
-  get total(): number {
-    return this.collectedCount
-  }
-
-  /** The closest uncollected plant within `radius` of (x, z), or null. A plain
-   *  O(n) scan — fine for a few dozen plants. */
-  nearestUncollected(x: number, z: number, radius: number): FoodItem | null {
-    let best: FoodItem | null = null
-    let bestSq = radius * radius
-    for (const item of this.items) {
-      if (item.collected) continue
-      const dSq = (item.x - x) ** 2 + (item.z - z) ** 2
-      if (dSq < bestSq) {
-        bestSq = dSq
-        best = item
-      }
-    }
-    return best
-  }
-
-  /** Eat a plant: mark it collected, remove + free its mesh, bump the count. The
-   *  `collected` guard means if two ducks reach the same plant, only one scores. */
-  collect(item: FoodItem): void {
-    if (item.collected) return
-    item.collected = true
-    this.scene.remove(item.mesh)
-    disposeObject(item.mesh)
-    this.collectedCount++
   }
 
   private scatterLand(): void {
@@ -77,31 +35,26 @@ export class Food {
       const z = (Math.random() * 2 - 1) * LAND_SPREAD
       if (Math.hypot(x, z) < 8) continue // keep the spawn point clear
       if (this.pond.isWater(x, z)) continue // land plants don't go in the pond
-      this.add(x, z, false)
+      this.plant(makeLandPlant(), x, 0, z)
       placed++
     }
   }
 
   private scatterWater(): void {
     for (let i = 0; i < WATER_COUNT; i++) {
-      // A random spot inside the pond, kept off the very edge.
       const angle = Math.random() * Math.PI * 2
-      const r = Math.random() * (this.pond.radius - 1.5)
-      this.add(this.pond.centerX + Math.cos(angle) * r, this.pond.centerZ + Math.sin(angle) * r, true)
+      const r = Math.random() * (this.pond.radius - 1.5) // inside, off the edge
+      this.plant(makeWaterPlant(), this.pond.centerX + Math.cos(angle) * r, this.pond.surfaceY, this.pond.centerZ + Math.sin(angle) * r)
     }
   }
 
-  private add(x: number, z: number, inWater: boolean): void {
-    const mesh = inWater ? makeWaterPlant() : makeLandPlant()
-    mesh.position.set(x, inWater ? this.pond.surfaceY : 0, z)
+  private plant(mesh: THREE.Object3D, x: number, y: number, z: number): void {
     mesh.rotation.y = Math.random() * Math.PI * 2 // vary the facing
-    this.scene.add(mesh)
-    this.items.push({ x, z, mesh, inWater, collected: false })
+    this.add(mesh, x, y, z)
   }
 }
 
-// --- Plant models (each builds its own geometry/material so disposing one on
-//     collect can't free anything another plant is using) ---------------------
+// --- Plant models (each builds its own geometry/material) --------------------
 
 function box(w: number, h: number, d: number, color: number, x: number, y: number, z: number): THREE.Mesh {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color }))
@@ -126,15 +79,4 @@ function makeWaterPlant(): THREE.Group {
   g.add(box(0.2, 0.04, 0.2, PAD, 0.18, 0.05, 0.12)) // a second smaller pad
   g.add(box(0.12, 0.14, 0.12, FLOWER, -0.05, 0.1, -0.05)) // flower
   return g
-}
-
-/** Free a removed plant's GPU resources (geometry + material) so they don't leak. */
-function disposeObject(obj: THREE.Object3D): void {
-  obj.traverse((child) => {
-    const mesh = child as THREE.Mesh
-    if (mesh.geometry) mesh.geometry.dispose()
-    const mat = mesh.material
-    if (Array.isArray(mat)) mat.forEach((m) => m.dispose())
-    else if (mat) mat.dispose()
-  })
 }
