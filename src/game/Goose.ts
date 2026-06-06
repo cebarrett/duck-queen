@@ -28,10 +28,14 @@ const PUFF_SCALE = 1.22 // how big it swells while squaring up
 const POSTURE_TURN = 10 // how fast it spins to face the Queen
 const POSTURE_HONK_RATE = 1.4 // it honks a LOT during a face-off
 const PUFF_EASE = 8 // how fast it puffs up / deflates
-const HONKOFF_COOLDOWN = 5 // after a honk-off, it won't be re-engaged for a bit
+const HONKOFF_COOLDOWN = 5 // after losing a honk-off (it won), brief no-re-fight gap
 
-// Posturing / fleeing arrive in later phases.
-type GooseState = 'pausing' | 'wandering' | 'foraging'
+// --- Defeat (the Queen won the honk-off) -----------------------------------
+const FLEE_SPEED = 5 // it bolts away fast
+const FLEE_DISTANCE = 25 // how far it runs
+const COWED_TIME = 12 // after being beaten: won't forage or be re-engaged for this long
+
+type GooseState = 'pausing' | 'wandering' | 'foraging' | 'fleeing'
 
 /**
  * A rival goose. For now it just wanders its patch and honks occasionally — the
@@ -64,6 +68,7 @@ export class Goose {
   private aimZ = 0
   private puff = 1
   private cooldown = 0 // seconds until it can be drawn into another honk-off
+  private cowed = 0 // seconds it stays rattled after a defeat (won't forage)
 
   constructor(
     x: number,
@@ -97,12 +102,30 @@ export class Goose {
     this.targetFood = null
   }
 
-  /** End the honk-off. (`won` = the Queen won; used in Phase 4 for flee/strut.) */
-  stopPosturing(_won: boolean): void {
+  /** End the honk-off. `won` = the QUEEN won. */
+  stopPosturing(won: boolean): void {
     this.posturing = false
-    this.cooldown = HONKOFF_COOLDOWN // don't immediately re-fight
-    this.state = 'pausing'
-    this.timer = randRange(PAUSE_MIN, PAUSE_MAX)
+
+    if (won) {
+      // Beaten! Let out a low, defeated honk, then bolt directly away from her
+      // and stay cowed (no foraging / re-fighting) for a while.
+      this.sound.honk(this.honkPitch * 0.8)
+      const pos = this.group.position
+      let dx = pos.x - this.aimX // aim = the Queen's last position
+      let dz = pos.z - this.aimZ
+      const d = Math.hypot(dx, dz) || 1
+      this.targetX = pos.x + (dx / d) * FLEE_DISTANCE
+      this.targetZ = pos.z + (dz / d) * FLEE_DISTANCE
+      this.state = 'fleeing'
+      this.cooldown = COWED_TIME
+      this.cowed = COWED_TIME
+    } else {
+      // It held its ground: a smug honk, then straight back to its business.
+      this.sound.honk(this.honkPitch * 1.1)
+      this.state = 'pausing'
+      this.timer = randRange(PAUSE_MIN, PAUSE_MAX)
+      this.cooldown = HONKOFF_COOLDOWN
+    }
   }
 
   /** Tell it where the Queen is, so it can face her while posturing. */
@@ -124,16 +147,22 @@ export class Goose {
       this.group.scale.setScalar(this.puff)
     }
     if (this.cooldown > 0) this.cooldown -= delta
+    if (this.cowed > 0) this.cowed -= delta
 
     // An occasional honk.
     if (Math.random() < HONK_RATE * delta) this.sound.honk(this.honkPitch)
 
-    // While just milling about, it might spot one of your plants and go for it.
-    if (this.state !== 'foraging' && Math.random() < FORAGE_RATE * delta) this.tryForage()
+    // Only while calmly milling about does it eye your plants (not mid-flee).
+    if ((this.state === 'wandering' || this.state === 'pausing') && Math.random() < FORAGE_RATE * delta) {
+      this.tryForage()
+    }
 
     switch (this.state) {
       case 'foraging':
         this.forage(delta)
+        break
+      case 'fleeing':
+        this.flee(delta)
         break
       case 'wandering':
         this.seekTarget(delta)
@@ -187,8 +216,23 @@ export class Goose {
     if (Math.random() < POSTURE_HONK_RATE * delta) this.sound.honk(this.honkPitch)
   }
 
-  /** Spot the nearest plant in range and head for it. */
+  /** Run away from the Queen; once it reaches its escape point, calm down. */
+  private flee(delta: number): void {
+    const pos = this.group.position
+    const dx = this.targetX - pos.x
+    const dz = this.targetZ - pos.z
+    const dist = Math.hypot(dx, dz)
+    if (dist < ARRIVE_STOP) {
+      this.state = 'pausing'
+      this.timer = randRange(PAUSE_MIN, PAUSE_MAX)
+      return
+    }
+    this.ease((dx / dist) * FLEE_SPEED, (dz / dist) * FLEE_SPEED, delta)
+  }
+
+  /** Spot the nearest plant in range and head for it (unless it's still cowed). */
   private tryForage(): boolean {
+    if (this.cowed > 0) return false // too rattled to steal right now
     const pos = this.group.position
     const plant = this.food.nearestUncollected(pos.x, pos.z, FORAGE_RADIUS)
     if (!plant) return false
