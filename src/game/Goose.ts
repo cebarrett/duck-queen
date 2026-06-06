@@ -13,8 +13,16 @@ const ARRIVE_STOP = 0.4
 const PAUSE_MIN = 1.5
 const PAUSE_MAX = 5.0
 const TURN_SPEED = 6
-const BOB_HEIGHT = 0.07
-const ROLL = 0.12
+
+// --- Walk + idle animation -------------------------------------------------
+const MOVING = 0.3 // speed above which it's "walking" (vs idling)
+const WALK_FREQ = 3.5 // base stride cadence — slow & deliberate (a duck waddles faster)
+const WALK_SPEED_FREQ = 0.8 // extra cadence per unit of speed
+const WALK_BOB = 0.05 // gentle up/down body bob per stride
+const WALK_ROLL = 0.05 // a little side sway (much less than a duck's waddle)
+const WALK_HEAD_BOB = 0.14 // the neck dips in rhythm as it strides
+const IDLE_GAP_MIN = 2.5 // shortest gap between idle fidgets (seconds)
+const IDLE_GAP_MAX = 6.0 // longest gap
 
 const HONK_RATE = 0.07 // per second: chance to let out a honk now and then
 
@@ -44,13 +52,22 @@ type GooseState = 'pausing' | 'wandering' | 'foraging' | 'fleeing'
  */
 export class Goose {
   readonly group: THREE.Group
+  // The animatable parts (pivots) of the model.
+  private readonly leftWing: THREE.Group
+  private readonly rightWing: THREE.Group
+  private readonly neck: THREE.Group
 
   private homeX: number
   private homeZ: number
   private velX = 0
   private velZ = 0
   private heading = 0
-  private bobPhase = 0
+  private walkPhase = 0
+
+  // Idle fidgets while standing around.
+  private idleAction: 'none' | 'flap' | 'look' | 'peck' = 'none'
+  private idleTime = 0 // elapsed in the current fidget
+  private nextIdle = randRange(IDLE_GAP_MIN, IDLE_GAP_MAX) // countdown to the next one
 
   private state: GooseState = 'pausing'
   private timer: number
@@ -76,7 +93,11 @@ export class Goose {
     private readonly sound: Sound,
     private readonly food: Food,
   ) {
-    this.group = buildGoose()
+    const model = buildGoose()
+    this.group = model.group
+    this.leftWing = model.leftWing
+    this.rightWing = model.rightWing
+    this.neck = model.neck
     this.group.position.set(x, 0, z)
     this.homeX = x
     this.homeZ = z
@@ -96,10 +117,15 @@ export class Goose {
     return !this.posturing && this.cooldown <= 0
   }
 
-  /** Start a honk-off: square up and puff, dropping whatever it was doing. */
+  /** Start a honk-off: square up and puff, dropping whatever it was doing
+   *  (including any idle fidget — reset the wings/neck to neutral). */
   startPosturing(): void {
     this.posturing = true
     this.targetFood = null
+    this.idleAction = 'none'
+    this.neck.rotation.set(0, 0, 0)
+    this.leftWing.rotation.z = 0
+    this.rightWing.rotation.z = 0
   }
 
   /** End the honk-off. `won` = the QUEEN won. */
@@ -179,17 +205,94 @@ export class Goose {
     pos.x += this.velX * delta
     pos.z += this.velZ * delta
 
-    // Face travel direction + a heavier waddle.
+    // Face travel direction.
     const speed = Math.hypot(this.velX, this.velZ)
     if (speed > 0.05) {
       const targetHeading = Math.atan2(-this.velX, -this.velZ) // faces -Z at 0
       this.heading = approachAngle(this.heading, targetHeading, TURN_SPEED * delta)
     }
-    const moveFactor = Math.min(speed / SPEED, 1)
-    this.bobPhase += delta * (5 + speed)
-    pos.y = Math.abs(Math.sin(this.bobPhase)) * BOB_HEIGHT * moveFactor
     this.group.rotation.y = this.heading
-    this.group.rotation.z = Math.sin(this.bobPhase) * ROLL * moveFactor
+    this.applyPose(delta, speed)
+  }
+
+  /** Either the deliberate walk bob, or — when standing — an idle fidget. */
+  private applyPose(delta: number, speed: number): void {
+    const pos = this.group.position
+
+    if (speed > MOVING) {
+      // Deliberate stride: gentle body bob + slight sway, and the neck head-bobs
+      // in rhythm. Wings stay folded.
+      this.idleAction = 'none'
+      this.walkPhase += delta * (WALK_FREQ + speed * WALK_SPEED_FREQ)
+      pos.y = Math.abs(Math.sin(this.walkPhase)) * WALK_BOB
+      this.group.rotation.z = Math.sin(this.walkPhase) * WALK_ROLL
+      this.neck.rotation.set(WALK_HEAD_BOB * (0.5 + 0.5 * Math.sin(this.walkPhase)), 0, 0)
+      this.leftWing.rotation.z = 0
+      this.rightWing.rotation.z = 0
+    } else {
+      pos.y = 0
+      this.group.rotation.z = 0
+      this.updateIdle(delta)
+    }
+  }
+
+  /** Stand around, occasionally flapping, looking about, or pecking the ground. */
+  private updateIdle(delta: number): void {
+    if (this.idleAction === 'none') {
+      // Neutral, settled pose.
+      this.neck.rotation.set(0, 0, 0)
+      this.leftWing.rotation.z = 0
+      this.rightWing.rotation.z = 0
+      this.nextIdle -= delta
+      if (this.nextIdle <= 0) {
+        const r = Math.random()
+        this.idleAction = r < 0.4 ? 'look' : r < 0.75 ? 'peck' : 'flap'
+        this.idleTime = 0
+        this.nextIdle = randRange(IDLE_GAP_MIN, IDLE_GAP_MAX)
+      }
+      return
+    }
+
+    this.idleTime += delta
+    if (this.idleAction === 'flap') this.animFlap()
+    else if (this.idleAction === 'look') this.animLook()
+    else this.animPeck()
+  }
+
+  /** A few quick wing flaps that taper off. */
+  private animFlap(): void {
+    const DUR = 0.9
+    if (this.idleTime > DUR) {
+      this.idleAction = 'none'
+      return
+    }
+    const taper = Math.min(1, (DUR - this.idleTime) / 0.3) // fade out at the end
+    const spread = (0.25 + 0.85 * (0.5 + 0.5 * Math.sin(this.idleTime * 22))) * taper
+    this.leftWing.rotation.z = -spread
+    this.rightWing.rotation.z = spread
+    this.neck.rotation.set(-0.1, 0, 0) // head up a touch while flapping
+  }
+
+  /** Turn the head one way then the other, settling back to centre. */
+  private animLook(): void {
+    const DUR = 2.2
+    if (this.idleTime > DUR) {
+      this.idleAction = 'none'
+      return
+    }
+    const envelope = Math.sin((this.idleTime / DUR) * Math.PI) // 0 -> 1 -> 0
+    this.neck.rotation.set(0, Math.sin(this.idleTime * 2.4) * 0.7 * envelope, 0)
+  }
+
+  /** Dip the head to the ground a couple of times. */
+  private animPeck(): void {
+    const DUR = 1.4
+    if (this.idleTime > DUR) {
+      this.idleAction = 'none'
+      return
+    }
+    const dip = Math.max(0, Math.sin(this.idleTime * 5)) // 0 -> down -> up, twice
+    this.neck.rotation.set(dip, 0, 0)
   }
 
   /** Square up to the Queen, hold ground, puff up, and honk a lot. */
