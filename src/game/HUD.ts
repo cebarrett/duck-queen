@@ -17,11 +17,44 @@ export class HUD {
   private reeds = 0
   private stolen = 0
 
+  // A centred banner + meter shown only during a honk-off.
+  private readonly honkBanner: HTMLElement
+  private readonly honkFill: HTMLElement
+
   constructor() {
     const el = document.getElementById('hud')
     // A clear error beats a silent no-op if the HTML and code drift apart.
     if (!el) throw new Error('HUD: #hud element not found in index.html')
     this.element = el
+
+    // Build the honk-off banner in code (it's not in index.html). Centred,
+    // hidden until a honk-off starts.
+    const banner = document.createElement('div')
+    banner.style.cssText =
+      'position:fixed;top:32%;left:50%;transform:translateX(-50%);text-align:center;' +
+      'color:#fff;font-weight:700;text-shadow:0 1px 3px rgba(0,0,0,.6);' +
+      'pointer-events:none;user-select:none;display:none;'
+    const label = document.createElement('div')
+    label.textContent = '🪿 HONK-OFF! · mash Q!'
+    label.style.cssText = 'font-size:22px;margin-bottom:6px;'
+    const meter = document.createElement('div')
+    meter.style.cssText =
+      'width:260px;height:20px;margin:0 auto;background:rgba(0,0,0,.4);' +
+      'border:2px solid #fff;border-radius:11px;overflow:hidden;'
+    const fill = document.createElement('div')
+    fill.style.cssText = 'height:100%;width:0%;background:#ffd400;transition:width 60ms linear;'
+    meter.appendChild(fill)
+    banner.appendChild(label)
+    banner.appendChild(meter)
+    document.body.appendChild(banner)
+    this.honkBanner = banner
+    this.honkFill = fill
+  }
+
+  /** Show/hide the honk-off banner and set the resolve meter (0..1). */
+  setHonkOff(active: boolean, resolve: number): void {
+    this.honkBanner.style.display = active ? 'block' : 'none'
+    if (active) this.honkFill.style.width = `${Math.round(resolve * 100)}%`
   }
 
   setMode(mode: DuckMode): void {

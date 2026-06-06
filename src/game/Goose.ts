@@ -23,6 +23,13 @@ const FORAGE_RADIUS = 7 // how far a goose will notice a plant and go for it
 const FORAGE_RATE = 0.5 // per second: chance to spot + go for an in-range plant
 const EAT_RADIUS = 1.1 // close enough to snatch a plant
 
+// --- Posturing (during a honk-off) -----------------------------------------
+const PUFF_SCALE = 1.22 // how big it swells while squaring up
+const POSTURE_TURN = 10 // how fast it spins to face the Queen
+const POSTURE_HONK_RATE = 1.4 // it honks a LOT during a face-off
+const PUFF_EASE = 8 // how fast it puffs up / deflates
+const HONKOFF_COOLDOWN = 5 // after a honk-off, it won't be re-engaged for a bit
+
 // Posturing / fleeing arrive in later phases.
 type GooseState = 'pausing' | 'wandering' | 'foraging'
 
@@ -50,6 +57,14 @@ export class Goose {
   // Its own honk pitch, so a gaggle sounds like distinct birds.
   private readonly honkPitch = randRange(0.9, 1.15)
 
+  // Honk-off state: while posturing it ignores its normal behaviour, squares up
+  // to face the Queen (aimX/aimZ), and "puffs up" (a swelling scale).
+  private posturing = false
+  private aimX = 0
+  private aimZ = 0
+  private puff = 1
+  private cooldown = 0 // seconds until it can be drawn into another honk-off
+
   constructor(
     x: number,
     z: number,
@@ -65,7 +80,51 @@ export class Goose {
     this.timer = randRange(0, PAUSE_MAX)
   }
 
+  /** Is this goose currently locked in a honk-off? */
+  get isPosturing(): boolean {
+    return this.posturing
+  }
+
+  /** Can the Queen start a honk-off with it right now? (Not already posturing,
+   *  and not in the brief cooldown after the last one.) */
+  get engageable(): boolean {
+    return !this.posturing && this.cooldown <= 0
+  }
+
+  /** Start a honk-off: square up and puff, dropping whatever it was doing. */
+  startPosturing(): void {
+    this.posturing = true
+    this.targetFood = null
+  }
+
+  /** End the honk-off. (`won` = the Queen won; used in Phase 4 for flee/strut.) */
+  stopPosturing(_won: boolean): void {
+    this.posturing = false
+    this.cooldown = HONKOFF_COOLDOWN // don't immediately re-fight
+    this.state = 'pausing'
+    this.timer = randRange(PAUSE_MIN, PAUSE_MAX)
+  }
+
+  /** Tell it where the Queen is, so it can face her while posturing. */
+  aimAt(x: number, z: number): void {
+    this.aimX = x
+    this.aimZ = z
+  }
+
   update(delta: number): void {
+    // While posturing, the honk-off takes over completely.
+    if (this.posturing) {
+      this.updatePosture(delta)
+      return
+    }
+    // Deflate back to normal size after a honk-off.
+    if (this.puff !== 1) {
+      this.puff += (1 - this.puff) * (1 - Math.exp(-PUFF_EASE * delta))
+      if (Math.abs(this.puff - 1) < 0.005) this.puff = 1
+      this.group.scale.setScalar(this.puff)
+    }
+    if (this.cooldown > 0) this.cooldown -= delta
+
     // An occasional honk.
     if (Math.random() < HONK_RATE * delta) this.sound.honk(this.honkPitch)
 
@@ -102,6 +161,30 @@ export class Goose {
     pos.y = Math.abs(Math.sin(this.bobPhase)) * BOB_HEIGHT * moveFactor
     this.group.rotation.y = this.heading
     this.group.rotation.z = Math.sin(this.bobPhase) * ROLL * moveFactor
+  }
+
+  /** Square up to the Queen, hold ground, puff up, and honk a lot. */
+  private updatePosture(delta: number): void {
+    const pos = this.group.position
+    const dx = this.aimX - pos.x
+    const dz = this.aimZ - pos.z
+    if (Math.hypot(dx, dz) > 0.01) {
+      const target = Math.atan2(-dx, -dz) // faces -Z at heading 0
+      this.heading = approachAngle(this.heading, target, POSTURE_TURN * delta)
+    }
+    // Stand its ground (glide any leftover velocity to zero).
+    this.ease(0, 0, delta)
+    pos.x += this.velX * delta
+    pos.z += this.velZ * delta
+
+    // Puff up + face her, no waddle.
+    this.puff += (PUFF_SCALE - this.puff) * (1 - Math.exp(-PUFF_EASE * delta))
+    this.group.scale.setScalar(this.puff)
+    pos.y = 0
+    this.group.rotation.y = this.heading
+    this.group.rotation.z = 0
+
+    if (Math.random() < POSTURE_HONK_RATE * delta) this.sound.honk(this.honkPitch)
   }
 
   /** Spot the nearest plant in range and head for it. */
