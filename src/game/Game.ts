@@ -6,6 +6,7 @@ import { ThirdPersonCamera } from './ThirdPersonCamera'
 import { DuckController } from './DuckController'
 import { Flock } from './Flock'
 import { Geese } from './Geese'
+import { Swan } from './Swan'
 import { Food } from './Food'
 import { Reeds } from './Reeds'
 import { Sound } from './Sound'
@@ -60,6 +61,7 @@ export class Game {
   private readonly duckController: DuckController
   private readonly flock: Flock
   private readonly geese: Geese
+  private readonly swan: Swan
   private readonly food: Food
   private readonly reeds: Reeds
   private readonly sound = new Sound()
@@ -157,6 +159,12 @@ export class Game {
       deriveRng(seed, 'geese'),
     )
 
+    // A lone, stately swan glides about the pond — pure ambient wildlife. It keeps
+    // to itself (no honk-offs, no foraging, no reacting to the Queen's quack); its
+    // spawn spot comes from the seeded rng so the world stays deterministic.
+    this.swan = new Swan(world.pond, deriveRng(seed, 'swan'))
+    this.scene.add(this.swan.group)
+
     // Keep the camera/canvas correct when the window resizes.
     window.addEventListener('resize', this.onResize)
   }
@@ -188,6 +196,7 @@ export class Game {
     this.flock.update(delta)
     this.updateResolveShaken(delta)
     this.geese.update(delta)
+    this.swan.update(delta)
     this.updateNestDefense()
     this.updateHatching(delta)
     this.updateMaturation()
