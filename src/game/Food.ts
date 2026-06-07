@@ -14,6 +14,7 @@ const FLOWER = 0xff9ecb
 const LAND_COUNT = 18
 const WATER_COUNT = 8
 const LAND_SPREAD = 100 // half-width of the area land plants scatter over
+const REGROW_TIME = 30 // seconds for a foraged or stolen plant to grow back (renewable food)
 
 /** A food plant the ducklings forage. (Alias kept so callers can name the type.) */
 export type FoodItem = Collectible
@@ -24,7 +25,7 @@ export type FoodItem = Collectible
  */
 export class Food extends ResourcePatch {
   constructor(scene: THREE.Scene, private readonly pond: Pond, private readonly rng: Rng) {
-    super(scene)
+    super(scene, REGROW_TIME)
     this.scatterLand()
     this.scatterWater()
   }

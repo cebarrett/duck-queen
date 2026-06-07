@@ -6,6 +6,7 @@ export interface Collectible {
   z: number
   mesh: THREE.Object3D
   collected: boolean
+  regrowTimer?: number // seconds until a harvested item grows back (regrowing patches only)
 }
 
 /**
@@ -20,7 +21,12 @@ export class ResourcePatch {
   private count = 0
   private stolenCount = 0
 
-  constructor(protected readonly scene: THREE.Scene) {}
+  /** `regrowDelay` > 0 makes harvested items grow back after that many seconds
+   *  (Food); 0 means once gathered they're gone for good (Reeds). */
+  constructor(
+    protected readonly scene: THREE.Scene,
+    private readonly regrowDelay = 0,
+  ) {}
 
   /** How many WE have gathered (for the HUD). */
   get total(): number {
@@ -60,9 +66,7 @@ export class ResourcePatch {
    *  The `collected` guard means two gatherers can't both score the same item. */
   collect(item: Collectible): void {
     if (item.collected) return
-    item.collected = true
-    this.scene.remove(item.mesh)
-    disposeObject(item.mesh)
+    this.harvest(item)
     this.count++
   }
 
@@ -71,10 +75,36 @@ export class ResourcePatch {
    *  outcome — that's the whole rivalry. */
   steal(item: Collectible): void {
     if (item.collected) return
-    item.collected = true
-    this.scene.remove(item.mesh)
-    disposeObject(item.mesh)
+    this.harvest(item)
     this.stolenCount++
+  }
+
+  /** Take an item out of play. On a regrowing patch it's just hidden and scheduled
+   *  to grow back; otherwise it's removed from the scene and freed for good. */
+  private harvest(item: Collectible): void {
+    item.collected = true
+    if (this.regrowDelay > 0) {
+      item.mesh.visible = false
+      item.regrowTimer = this.regrowDelay
+    } else {
+      this.scene.remove(item.mesh)
+      disposeObject(item.mesh)
+    }
+  }
+
+  /** Tick regrowth: a harvested item reappears (collectable again) once its delay
+   *  elapses. A no-op on patches that don't regrow. */
+  update(delta: number): void {
+    if (this.regrowDelay <= 0) return
+    for (const item of this.items) {
+      if (item.regrowTimer === undefined) continue
+      item.regrowTimer -= delta
+      if (item.regrowTimer <= 0) {
+        item.collected = false
+        item.mesh.visible = true
+        item.regrowTimer = undefined
+      }
+    }
   }
 
   /** Subclasses call this to drop a built mesh into the world at (x, y, z) and

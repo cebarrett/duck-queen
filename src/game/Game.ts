@@ -189,6 +189,7 @@ export class Game {
     this.updateNestDefense()
     this.updateHatching(delta)
     this.updateMaturation()
+    this.food.update(delta) // foraged/stolen plants slowly grow back
     this.splashFx.update(delta)
     this.hud.update(delta)
     this.cameraRig.update(delta)
