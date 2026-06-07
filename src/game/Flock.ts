@@ -28,13 +28,13 @@ export class Flock {
   private wasQuackDown = false // edge-detect the Q key (one quack per press)
 
   constructor(
-    scene: THREE.Scene,
+    private readonly scene: THREE.Scene,
     private readonly input: Input,
     private readonly queen: THREE.Object3D,
     private readonly sound: Sound,
-    pond: Pond,
-    food: Food,
-    colliders: readonly Collider[],
+    private readonly pond: Pond,
+    private readonly food: Food,
+    private readonly colliders: readonly Collider[],
     rng: Rng,
   ) {
     // Shuffle the roster into random spawn slots, deterministically from the seed
@@ -102,6 +102,16 @@ export class Flock {
       }
     }
     return best
+  }
+
+  /** A nest egg hatched: a new duckling pops out at (x, z) and falls in behind the
+   *  Queen — hers from birth. Hatching is gameplay, so the newborn draws its voice
+   *  and heading from Math.random, NOT the seeded world rng. */
+  hatchAt(x: number, z: number): void {
+    const duckling = new DuckSubject(x, z, 'duckling', this.pond, this.food, this.sound, this.colliders, Math.random)
+    duckling.recruit() // it's the Queen's already — start it following her
+    this.members.push(duckling)
+    this.scene.add(duckling.group)
   }
 
   /** Scatter current subjects near a conflict point. They still count as hers,

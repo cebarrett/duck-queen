@@ -186,6 +186,7 @@ export class Game {
     this.updateResolveShaken(delta)
     this.geese.update(delta)
     this.updateNestDefense()
+    this.updateHatching(delta)
     this.splashFx.update(delta)
     this.hud.update(delta)
     this.cameraRig.update(delta)
@@ -241,6 +242,19 @@ export class Game {
       this.hud.showMessage('🥚 A hen settles in')
     }
     this.wasSeatDown = down
+  }
+
+  /**
+   * Hatching: any nest that's been brooded long enough turns one egg into a new
+   * duckling, who pops out at the nest and joins the flock. That's the payoff for
+   * building nests, seating hens, and keeping the geese off them.
+   */
+  private updateHatching(delta: number): void {
+    for (const nest of this.nests.collectHatches(delta)) {
+      this.flock.hatchAt(nest.x, nest.z)
+      this.sound.peep() // a newborn cheep
+      this.hud.showMessage('🐣 An egg hatched!')
+    }
   }
 
   /**
