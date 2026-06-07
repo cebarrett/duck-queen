@@ -16,10 +16,10 @@ const AREA_RADIUS = 12
 // --- Honk-off tuning -------------------------------------------------------
 const TRIGGER_RANGE = 5 // a honk-off begins when the Queen gets this close to a goose
 const DISENGAGE_RANGE = 9 // backing this far away ends it (counts as a loss)
-const QUACK_GAIN = 0.14 // resolve added per Q press
-const FLOCK_FILL = 0.06 // resolve/sec per following duck (the flock bonus)
-const GOOSE_DRAIN = 0.18 // resolve/sec the goose pushes back
-const MAX_PASSIVE_SUPPORT = GOOSE_DRAIN * 0.75 // support slows losses; Q still wins fights
+const QUACK_GAIN = 0.022 // resolve per Q press — small, so frantic mashing alone can't win a fight
+const FLOCK_FILL = 0.11 // resolve/sec per following duck — ~3 followers already out-honk the goose passively
+const GOOSE_DRAIN = 0.31 // resolve/sec the goose pushes back — outpaces a lone Queen no matter how she mashes
+const MAX_PASSIVE_SUPPORT = 0.55 // cap the crowd's help (well above the drain) so a big flock wins with light mashing
 
 /** Game wires this to the HUD (active? + how full the resolve meter is, 0..1). */
 type OnHonkOff = (active: boolean, resolve: number) => void
@@ -106,8 +106,9 @@ export class Geese {
       if (qDown && !this.wasQuackDown) this.resolve += QUACK_GAIN
       this.wasQuackDown = qDown
 
-      // Flock backs her up, but never enough to win by itself; the Queen still
-      // has to quack in the goose's face to push resolve upward.
+      // Flock backs her up — a good crowd can out-honk the goose almost on its own;
+      // quacking just hurries it along. Alone, the goose drains her faster than she
+      // can ever quack.
       const passiveSupport = Math.min(FLOCK_FILL * this.flock.subjectCount, MAX_PASSIVE_SUPPORT)
       this.resolve += (passiveSupport - GOOSE_DRAIN) * delta
       this.resolve = Math.max(0, Math.min(1, this.resolve))
@@ -137,8 +138,9 @@ export class Geese {
   private start(goose: Goose): void {
     this.active = goose
     goose.startPosturing()
-    // Head start from the flock — a crowd at your back is intimidating.
-    const baseResolve = Math.min(0.6, 0.1 + this.flock.subjectCount * 0.08)
+    // Head start from the flock — a crowd at your back is intimidating; alone she
+    // starts low and the goose quickly drains her.
+    const baseResolve = Math.min(0.55, 0.22 + this.flock.subjectCount * 0.05)
     this.resolve = Math.max(0.05, baseResolve - this.resolvePenalty())
     this.wasQuackDown = this.input.isDown('KeyQ') // don't count an already-held Q
     this.onHonkOff(true, this.resolve)
