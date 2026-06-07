@@ -24,6 +24,7 @@ const REGROUP_RADIUS = 5
 const REGROUP_CLEAR_RATIO = 0.6
 const NEST_COST = 10 // reeds spent to build one nest
 const MATURE_FOOD_COST = 4 // food spent to raise one duckling into an adult
+const HATCH_FOOD_COST = 5 // food the flock must have saved up — and spends — to hatch one egg
 const SEAT_RANGE = 3 // how close the Queen must stand to a nest to seat a hen on it
 const SCARE_RANGE = 4 // a goose this close to a brooding hen scares her off (and grabs an egg)
 
@@ -277,7 +278,9 @@ export class Game {
    */
   private updateHatching(delta: number): void {
     if (this.flock.isFull) return // flock at capacity — eggs wait to hatch until there's room
+    if (this.food.total < HATCH_FOOD_COST) return // not enough food to raise a hatchling — eggs wait until the flock has foraged enough (incubation pauses, so no egg is lost)
     for (const nest of this.nests.collectHatches(delta)) {
+      if (!this.food.spend(HATCH_FOOD_COST)) break // ran out mid-frame (several nests hatched at once) — the rest wait their turn
       this.flock.hatchAt(nest.x, nest.z)
       this.sound.peep() // a newborn cheep
       this.hud.showMessage('🐣 An egg hatched!')
