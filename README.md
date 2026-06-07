@@ -50,6 +50,8 @@ work, so you don't have to memorize them.
 - **Rally a flock.** Quack (**Q**) to gather wandering ducks — yellow *ducklings*
   plus adult *drakes* (♂) and *hens* (♀), who look and sound different but all
   follow the same. Lead them around, but don't stray too far or they get lost.
+  You can lead **up to 10** at once for now — best the **Marsh Baron** to prove
+  your leadership and that cap lifts.
 - **Move three ways.** Waddle on land, **hold Space** to fly (descend onto a rock
   or tree to perch on top), and paddle across the **pond**.
 - **Forage.** Your ducklings gather food plants; only the Queen herself harvests

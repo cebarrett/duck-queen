@@ -300,6 +300,7 @@ export class Geese {
     this.baron.stopPosturing(won) // won → he breaks and flees; lost → he struts
     if (won) {
       this.bossDefeated = true
+      this.flock.liftFollowerCap() // her leadership is proven — gather without limit now
       this.onBaronMessage('👑 THE MARSH BARON is broken — the marsh is yours!')
     } else {
       this.onQueenLost(bp.x, bp.z, qp.x, qp.z) // routed: panic flee + flock scatter
