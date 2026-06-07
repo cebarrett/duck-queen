@@ -17,7 +17,12 @@ export interface DuckModel {
 }
 
 export interface DuckModelOptions {
-  featherColor?: number // body/head/wing/tail colour (default soft white)
+  featherColor?: number // base colour for body/head/wings/tail (default soft white)
+  bodyColor?: number // body + tail + wings — defaults to featherColor
+  headColor?: number // head — defaults to featherColor (a drake gets a green head)
+  billColor?: number // beak — defaults to orange
+  neckRingColor?: number // optional collar band (the drake's white neck ring)
+  breastColor?: number // optional breast patch (the drake's chestnut front)
   crown?: boolean // give her the golden crown (the Queen) — default no
   scale?: number // overall size multiplier (ducklings are smaller) — default 1
 }
@@ -32,43 +37,80 @@ export interface DuckModelOptions {
  * group scales about the feet, so a smaller duckling still sits on the ground.
  */
 export function buildDuckModel(opts: DuckModelOptions = {}): DuckModel {
+  // Resolve the per-part palette. Everything falls back to featherColor (or
+  // orange for the bill), so callers that pass only featherColor — the Queen and
+  // the ducklings — render exactly as before; mallards override head/body/bill.
   const feather = opts.featherColor ?? 0xf5f5f5
+  const body = opts.bodyColor ?? feather
+  const head = opts.headColor ?? feather
+  const bill = opts.billColor ?? ORANGE
   const withCrown = opts.crown ?? false
   const scale = opts.scale ?? 1
 
   const group = new THREE.Group()
 
   // Body — the main blob. Longer front-to-back (depth) than it is wide.
-  group.add(box(1.0, 0.8, 1.4, feather, [0, 0.55, 0]))
+  group.add(box(1.0, 0.8, 1.4, body, [0, 0.55, 0]))
 
-  // Feet — two flat orange boxes poking out the front-bottom.
+  // Feet — two flat orange boxes poking out the front-bottom. (Mallards, ducklings
+  // and the Queen all have orange feet, so this stays orange.)
   group.add(box(0.25, 0.1, 0.5, ORANGE, [-0.25, 0.05, 0.1]))
   group.add(box(0.25, 0.1, 0.5, ORANGE, [0.25, 0.05, 0.1]))
 
-  // Head — a cube sitting up and toward the front (-Z).
-  group.add(box(0.7, 0.7, 0.7, feather, [0, 1.25, -0.5]))
+  // Optional chestnut breast patch (the drake), poking proud of the body's front.
+  if (opts.breastColor !== undefined) {
+    group.add(box(0.86, 0.55, 0.32, opts.breastColor, [0, 0.62, -0.74]))
+  }
+  // Optional white collar band (the drake's neck ring), at the head/body junction.
+  if (opts.neckRingColor !== undefined) {
+    group.add(box(0.74, 0.16, 0.74, opts.neckRingColor, [0, 0.98, -0.45]))
+  }
 
-  // Beak — orange box sticking out the front of the head.
-  group.add(box(0.45, 0.22, 0.45, ORANGE, [0, 1.15, -0.95]))
+  // Head — a cube sitting up and toward the front (-Z).
+  group.add(box(0.7, 0.7, 0.7, head, [0, 1.25, -0.5]))
+
+  // Beak — a box sticking out the front of the head.
+  group.add(box(0.45, 0.22, 0.45, bill, [0, 1.15, -0.95]))
 
   // Eyes — small dark cubes on the front corners of the head.
   group.add(box(0.12, 0.12, 0.12, BLACK, [-0.22, 1.4, -0.82]))
   group.add(box(0.12, 0.12, 0.12, BLACK, [0.22, 1.4, -0.82]))
 
   // Tail — a stub at the back (+Z), tilted upward for a jaunty look.
-  const tail = box(0.5, 0.35, 0.4, feather, [0, 0.8, 0.8])
+  const tail = box(0.5, 0.35, 0.4, body, [0, 0.8, 0.8])
   tail.rotation.x = -0.5 // tilt the top backward/up (radians)
   group.add(tail)
 
   // Wings — hinged pivots so they can flap (see makeWing).
-  const leftWing = makeWing(-1, feather)
-  const rightWing = makeWing(1, feather)
+  const leftWing = makeWing(-1, body)
+  const rightWing = makeWing(1, body)
   group.add(leftWing, rightWing)
 
   const crown = withCrown ? addCrown(group) : undefined
 
   group.scale.setScalar(scale)
   return { group, leftWing, rightWing, crown }
+}
+
+// --- Mallard palettes ------------------------------------------------------
+// The body/head/bill colours that turn the shared duck into an adult mallard.
+// (Each kind's size and voice come from the subject-kinds table, added later.)
+
+/** Drake (male mallard): glossy green head, white collar, chestnut breast, grey
+ *  flanks, yellow bill — the instantly-readable "mallard" look. */
+export const MALLARD_DRAKE: DuckModelOptions = {
+  bodyColor: 0x9a9ea4, // pale grey flanks
+  headColor: 0x1b7a43, // glossy green head
+  billColor: 0xf3c24b, // yellow bill
+  neckRingColor: 0xf6f6f6, // white collar
+  breastColor: 0x7c4a2f, // chestnut breast
+}
+
+/** Hen (female mallard): mottled brown all over with a dull orange bill. */
+export const MALLARD_HEN: DuckModelOptions = {
+  bodyColor: 0x8a6c49, // mottled brown body
+  headColor: 0x6f5536, // darker brown crown
+  billColor: 0xcf9a4c, // dull orange bill
 }
 
 /**
@@ -96,10 +138,10 @@ function box(
  * it, so rotating the pivot around its forward (Z) axis swings the wing up/out like
  * a real flap — hinging at the shoulder instead of spinning around its own middle.
  */
-function makeWing(side: number, feather: number): THREE.Group {
+function makeWing(side: number, color: number): THREE.Group {
   const pivot = new THREE.Group()
   pivot.position.set(side * 0.45, 0.85, 0.05) // the shoulder hinge point
-  pivot.add(box(0.15, 0.5, 0.9, feather, [side * 0.1, -0.25, 0]))
+  pivot.add(box(0.15, 0.5, 0.9, color, [side * 0.1, -0.25, 0]))
   return pivot
 }
 
