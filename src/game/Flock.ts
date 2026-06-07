@@ -83,6 +83,16 @@ export class Flock {
     return { ducklings, males, females, nesting }
   }
 
+  /** The flock's "chorus" for honk-offs: how many active subjects it has, and how
+   *  many of the three voices (duckling / drake / hen) are represented. A full
+   *  3-voice chorus out-honks a same-size flock of a single kind. */
+  get chorus(): { size: number; layers: number } {
+    const b = this.subjectBreakdown
+    const size = b.ducklings + b.males + b.females
+    const layers = (b.ducklings > 0 ? 1 : 0) + (b.males > 0 ? 1 : 0) + (b.females > 0 ? 1 : 0)
+    return { size, layers }
+  }
+
   /** Every hen currently brooding on a nest (so Game can check geese near them). */
   get nestingHens(): DuckSubject[] {
     return this.members.filter((m) => m.isNesting)

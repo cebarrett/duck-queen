@@ -20,6 +20,10 @@ const QUACK_GAIN = 0.022 // resolve per Q press — small, so frantic mashing al
 const FLOCK_FILL = 0.11 // resolve/sec per following duck — ~3 followers already out-honk the goose passively
 const GOOSE_DRAIN = 0.31 // resolve/sec the goose pushes back — outpaces a lone Queen no matter how she mashes
 const MAX_PASSIVE_SUPPORT = 0.55 // cap the crowd's help (well above the drain) so a big flock wins with light mashing
+// The Chorus: a flock's support is scaled by how many of the three duck voices
+// (duckling / drake / hen) it has. A full 3-voice chorus is full strength; a
+// one-note flock is much weaker — "unity must be maintained". Indexed by voices.
+const CHORUS_MULT = [0.6, 0.6, 0.8, 1.0]
 
 /** Game wires this to the HUD (active? + how full the resolve meter is, 0..1). */
 type OnHonkOff = (active: boolean, resolve: number) => void
@@ -108,8 +112,10 @@ export class Geese {
 
       // Flock backs her up — a good crowd can out-honk the goose almost on its own;
       // quacking just hurries it along. Alone, the goose drains her faster than she
-      // can ever quack.
-      const passiveSupport = Math.min(FLOCK_FILL * this.flock.subjectCount, MAX_PASSIVE_SUPPORT)
+      // can ever quack. A diverse flock (full chorus) supports at full strength; a
+      // one-note flock is weaker, so keeping all three duck voices matters.
+      const chorus = this.flock.chorus
+      const passiveSupport = Math.min(FLOCK_FILL * chorus.size * CHORUS_MULT[chorus.layers], MAX_PASSIVE_SUPPORT)
       this.resolve += (passiveSupport - GOOSE_DRAIN) * delta
       this.resolve = Math.max(0, Math.min(1, this.resolve))
       this.onHonkOff(true, this.resolve)

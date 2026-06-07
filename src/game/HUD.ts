@@ -152,8 +152,12 @@ export class HUD {
     const s = this.subjects
     const total = s.ducklings + s.males + s.females
     // Ducklings have no sex in this game; drakes (♂) and hens (♀) are the adults.
+    // The chorus tag shows how many of the three voices are present — a full 3/3
+    // out-honks the geese; lose a voice and your honk-offs get harder.
+    const voices = (s.ducklings > 0 ? 1 : 0) + (s.males > 0 ? 1 : 0) + (s.females > 0 ? 1 : 0)
+    const chorus = total > 0 ? `   🎵 ${voices}/3` : ''
     const nesting = s.nesting > 0 ? `   🥚 ${s.nesting} nesting` : ''
-    const flock = `👑 Subjects: ${total}  (🐤${s.ducklings} ♂${s.males} ♀${s.females})${nesting}`
+    const flock = `👑 Subjects: ${total}  (🐤${s.ducklings} ♂${s.males} ♀${s.females})${chorus}${nesting}`
     const line2 = `${flock}   🌿 Food: ${this.food}   🌾 Reeds: ${this.reeds}   🪺 Nests: ${this.nests}   🪿 Stolen: ${this.stolen}${shaken}`
 
     // Two lines via <br>. The values are our own strings + an integer, so there's
