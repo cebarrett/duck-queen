@@ -17,6 +17,14 @@ const COMPOSITION: SubjectKind[] = [
 ]
 const QUACK_RANGE = 12 // a quack recruits idle ducks within this distance
 const SCATTER_RANGE = 10 // subjects this close to conflict briefly scatter
+// How many subjects the Queen may lead at once — for now, until she bests the
+// Marsh Baron and proves her leadership, which lifts the cap (see liftFollowerCap).
+// It sits right at the boss gate (BOSS_MIN_FOLLOWERS), so a full flock is exactly
+// enough to challenge him: recruiting and hatching stop here until he's broken.
+const FOLLOWER_CAP = 10
+
+/** Game wires this to the HUD so the flock can explain why a duck won't join. */
+type OnMessage = (text: string) => void
 
 /**
  * The Flock owns all the duck subjects: spawns them, updates them, and turns the
@@ -26,6 +34,7 @@ const SCATTER_RANGE = 10 // subjects this close to conflict briefly scatter
 export class Flock {
   private readonly members: DuckSubject[] = []
   private wasQuackDown = false // edge-detect the Q key (one quack per press)
+  private capLifted = false // set once the Marsh Baron is broken — then no follower cap
 
   constructor(
     private readonly scene: THREE.Scene,
@@ -35,6 +44,7 @@ export class Flock {
     private readonly pond: Pond,
     private readonly food: Food,
     private readonly colliders: readonly Collider[],
+    private readonly onMessage: OnMessage,
     rng: Rng,
   ) {
     // Shuffle the roster into random spawn slots, deterministically from the seed
@@ -60,6 +70,18 @@ export class Flock {
     let n = 0
     for (const d of this.members) if (d.isSubject) n++
     return n
+  }
+
+  /** Has the flock hit its leadership cap? (Recruiting + hatching pause here until
+   *  the cap is lifted.) A brooding hen is off-duty and doesn't count toward it. */
+  get isFull(): boolean {
+    return !this.capLifted && this.subjectCount >= FOLLOWER_CAP
+  }
+
+  /** The Queen has bested the Marsh Baron: her proven leadership lifts the cap, so
+   *  she may gather a flock without limit from here on. */
+  liftFollowerCap(): void {
+    this.capLifted = true
   }
 
   /** Current subjects split by kind, for the HUD. Ducklings have no sex (yet);
@@ -229,13 +251,19 @@ export class Flock {
 
       const qx = this.queen.position.x
       const qz = this.queen.position.z
+      let turnedAway = false // a duck in range she couldn't take (flock full)
       for (const d of this.members) {
         if (d.isSubject) {
           d.rally() // already hers — snap her back to following
         } else {
           const dist = Math.hypot(d.group.position.x - qx, d.group.position.z - qz)
-          if (dist <= QUACK_RANGE) d.recruit()
+          if (dist > QUACK_RANGE) continue
+          if (this.isFull) turnedAway = true // no room — but keep checking the rest
+          else d.recruit()
         }
+      }
+      if (turnedAway) {
+        this.onMessage(`🦆 Your flock is full (${FOLLOWER_CAP}) — break the Marsh Baron to lead more`)
       }
     }
     this.wasQuackDown = down
