@@ -5,6 +5,7 @@ import { type Collider, resolveWalls } from './collision'
 import type { Pond } from './Water'
 import type { Sound } from './Sound'
 import type { Food, FoodItem } from './Food'
+import type { Nest, Nests } from './Nests'
 import { type Rng, rngRange } from './rng'
 
 // --- Wander tuning (geese amble a bit faster/heavier than ducklings) -------
@@ -51,6 +52,10 @@ const BOLD_FORAGE_RADIUS = 10 // bold geese scan farther for plants
 const BOLD_FORAGE_RATE = 1.0 // bold geese try to steal more often
 const EAT_RADIUS = 1.1 // close enough to snatch a plant
 
+// --- Raiding nests (geese actively hunt brooding hens) ---------------------
+const RAID_RADIUS = 24 // how far a goose will spot a brooding hen and stalk over to it
+const BOLD_RAID_RADIUS = 34 // a bold goose ranges even farther to harass nests
+
 // --- Posturing (during a honk-off) -----------------------------------------
 const PUFF_SCALE = 1.22 // how big it swells while squaring up
 const POSTURE_TURN = 10 // how fast it spins to face the Queen
@@ -65,7 +70,7 @@ const FLEE_SPEED = 5 // it bolts away fast
 const FLEE_DISTANCE = 25 // how far it runs
 const COWED_TIME = 12 // after being beaten: won't forage or be re-engaged for this long
 
-type GooseState = 'pausing' | 'wandering' | 'foraging' | 'fleeing'
+type GooseState = 'pausing' | 'wandering' | 'foraging' | 'fleeing' | 'raiding'
 
 /**
  * A rival goose. For now it just wanders its patch and honks occasionally — the
@@ -96,6 +101,7 @@ export class Goose {
   private targetX = 0
   private targetZ = 0
   private targetFood: FoodItem | null = null // the plant it's stealing toward
+  private targetNest: Nest | null = null // the brooding hen's nest it's stalking
 
   // Its own honk pitch, so a gaggle sounds like distinct birds. Seeded (ctor).
   private readonly honkPitch: number
@@ -116,6 +122,7 @@ export class Goose {
     private readonly sound: Sound,
     private readonly food: Food,
     private readonly pond: Pond,
+    private readonly nests: Nests,
     private readonly colliders: readonly Collider[],
     rng: Rng,
   ) {
@@ -161,6 +168,7 @@ export class Goose {
   startPosturing(): void {
     this.posturing = true
     this.targetFood = null
+    this.targetNest = null
     this.idleAction = 'none'
     this.neck.rotation.set(0, 0, 0)
     this.leftWing.rotation.z = 0
@@ -220,13 +228,20 @@ export class Goose {
     // An occasional honk.
     if (Math.random() < HONK_RATE * delta) this.sound.honk(this.honkPitch)
 
-    // Only while calmly milling about does it eye your plants (not mid-flee).
-    const forageRate = this.isBold ? BOLD_FORAGE_RATE : FORAGE_RATE
-    if ((this.state === 'wandering' || this.state === 'pausing') && Math.random() < forageRate * delta) {
-      this.tryForage()
+    // While calmly milling about, pick a target: a brooding hen takes priority —
+    // if one's nest is in range the goose stalks straight over (this is what makes
+    // geese actively menace your nests) — otherwise it eyes your plants.
+    if (this.state === 'wandering' || this.state === 'pausing') {
+      if (!this.tryRaid()) {
+        const forageRate = this.isBold ? BOLD_FORAGE_RATE : FORAGE_RATE
+        if (Math.random() < forageRate * delta) this.tryForage()
+      }
     }
 
     switch (this.state) {
+      case 'raiding':
+        this.raid(delta)
+        break
       case 'foraging':
         this.forage(delta)
         break
@@ -445,6 +460,36 @@ export class Goose {
       this.timer = randRange(PAUSE_MIN, PAUSE_MAX)
       return
     }
+    this.ease(s.vx, s.vz, delta)
+  }
+
+  /** Spot the nearest occupied nest (a brooding hen) in range and set out to raid
+   *  it — unless it's still cowed from a lost honk-off. Returns whether it's now
+   *  raiding. */
+  private tryRaid(): boolean {
+    if (this.cowed > 0) return false // too rattled to hunt right now
+    const pos = this.group.position
+    const radius = this.isBold ? BOLD_RAID_RADIUS : RAID_RADIUS
+    const nest = this.nests.nearestOccupied(pos.x, pos.z, radius)
+    if (!nest) return false
+    this.targetNest = nest
+    this.state = 'raiding'
+    this.sound.honk(this.honkPitch) // a menacing honk as it sets off
+    return true
+  }
+
+  /** Stalk toward the brooding hen's nest. The hen panics and bolts when the goose
+   *  closes in (Game handles that, freeing the nest); then the goose gloats and
+   *  wanders off. If the hen's already gone, give up the chase. */
+  private raid(delta: number): void {
+    const nest = this.targetNest
+    if (!nest || !nest.occupied) {
+      this.targetNest = null // hen fled (we scared her, or someone did) — done here
+      this.state = 'pausing'
+      this.timer = randRange(PAUSE_MIN, PAUSE_MAX)
+      return
+    }
+    const s = seekArrive(this.group.position, nest.x, nest.z, SPEED, ARRIVE_RADIUS, ARRIVE_STOP)
     this.ease(s.vx, s.vz, delta)
   }
 

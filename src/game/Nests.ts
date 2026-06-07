@@ -9,6 +9,7 @@ export class Nest {
   readonly group: THREE.Group
   eggs = 0
   occupied = false
+  private readonly eggMeshes: THREE.Mesh[] = []
 
   constructor(
     readonly x: number,
@@ -22,8 +23,21 @@ export class Nest {
   /** Lay one more egg into the bowl, up to the nest's capacity. */
   layEgg(): void {
     if (this.eggs >= MAX_EGGS) return
-    addEgg(this.group, this.eggs)
+    this.eggMeshes.push(addEgg(this.group, this.eggs))
     this.eggs++
+  }
+
+  /** A goose filches the most recent egg. Returns whether there was one to take. */
+  takeEgg(): boolean {
+    const egg = this.eggMeshes.pop()
+    if (!egg) return false
+    this.group.remove(egg)
+    egg.geometry.dispose()
+    const mat = egg.material
+    if (Array.isArray(mat)) mat.forEach((m) => m.dispose())
+    else mat.dispose()
+    this.eggs--
+    return true
   }
 }
 
@@ -59,10 +73,20 @@ export class Nests {
 
   /** The nearest unoccupied nest within `radius` of (x, z), or null. */
   nearestEmpty(x: number, z: number, radius: number): Nest | null {
+    return this.nearest(x, z, radius, false)
+  }
+
+  /** The nearest OCCUPIED nest (a brooding hen sitting on it) within `radius`, or
+   *  null. Geese use this to hunt down nesting hens. */
+  nearestOccupied(x: number, z: number, radius: number): Nest | null {
+    return this.nearest(x, z, radius, true)
+  }
+
+  private nearest(x: number, z: number, radius: number, occupied: boolean): Nest | null {
     let best: Nest | null = null
     let bestSq = radius * radius
     for (const nest of this.all) {
-      if (nest.occupied) continue
+      if (nest.occupied !== occupied) continue
       const dSq = (nest.x - x) ** 2 + (nest.z - z) ** 2
       if (dSq < bestSq) {
         bestSq = dSq

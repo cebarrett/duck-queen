@@ -23,6 +23,7 @@ const REGROUP_RADIUS = 5
 const REGROUP_CLEAR_RATIO = 0.6
 const NEST_COST = 10 // reeds spent to build one nest
 const SEAT_RANGE = 3 // how close the Queen must stand to a nest to seat a hen on it
+const SCARE_RANGE = 4 // a goose this close to a brooding hen scares her off (and grabs an egg)
 
 function getWorldSeed(): number {
   const raw = new URLSearchParams(window.location.search).get('seed')
@@ -142,6 +143,7 @@ export class Game {
       this.sound,
       this.food,
       world.pond,
+      this.nests,
       this.input,
       this.duck.group,
       this.flock,
@@ -183,6 +185,7 @@ export class Game {
     this.flock.update(delta)
     this.updateResolveShaken(delta)
     this.geese.update(delta)
+    this.updateNestDefense()
     this.splashFx.update(delta)
     this.hud.update(delta)
     this.cameraRig.update(delta)
@@ -238,6 +241,26 @@ export class Game {
       this.hud.showMessage('🥚 A hen settles in')
     }
     this.wasSeatDown = down
+  }
+
+  /**
+   * Nest defence: a goose that wanders too close to a brooding hen scares her off
+   * the nest AND filches an egg from it. That's the incentive to patrol and honk
+   * geese away — leave them near your nests and they'll plunder your eggs.
+   */
+  private updateNestDefense(): void {
+    for (const hen of this.flock.nestingHens) {
+      const pos = hen.group.position
+      const goose = this.geese.nearestGoose(pos.x, pos.z)
+      if (!goose || goose.dist > SCARE_RANGE) continue
+
+      const nest = hen.nest
+      hen.spookFromNest(goose.x, goose.z)
+      if (nest && nest.takeEgg()) {
+        this.sound.honk() // the goose honks, triumphant
+        this.hud.showMessage('🪿 A goose raided the nest!')
+      }
+    }
   }
 
   private handleQueenLostHonkOff(gooseX: number, gooseZ: number): void {

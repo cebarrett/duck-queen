@@ -61,8 +61,11 @@ const EGG_SLOTS: [number, number, number][] = [
 /** How many eggs one nest can hold. */
 export const MAX_EGGS = EGG_SLOTS.length
 
-/** Drop the next egg into a nest's bowl. `index` is 0-based; callers cap at MAX_EGGS. */
-export function addEgg(group: THREE.Group, index: number): void {
+/** Drop the next egg into a nest's bowl and return its mesh (so the nest can take
+ *  it back later if a goose raids). `index` is 0-based; callers cap at MAX_EGGS. */
+export function addEgg(group: THREE.Group, index: number): THREE.Mesh {
   const [x, y, z] = EGG_SLOTS[index % EGG_SLOTS.length]
-  group.add(box(0.2, 0.24, 0.26, EGG, x, y, z))
+  const egg = box(0.2, 0.24, 0.26, EGG, x, y, z)
+  group.add(egg)
+  return egg
 }

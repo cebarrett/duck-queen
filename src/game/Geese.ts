@@ -5,6 +5,7 @@ import type { Food } from './Food'
 import type { Input } from './Input'
 import type { Flock } from './Flock'
 import type { Pond } from './Water'
+import type { Nests } from './Nests'
 import type { Collider } from './collision'
 import type { Rng } from './rng'
 
@@ -45,6 +46,7 @@ export class Geese {
     sound: Sound,
     food: Food,
     pond: Pond,
+    nests: Nests,
     private readonly input: Input,
     private readonly queen: THREE.Object3D,
     private readonly flock: Flock,
@@ -57,7 +59,7 @@ export class Geese {
     for (let i = 0; i < GOOSE_COUNT; i++) {
       const angle = rng() * Math.PI * 2
       const radius = rng() * AREA_RADIUS
-      const goose = new Goose(Math.cos(angle) * radius, AREA_CENTER_Z + Math.sin(angle) * radius, sound, food, pond, colliders, rng)
+      const goose = new Goose(Math.cos(angle) * radius, AREA_CENTER_Z + Math.sin(angle) * radius, sound, food, pond, nests, colliders, rng)
       this.geese.push(goose)
       scene.add(goose.group)
     }
@@ -66,6 +68,22 @@ export class Geese {
   update(delta: number): void {
     this.updateHonkOff(delta)
     for (const goose of this.geese) goose.update(delta)
+  }
+
+  /** The nearest goose to (x, z) with its position + distance, or null if there
+   *  are none. Used to tell whether a goose is menacing a nesting hen. */
+  nearestGoose(x: number, z: number): { x: number; z: number; dist: number } | null {
+    let best: THREE.Vector3 | null = null
+    let bestSq = Infinity
+    for (const goose of this.geese) {
+      const gp = goose.group.position
+      const dSq = (gp.x - x) ** 2 + (gp.z - z) ** 2
+      if (dSq < bestSq) {
+        bestSq = dSq
+        best = gp
+      }
+    }
+    return best ? { x: best.x, z: best.z, dist: Math.sqrt(bestSq) } : null
   }
 
   private updateHonkOff(delta: number): void {

@@ -83,6 +83,11 @@ export class Flock {
     return { ducklings, males, females, nesting }
   }
 
+  /** Every hen currently brooding on a nest (so Game can check geese near them). */
+  get nestingHens(): DuckSubject[] {
+    return this.members.filter((m) => m.isNesting)
+  }
+
   /** The nearest following hen — one available to send off to a nest — or null.
    *  (A lost or already-nesting hen doesn't count.) */
   nearestFollowingHen(x: number, z: number): DuckSubject | null {

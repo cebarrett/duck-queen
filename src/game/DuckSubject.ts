@@ -182,7 +182,11 @@ export class DuckSubject {
    *  still belong to the Queen, but they won't forage until they regroup. */
   scatterFrom(x: number, z: number): void {
     if (!this.isSubject) return
+    this.scatterTo(x, z)
+  }
 
+  /** Fling this subject into a brief panic-skitter away from (x, z). */
+  private scatterTo(x: number, z: number): void {
     const pos = this.group.position
     const dx = pos.x - x
     const dz = pos.z - z
@@ -208,12 +212,18 @@ export class DuckSubject {
     this.state = 'nesting'
   }
 
-  /** Leave the nest (freeing it to be re-seated) and fall back into the flock. */
-  leaveNest(): void {
+  /** The nest she's brooding on (or walking to), or null. */
+  get nest(): Nest | null {
+    return this.targetNest
+  }
+
+  /** A goose got too close: bolt off the nest (freeing it) and skitter away from
+   *  the goose, leaving the eggs behind undefended. */
+  spookFromNest(gooseX: number, gooseZ: number): void {
     if (this.targetNest) this.targetNest.occupied = false
     this.targetNest = null
     this.sitting = false
-    this.state = 'following'
+    this.scatterTo(gooseX, gooseZ)
   }
 
   update(delta: number, ctx: FlockContext): void {
