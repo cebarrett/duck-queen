@@ -16,6 +16,8 @@ export class HUD {
   private food = 0
   private reeds = 0
   private stolen = 0
+  private nests = 0
+  private canBuildNest = false
   private resolveShaken = false
 
   // A centred banner + meter shown only during a honk-off.
@@ -113,6 +115,18 @@ export class HUD {
     this.render()
   }
 
+  setNests(count: number): void {
+    this.nests = count
+    this.render()
+  }
+
+  /** Whether the Queen can build a nest right now — drives the contextual prompt
+   *  so the B control only advertises itself when it'll actually do something. */
+  setCanBuildNest(canBuild: boolean): void {
+    this.canBuildNest = canBuild
+    this.render()
+  }
+
   private render(): void {
     let line1: string
     if (this.mode === 'fly') {
@@ -122,12 +136,15 @@ export class HUD {
     } else {
       line1 = '🦆 WADDLE  ·  WASD move · Space to take off · Q quack'
     }
+    // Only nag about building when it's actually possible (enough reeds, on land).
+    if (this.canBuildNest) line1 += '   ·   🪺 Press B to build a nest!'
+
     const shaken = this.resolveShaken ? '   Resolve shaken' : ''
     const s = this.subjects
     const total = s.ducklings + s.males + s.females
     // Ducklings have no sex in this game; drakes (♂) and hens (♀) are the adults.
     const flock = `👑 Subjects: ${total}  (🐤${s.ducklings} ♂${s.males} ♀${s.females})`
-    const line2 = `${flock}   🌿 Food: ${this.food}   🌾 Reeds: ${this.reeds}   🪿 Stolen: ${this.stolen}${shaken}`
+    const line2 = `${flock}   🌿 Food: ${this.food}   🌾 Reeds: ${this.reeds}   🪺 Nests: ${this.nests}   🪿 Stolen: ${this.stolen}${shaken}`
 
     // Two lines via <br>. The values are our own strings + an integer, so there's
     // nothing untrusted going into innerHTML here.

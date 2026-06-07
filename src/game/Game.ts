@@ -10,6 +10,7 @@ import { Food } from './Food'
 import { Reeds } from './Reeds'
 import { Sound } from './Sound'
 import { Splash } from './Splash'
+import { Nests } from './Nests'
 import { HUD } from './HUD'
 import { deriveRng } from './rng'
 
@@ -20,6 +21,7 @@ const RESOLVE_SHAKEN_TIME = 20
 const RESOLVE_SHAKEN_PENALTY = 0.15
 const REGROUP_RADIUS = 5
 const REGROUP_CLEAR_RATIO = 0.6
+const NEST_COST = 10 // reeds spent to build one nest
 
 function getWorldSeed(): number {
   const raw = new URLSearchParams(window.location.search).get('seed')
@@ -60,6 +62,8 @@ export class Game {
   private readonly sound = new Sound()
   private readonly splashFx: Splash
   private readonly hud = new HUD()
+  private readonly nests: Nests
+  private wasBuildDown = false // edge-detect the B key (one nest per press)
   private resolveShakenTimer = 0
 
   constructor() {
@@ -107,6 +111,8 @@ export class Game {
     this.food = new Food(this.scene, world.pond, deriveRng(seed, 'food'))
     // Reeds grow on the shoreline — only the Queen gathers these.
     this.reeds = new Reeds(this.scene, world.pond, deriveRng(seed, 'reeds'))
+    // Nests the Queen builds by spending reeds (they don't do anything yet).
+    this.nests = new Nests(this.scene)
 
     // Splash effects live on the water surface; a splash plays a sound + ripple.
     this.splashFx = new Splash(this.scene, world.pond.surfaceY)
@@ -178,6 +184,7 @@ export class Game {
     this.splashFx.update(delta)
     this.hud.update(delta)
     this.cameraRig.update(delta)
+    this.handleNestBuild()
 
     // Keep the HUD in sync (both only redraw on change).
     this.hud.setMode(this.duckController.getMode())
@@ -185,8 +192,29 @@ export class Game {
     this.hud.setFood(this.food.total)
     this.hud.setReeds(this.reeds.total)
     this.hud.setStolen(this.food.stolen)
+    this.hud.setNests(this.nests.count)
 
     this.renderer.render(this.scene, this.camera)
+  }
+
+  /**
+   * Nest building: when the Queen has enough reeds and is on dry ground, the HUD
+   * invites her to press B; pressing it spends the reeds and drops a nest at her
+   * feet. The prompt only shows when it'll work, so the control teaches itself.
+   */
+  private handleNestBuild(): void {
+    // "On land" = waddle mode (not swimming the pond, not airborne).
+    const canBuild = this.duckController.getMode() === 'waddle' && this.reeds.total >= NEST_COST
+    this.hud.setCanBuildNest(canBuild)
+
+    const down = this.input.isDown('KeyB')
+    if (down && !this.wasBuildDown && canBuild && this.reeds.spend(NEST_COST)) {
+      const pos = this.duck.group.position
+      this.nests.build(pos.x, pos.z)
+      this.sound.nestBuilt()
+      this.hud.showMessage('🪺 Nest built!')
+    }
+    this.wasBuildDown = down
   }
 
   private handleQueenLostHonkOff(gooseX: number, gooseZ: number): void {

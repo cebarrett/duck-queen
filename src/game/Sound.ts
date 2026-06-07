@@ -166,6 +166,40 @@ export class Sound {
     src.stop(now + dur)
   }
 
+  /**
+   * A soft woody rustle for placing a nest — a short burst of decaying noise
+   * through a mid bandpass. Drier and shorter than the splash, so it reads as
+   * "twigs settling into place" rather than water.
+   */
+  nestBuilt(): void {
+    const ctx = this.getContext()
+    if (!ctx) return
+
+    const now = ctx.currentTime
+    const dur = 0.24
+    const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate)
+    const data = buffer.getChannelData(0)
+    for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length)
+    const src = ctx.createBufferSource()
+    src.buffer = buffer
+
+    const band = ctx.createBiquadFilter()
+    band.type = 'bandpass'
+    band.frequency.value = 850
+    band.Q.value = 0.8
+
+    const gain = ctx.createGain()
+    gain.gain.setValueAtTime(0.0001, now)
+    gain.gain.exponentialRampToValueAtTime(0.32, now + 0.01)
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + dur)
+
+    src.connect(band)
+    band.connect(gain)
+    gain.connect(ctx.destination)
+    src.start(now)
+    src.stop(now + dur)
+  }
+
   // --- Recorded-file path (shared by every voiced sound) ---------------------
 
   private playSampleOrSynth(

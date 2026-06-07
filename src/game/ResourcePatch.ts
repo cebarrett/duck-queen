@@ -32,6 +32,14 @@ export class ResourcePatch {
     return this.stolenCount
   }
 
+  /** Spend `n` of what we've gathered (e.g. reeds to build a nest). Returns
+   *  whether we could afford it; on success the total drops by `n`. */
+  spend(n: number): boolean {
+    if (this.count < n) return false
+    this.count -= n
+    return true
+  }
+
   /** The closest uncollected item within `radius` of (x, z), or null. Plain O(n)
    *  scan — fine for a few dozen items. */
   nearestUncollected(x: number, z: number, radius: number): Collectible | null {
