@@ -29,10 +29,21 @@ const MAX_PASSIVE_SUPPORT = 0.55 // cap the crowd's help (well above the drain) 
 // one-note flock is much weaker — "unity must be maintained". Indexed by voices.
 const CHORUS_MULT = [0.6, 0.6, 0.8, 1.0]
 
+// --- The Marsh Baron boss fight --------------------------------------------
+const BOSS_TRIGGER_RANGE = 6 // the Queen must come this close to face the Baron
+const BOSS_DISENGAGE_RANGE = 11 // backing this far off forfeits the boss fight
+const BOSS_DRAIN = 0.55 // he pushes back far harder than a regular goose
+const BOSS_FLOCK_FILL = 0.06 // per follower — he needs a genuinely big flock to out-honk
+const BOSS_MAX_PASSIVE = 0.6 // cap on the crowd's help against him
+const BOSS_START_RESOLVE = 0.15 // only a small head start — he's a boss
+const BOSS_MIN_FOLLOWERS = 8 // "formidable": at least this many subjects...
+const BOSS_MIN_DRAKES = 3 // ...including this many drakes (you'll need them against his splits)
+
 /** Game wires this to the HUD (active? + how full the resolve meter is, 0..1). */
 type OnHonkOff = (active: boolean, resolve: number) => void
 type OnQueenLost = (gooseX: number, gooseZ: number, queenX: number, queenZ: number) => void
 type ResolvePenalty = () => number
+type OnMessage = (text: string) => void
 
 /**
  * Geese owns the rival geese and runs the honk-off — the non-violent standoff.
@@ -52,6 +63,13 @@ export class Geese {
   private resolve = 0
   private wasQuackDown = false
 
+  // Boss-fight state (the Marsh Baron — run separately from the gaggle's honk-off).
+  private bossActive = false
+  private bossResolve = 0
+  private bossWasQuackDown = false
+  private bossDefeated = false
+  private bossGateCooldown = 0 // throttles the "you're not ready" sneer
+
   constructor(
     scene: THREE.Scene,
     sound: Sound,
@@ -62,6 +80,8 @@ export class Geese {
     private readonly queen: THREE.Object3D,
     private readonly flock: Flock,
     private readonly onHonkOff: OnHonkOff,
+    private readonly onBossFight: OnHonkOff,
+    private readonly onBaronMessage: OnMessage,
     private readonly onQueenLost: OnQueenLost,
     private readonly resolvePenalty: ResolvePenalty,
     colliders: readonly Collider[],
@@ -83,6 +103,7 @@ export class Geese {
 
   update(delta: number): void {
     this.updateHonkOff(delta)
+    this.updateBossFight(delta)
     for (const goose of this.geese) goose.update(delta)
     this.baron.update(delta)
   }
@@ -104,6 +125,7 @@ export class Geese {
   }
 
   private updateHonkOff(delta: number): void {
+    if (this.bossActive) return // the boss fight takes over the standoff
     const qx = this.queen.position.x
     const qz = this.queen.position.z
 
@@ -180,6 +202,83 @@ export class Geese {
 
   private engageRange(goose: Goose): number {
     return goose.honkOffTriggerRange(TRIGGER_RANGE)
+  }
+
+  // --- The Marsh Baron boss fight --------------------------------------------
+
+  private updateBossFight(delta: number): void {
+    if (this.bossDefeated) return // beaten for good — he's broken and gone
+
+    const qx = this.queen.position.x
+    const qz = this.queen.position.z
+    const bp = this.baron.group.position
+
+    if (this.bossActive) {
+      this.baron.aimAt(qx, qz)
+      if (Math.hypot(bp.x - qx, bp.z - qz) > BOSS_DISENGAGE_RANGE) {
+        this.endBossFight(false) // she fled the standoff
+        return
+      }
+      const qDown = this.input.isDown('KeyQ')
+      if (qDown && !this.bossWasQuackDown) this.bossResolve += QUACK_GAIN
+      this.bossWasQuackDown = qDown
+
+      const chorus = this.flock.chorus
+      const passive = Math.min(BOSS_FLOCK_FILL * chorus.size * CHORUS_MULT[chorus.layers], BOSS_MAX_PASSIVE)
+      this.bossResolve += (passive - BOSS_DRAIN) * delta
+      this.bossResolve = Math.max(0, Math.min(1, this.bossResolve))
+      this.onBossFight(true, this.bossResolve)
+
+      if (this.bossResolve >= 1) this.endBossFight(true)
+      else if (this.bossResolve <= 0) this.endBossFight(false)
+      return
+    }
+
+    // Not fighting — start one if the Queen squares up to him with a real host at
+    // her back; otherwise he sneers her off with a hint about what she's missing.
+    if (this.bossGateCooldown > 0) this.bossGateCooldown -= delta
+    if (Math.hypot(bp.x - qx, bp.z - qz) > BOSS_TRIGGER_RANGE) return
+    if (this.isFlockFormidable()) {
+      this.startBossFight()
+    } else if (this.bossGateCooldown <= 0) {
+      this.onBaronMessage(this.gateHint())
+      this.bossGateCooldown = 5
+    }
+  }
+
+  private isFlockFormidable(): boolean {
+    return this.flock.subjectCount >= BOSS_MIN_FOLLOWERS && this.flock.subjectBreakdown.males >= BOSS_MIN_DRAKES
+  }
+
+  private gateHint(): string {
+    const drakes = this.flock.subjectBreakdown.males
+    if (drakes < BOSS_MIN_DRAKES) return `🪿 The Baron sneers — bring more drakes (${drakes}/${BOSS_MIN_DRAKES})`
+    return `🪿 The Baron sneers — bring a bigger flock (${this.flock.subjectCount}/${BOSS_MIN_FOLLOWERS})`
+  }
+
+  private startBossFight(): void {
+    this.bossActive = true
+    this.baron.startPosturing()
+    this.bossResolve = BOSS_START_RESOLVE
+    this.bossWasQuackDown = this.input.isDown('KeyQ')
+    this.onBaronMessage('👑 THE MARSH BARON squares up!')
+    this.onBossFight(true, this.bossResolve)
+  }
+
+  private endBossFight(won: boolean): void {
+    const bp = this.baron.group.position
+    const qp = this.queen.position
+    this.baron.stopPosturing(won) // won → he breaks and flees; lost → he struts
+    if (won) {
+      this.bossDefeated = true
+      this.onBaronMessage('👑 THE MARSH BARON is broken — the marsh is yours!')
+    } else {
+      this.onQueenLost(bp.x, bp.z, qp.x, qp.z) // routed: panic flee + flock scatter
+      this.bossGateCooldown = 6 // a breather before she can challenge again
+    }
+    this.bossActive = false
+    this.bossResolve = 0
+    this.onBossFight(false, 0)
   }
 }
 

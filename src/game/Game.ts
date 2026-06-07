@@ -149,6 +149,8 @@ export class Game {
       this.duck.group,
       this.flock,
       (active, resolve) => this.hud.setHonkOff(active, resolve),
+      (active, resolve) => this.hud.setHonkOff(active, resolve, '👑 THE MARSH BARON — mash Q!', '#e23b3b'),
+      (text) => this.hud.showMessage(text),
       (gooseX, gooseZ) => this.handleQueenLostHonkOff(gooseX, gooseZ),
       () => this.resolvePenalty(),
       world.colliders,

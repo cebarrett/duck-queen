@@ -21,8 +21,9 @@ export class HUD {
   private canSeatHen = false
   private resolveShaken = false
 
-  // A centred banner + meter shown only during a honk-off.
+  // A centred banner + meter shown only during a honk-off (or boss fight).
   private readonly honkBanner: HTMLElement
+  private readonly honkLabel: HTMLElement
   private readonly honkFill: HTMLElement
   private readonly messageBanner: HTMLElement
   private messageTimer = 0
@@ -54,6 +55,7 @@ export class HUD {
     banner.appendChild(meter)
     document.body.appendChild(banner)
     this.honkBanner = banner
+    this.honkLabel = label
     this.honkFill = fill
 
     const message = document.createElement('div')
@@ -65,10 +67,15 @@ export class HUD {
     this.messageBanner = message
   }
 
-  /** Show/hide the honk-off banner and set the resolve meter (0..1). */
-  setHonkOff(active: boolean, resolve: number): void {
+  /** Show/hide the honk-off banner and set the resolve meter (0..1). `label` and
+   *  `color` let the boss fight wear its own dramatic banner. */
+  setHonkOff(active: boolean, resolve: number, label = '🪿 HONK-OFF! · mash Q!', color = '#ffd400'): void {
     this.honkBanner.style.display = active ? 'block' : 'none'
-    if (active) this.honkFill.style.width = `${Math.round(resolve * 100)}%`
+    if (active) {
+      this.honkLabel.textContent = label
+      this.honkFill.style.background = color
+      this.honkFill.style.width = `${Math.round(resolve * 100)}%`
+    }
   }
 
   showMessage(text: string, seconds = 1.6): void {

@@ -113,6 +113,9 @@ export class Goose {
   // Collision footprint — bigger for the (larger) Baron.
   private readonly collideRadius: number
   private readonly collideHeight: number
+  // Base size (1, or the Baron's bigger scale); puff multiplies this so posturing
+  // swells him from his real size rather than snapping him back to 1.
+  private readonly baseScale: number
 
   // Honk-off state: while posturing it ignores its normal behaviour, squares up
   // to face the Queen (aimX/aimZ), and "puffs up" (a swelling scale).
@@ -150,6 +153,7 @@ export class Goose {
 
     this.collideRadius = boss ? COLLIDE_RADIUS * BARON_SCALE : COLLIDE_RADIUS
     this.collideHeight = boss ? COLLIDE_HEIGHT * BARON_SCALE : COLLIDE_HEIGHT
+    this.baseScale = boss ? BARON_SCALE : 1
 
     // Spawn-time values from the seeded rng so the initial world is stable. The
     // Baron's voice sits much lower — a deep, ominous honk.
@@ -236,7 +240,7 @@ export class Goose {
     if (this.puff !== 1) {
       this.puff += (1 - this.puff) * easeFactor(PUFF_EASE, delta)
       if (Math.abs(this.puff - 1) < 0.005) this.puff = 1
-      this.group.scale.setScalar(this.puff)
+      this.group.scale.setScalar(this.baseScale * this.puff)
     }
     if (this.cooldown > 0) this.cooldown -= delta
     if (this.cowed > 0) this.cowed -= delta
@@ -428,7 +432,7 @@ export class Goose {
     // Puff up + face her, no waddle. Hold at the waterline if it's squaring up
     // while afloat, so it doesn't pop up onto the surface mid-honk-off.
     this.puff += (PUFF_SCALE - this.puff) * easeFactor(PUFF_EASE, delta)
-    this.group.scale.setScalar(this.puff)
+    this.group.scale.setScalar(this.baseScale * this.puff)
     pos.y = this.pond.isWater(pos.x, pos.z) ? SWIM_FLOAT_Y : 0
     this.group.rotation.y = this.heading
     this.group.rotation.z = 0
