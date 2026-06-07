@@ -62,6 +62,21 @@ export class Flock {
     return n
   }
 
+  /** Current subjects split by kind, for the HUD. Ducklings have no sex (yet);
+   *  drakes are the males, hens the females. */
+  get subjectBreakdown(): { ducklings: number; males: number; females: number } {
+    let ducklings = 0
+    let males = 0
+    let females = 0
+    for (const d of this.members) {
+      if (!d.isSubject) continue
+      if (d.kind === 'duckling') ducklings++
+      else if (d.kind === 'drake') males++
+      else females++
+    }
+    return { ducklings, males, females }
+  }
+
   /** Scatter current subjects near a conflict point. They still count as hers,
    *  just briefly panic-skitter before following again. */
   scatterFrom(x: number, z: number): void {

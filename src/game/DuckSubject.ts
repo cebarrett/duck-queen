@@ -115,7 +115,7 @@ export class DuckSubject {
   constructor(
     x: number,
     z: number,
-    kind: SubjectKind,
+    readonly kind: SubjectKind,
     private readonly pond: Pond,
     private readonly food: Food,
     private readonly sound: Sound,

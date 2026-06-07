@@ -181,7 +181,7 @@ export class Game {
 
     // Keep the HUD in sync (both only redraw on change).
     this.hud.setMode(this.duckController.getMode())
-    this.hud.setSubjects(this.flock.subjectCount)
+    this.hud.setSubjects(this.flock.subjectBreakdown)
     this.hud.setFood(this.food.total)
     this.hud.setReeds(this.reeds.total)
     this.hud.setStolen(this.food.stolen)
