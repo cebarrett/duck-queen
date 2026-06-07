@@ -7,12 +7,14 @@ const BLACK = 0x222222
 const GOLD = 0xffd700
 const JEWEL = 0xff4d4d
 
-/** What a built duck hands back: the whole thing as one Group, plus the two wing
- *  pivots in case something wants to animate them (the Queen's controller flaps). */
+/** What a built duck hands back: the whole thing as one Group, plus the pivots
+ *  something might want to animate — the two wings (the Queen's controller flaps
+ *  them) and the head (subjects tip/turn it for their idle fidgets). */
 export interface DuckModel {
   group: THREE.Group
   leftWing: THREE.Group
   rightWing: THREE.Group
+  head: THREE.Group
   crown?: THREE.Group
 }
 
@@ -42,7 +44,7 @@ export function buildDuckModel(opts: DuckModelOptions = {}): DuckModel {
   // the ducklings — render exactly as before; mallards override head/body/bill.
   const feather = opts.featherColor ?? 0xf5f5f5
   const body = opts.bodyColor ?? feather
-  const head = opts.headColor ?? feather
+  const headColor = opts.headColor ?? feather
   const bill = opts.billColor ?? ORANGE
   const withCrown = opts.crown ?? false
   const scale = opts.scale ?? 1
@@ -66,15 +68,17 @@ export function buildDuckModel(opts: DuckModelOptions = {}): DuckModel {
     group.add(box(0.74, 0.16, 0.74, opts.neckRingColor, [0, 0.98, -0.45]))
   }
 
-  // Head — a cube sitting up and toward the front (-Z).
-  group.add(box(0.7, 0.7, 0.7, head, [0, 1.25, -0.5]))
-
-  // Beak — a box sticking out the front of the head.
-  group.add(box(0.45, 0.22, 0.45, bill, [0, 1.15, -0.95]))
-
-  // Eyes — small dark cubes on the front corners of the head.
-  group.add(box(0.12, 0.12, 0.12, BLACK, [-0.22, 1.4, -0.82]))
-  group.add(box(0.12, 0.12, 0.12, BLACK, [0.22, 1.4, -0.82]))
+  // Head, beak and eyes live under ONE pivot at the base of the neck, so the whole
+  // head can tip up (gaze at the sky), dip down (peck the ground) and turn (look
+  // around) as a unit — that's what the subjects' idle fidgets animate. At rest
+  // (rotation 0) it sits exactly where a fixed head would, so nothing looks moved.
+  const head = new THREE.Group()
+  head.position.set(0, 1.0, -0.4)
+  head.add(box(0.7, 0.7, 0.7, headColor, [0, 0.25, -0.1])) // head cube
+  head.add(box(0.45, 0.22, 0.45, bill, [0, 0.15, -0.55])) // beak, out the front
+  head.add(box(0.12, 0.12, 0.12, BLACK, [-0.22, 0.4, -0.42])) // eyes
+  head.add(box(0.12, 0.12, 0.12, BLACK, [0.22, 0.4, -0.42]))
+  group.add(head)
 
   // Tail — a stub at the back (+Z), tilted upward for a jaunty look.
   const tail = box(0.5, 0.35, 0.4, body, [0, 0.8, 0.8])
@@ -86,10 +90,11 @@ export function buildDuckModel(opts: DuckModelOptions = {}): DuckModel {
   const rightWing = makeWing(1, body)
   group.add(leftWing, rightWing)
 
-  const crown = withCrown ? addCrown(group) : undefined
+  // Crown rides on the head pivot (Queen only), so it'd tip with her head too.
+  const crown = withCrown ? addCrown(head) : undefined
 
   group.scale.setScalar(scale)
-  return { group, leftWing, rightWing, crown }
+  return { group, leftWing, rightWing, head, crown }
 }
 
 // --- Mallard palettes ------------------------------------------------------
@@ -145,16 +150,16 @@ function makeWing(side: number, color: number): THREE.Group {
   return pivot
 }
 
-/** The golden crown — a band, three points, and a red jewel. Queen only. */
-function addCrown(group: THREE.Group): THREE.Group {
+/** The golden crown — a band, three points, and a red jewel. Queen only. Added to
+ *  the head pivot, with positions in that pivot's space (the head sits at y 1.0). */
+function addCrown(head: THREE.Group): THREE.Group {
   const crown = new THREE.Group()
-  const headTopY = 1.6 // just above the 0.7-tall head centred at y=1.25
-  crown.position.set(0, headTopY, -0.5)
+  crown.position.set(0, 0.6, -0.1) // atop the head, in the head pivot's local space
   crown.add(box(0.5, 0.18, 0.5, GOLD, [0, 0, 0]))
   for (const x of [-0.16, 0, 0.16]) {
     crown.add(box(0.1, 0.16, 0.1, GOLD, [x, 0.16, 0]))
   }
   crown.add(box(0.1, 0.1, 0.06, JEWEL, [0, 0, -0.26]))
-  group.add(crown)
+  head.add(crown)
   return crown
 }

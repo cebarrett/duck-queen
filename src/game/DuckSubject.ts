@@ -45,6 +45,11 @@ const TURN_SPEED = 8 // how fast it rotates to face travel direction
 const BOB_HEIGHT = 0.05 // little waddle hop
 const ROLL = 0.18 // side-to-side waddle tilt (radians)
 
+// --- Idle fidgets (daft stationary-duck business) --------------------------
+const IDLE_SPEED = 0.4 // below this speed it's "standing", and free to fidget
+const IDLE_GAP_MIN = 1.5 // shortest gap between fidgets (seconds)
+const IDLE_GAP_MAX = 4.5 // longest gap
+
 // --- Swimming (when over the pond) -----------------------------------------
 const SWIM_BOB = 0.04 // gentle float bob — no waddle hop
 const SWIM_SWAY = 0.05 // very slight side sway (much less than the waddle wiggle)
@@ -103,6 +108,16 @@ export class DuckSubject {
   private heading = 0
   private bobPhase = 0
 
+  // Animatable model pivots (grabbed from the model in the ctor) for idle fidgets.
+  private readonly leftWing: THREE.Group
+  private readonly rightWing: THREE.Group
+  private readonly head: THREE.Group
+  // Idle fidget state: which daft thing it's doing, how long it's been at it, and
+  // the countdown to the next one.
+  private idleAction: 'none' | 'flap' | 'look' | 'peck' | 'skyGaze' | 'stretch' = 'none'
+  private idleTime = 0
+  private nextIdle = randRange(IDLE_GAP_MIN, IDLE_GAP_MAX)
+
   private state: SubjectState = 'pausing'
   private timer: number // counts down the current pause
   private distractTimer = 0 // counts down a distraction
@@ -135,6 +150,9 @@ export class DuckSubject {
     const def = SUBJECT_KINDS[kind]
     const model = buildDuckModel(def.model)
     this.group = model.group
+    this.leftWing = model.leftWing
+    this.rightWing = model.rightWing
+    this.head = model.head
     this.group.position.set(x, 0, z)
     this.homeX = x
     this.homeZ = z
@@ -291,21 +309,30 @@ export class DuckSubject {
     this.heading = faceHeading(this.heading, this.velX, this.velZ, TURN_SPEED, delta)
     if (this.state === 'nesting' && this.sitting) {
       // Settled on the nest: a calm breathing bob, no waddle hop or sway.
+      this.resetFidget()
       this.bobPhase += delta * 1.5
       pos.y = Math.sin(this.bobPhase) * SIT_BOB
       this.group.rotation.z = 0
     } else if (this.pond.isWater(pos.x, pos.z)) {
       // Over the pond: float like the Queen — settle at the (scaled) waterline
       // with a slow, gentle bob and sway, and NO waddle hop / side-wiggle.
+      this.resetFidget()
       this.bobPhase += delta * 3
       pos.y = this.pond.floatLine * this.scale + Math.sin(this.bobPhase) * SWIM_BOB
       this.group.rotation.z = Math.sin(this.bobPhase * 0.7) * SWIM_SWAY
-    } else {
-      // On land: the little waddle hop + side-to-side tilt, scaled by speed.
+    } else if (speed > IDLE_SPEED) {
+      // On land, on the move: the little waddle hop + side-to-side tilt, scaled by
+      // speed; head and wings stay neutral.
+      this.resetFidget()
       const moveFactor = Math.min(speed / WANDER_SPEED, 1)
       this.bobPhase += delta * (6 + speed * 2)
       pos.y = Math.abs(Math.sin(this.bobPhase)) * BOB_HEIGHT * moveFactor
       this.group.rotation.z = Math.sin(this.bobPhase) * ROLL * moveFactor
+    } else {
+      // On land, standing still: do daft duck things (stretch, flap, peck, gaze...).
+      pos.y = 0
+      this.group.rotation.z = 0
+      this.updateIdle(delta)
     }
     this.group.rotation.y = this.heading
   }
@@ -478,5 +505,100 @@ export class DuckSubject {
     this.targetX = p.x
     this.targetZ = p.z
     this.state = 'wandering'
+  }
+
+  // --- Idle fidgets ----------------------------------------------------------
+
+  /** Drop any fidget and return the head + wings to neutral (used the moment it
+   *  starts moving, swims, or sits on a nest). */
+  private resetFidget(): void {
+    this.idleAction = 'none'
+    this.head.rotation.set(0, 0, 0)
+    this.leftWing.rotation.z = 0
+    this.rightWing.rotation.z = 0
+  }
+
+  /** Standing around being a daft duck: now and then pick a fidget — stretch, flap,
+   *  peck the ground, gaze at the sky, or look about — play it out, then wait. */
+  private updateIdle(delta: number): void {
+    if (this.idleAction === 'none') {
+      this.head.rotation.set(0, 0, 0) // neutral while waiting
+      this.leftWing.rotation.z = 0
+      this.rightWing.rotation.z = 0
+      this.nextIdle -= delta
+      if (this.nextIdle <= 0) {
+        const r = Math.random()
+        this.idleAction =
+          r < 0.28 ? 'peck' : r < 0.5 ? 'look' : r < 0.68 ? 'flap' : r < 0.85 ? 'skyGaze' : 'stretch'
+        this.idleTime = 0
+        this.nextIdle = randRange(IDLE_GAP_MIN, IDLE_GAP_MAX)
+      }
+      return
+    }
+
+    this.idleTime += delta
+    switch (this.idleAction) {
+      case 'flap':
+        this.animFlap()
+        break
+      case 'look':
+        this.animLook()
+        break
+      case 'peck':
+        this.animPeck()
+        break
+      case 'skyGaze':
+        this.animSkyGaze()
+        break
+      case 'stretch':
+        this.animStretch()
+        break
+    }
+  }
+
+  /** A flurry of quick wing flaps that taper off, chin lifted a touch. */
+  private animFlap(): void {
+    const DUR = 0.9
+    if (this.idleTime > DUR) return void (this.idleAction = 'none')
+    const taper = Math.min(1, (DUR - this.idleTime) / 0.3)
+    const spread = (0.3 + 0.8 * (0.5 + 0.5 * Math.sin(this.idleTime * 24))) * taper
+    this.leftWing.rotation.z = -spread
+    this.rightWing.rotation.z = spread
+    this.head.rotation.set(0.12, 0, 0)
+  }
+
+  /** Glance one way then the other — the classic "did I hear something?" look. */
+  private animLook(): void {
+    const DUR = 2.0
+    if (this.idleTime > DUR) return void (this.idleAction = 'none')
+    const envelope = Math.sin((this.idleTime / DUR) * Math.PI) // 0 -> 1 -> 0
+    this.head.rotation.set(0, Math.sin(this.idleTime * 2.6) * 0.8 * envelope, 0)
+  }
+
+  /** Dip the head to the ground a couple of times — poking at nothing in particular. */
+  private animPeck(): void {
+    const DUR = 1.4
+    if (this.idleTime > DUR) return void (this.idleAction = 'none')
+    const dip = Math.max(0, Math.sin(this.idleTime * 5)) // 0 -> down -> up, twice
+    this.head.rotation.set(-dip * 0.85, 0, 0) // tip the beak toward the ground
+  }
+
+  /** Crane the head up to stare at the sky, with a slow idle turn. */
+  private animSkyGaze(): void {
+    const DUR = 2.4
+    if (this.idleTime > DUR) return void (this.idleAction = 'none')
+    const envelope = Math.sin((this.idleTime / DUR) * Math.PI)
+    this.head.rotation.set(0.75 * envelope, Math.sin(this.idleTime * 1.4) * 0.25 * envelope, 0)
+  }
+
+  /** A big stretch: neck craned up while both wings spread wide, then settle. */
+  private animStretch(): void {
+    const DUR = 1.7
+    if (this.idleTime > DUR) return void (this.idleAction = 'none')
+    const envelope = Math.sin((this.idleTime / DUR) * Math.PI) // ease up and back down
+    this.head.rotation.set(0.5 * envelope, 0, 0)
+    const spread = 1.1 * envelope
+    this.leftWing.rotation.z = -spread
+    this.rightWing.rotation.z = spread
   }
 }
