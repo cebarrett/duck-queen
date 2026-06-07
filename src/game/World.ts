@@ -21,12 +21,39 @@ export class World {
   // ducklings read this to know where they can swim.
   readonly pond = new Pond(0, -26, 10)
 
-  constructor(scene: THREE.Scene, rng: Rng) {
+  constructor(scene: THREE.Scene, rng: Rng, pondRng: Rng) {
     this.addSky(scene)
     this.addLights(scene)
     this.addGround(scene)
+    // Scatter the extra ponds BEFORE the scenery so trees/rocks avoid them too.
+    this.addExtraPonds(pondRng)
     scene.add(this.pond.mesh)
     this.addScenery(scene, rng)
+  }
+
+  /**
+   * A few smaller ponds dotted around the world, in addition to the main one near
+   * spawn. They're "placed objects", so their spots come from the SEEDED rng (same
+   * seed → same ponds). We keep them in a mid-distance ring around spawn — out of
+   * the immediate starting area and the geese's corridor to the north (-Z) — and
+   * reject any that would overlap an existing pond. Because the Pond's isWater()
+   * now covers every circle, these are instantly swimmable: the Queen, the flock
+   * and the geese all float on them with no other code change.
+   */
+  private addExtraPonds(rng: Rng): void {
+    const TARGET = 3 // a few more
+    const MARGIN = 6 // clear gap to leave between ponds
+    let made = 0
+    for (let guard = 0; made < TARGET && guard < 300; guard++) {
+      const x = (rng() * 2 - 1) * 75
+      const z = -36 + rng() * 111 // z in [-36, 75]: around + in front of spawn, not the -Z geese corridor
+      const radius = 5 + rng() * 4 // 5..9 — smaller than the main pond (10)
+      const dist = Math.hypot(x, z)
+      if (dist < 22 || dist > 75) continue // keep the spawn area open; don't get lost in the fog
+      if (this.pond.overlaps(x, z, radius + MARGIN)) continue // no overlaps
+      this.pond.addCircle(x, z, radius)
+      made++
+    }
   }
 
   private addSky(scene: THREE.Scene): void {

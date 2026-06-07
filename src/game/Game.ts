@@ -92,7 +92,7 @@ export class Game {
     this.scene = new THREE.Scene()
     // World adds the ground, sky, fog, lights, and scenery to the scene, and
     // exposes the scenery's colliders so the duck can bump into them.
-    const world = new World(this.scene, deriveRng(seed, 'scenery'))
+    const world = new World(this.scene, deriveRng(seed, 'scenery'), deriveRng(seed, 'ponds'))
 
     // --- Camera -----------------------------------------------------------
     // PerspectiveCamera(fov, aspect, near, far):
