@@ -124,6 +124,31 @@ export class Flock {
     this.scene.add(duckling.group)
   }
 
+  /** The ducklings old enough to grow up right now (Game checks they can be fed). */
+  maturableDucklings(): DuckSubject[] {
+    return this.members.filter((m) => m.isReadyToMature)
+  }
+
+  /** Grow a ready duckling up: replace it in place with a fresh adult — a random
+   *  drake or hen, hers and following, at the same spot — and free the old model. */
+  matureToAdult(duckling: DuckSubject): void {
+    const kind: SubjectKind = Math.random() < 0.5 ? 'drake' : 'hen'
+    const pos = duckling.group.position
+    const adult = new DuckSubject(pos.x, pos.z, kind, this.pond, this.food, this.sound, this.colliders, Math.random)
+    adult.recruit()
+
+    const idx = this.members.indexOf(duckling)
+    if (idx >= 0) this.members[idx] = adult
+    else this.members.push(adult)
+    this.scene.remove(duckling.group)
+    duckling.dispose()
+    this.scene.add(adult.group)
+
+    // A first call in its new grown-up voice.
+    if (kind === 'drake') this.sound.drakeCall()
+    else this.sound.henQuack()
+  }
+
   /** Scatter current subjects near a conflict point. They still count as hers,
    *  just briefly panic-skitter before following again. */
   scatterFrom(x: number, z: number): void {

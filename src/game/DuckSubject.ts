@@ -70,6 +70,9 @@ const LAY_MIN = 8 // shortest gap between eggs while sitting (seconds)
 const LAY_MAX = 16 // longest gap
 const SIT_BOB = 0.02 // gentle breathing bob while settled (no waddle)
 
+// --- Growing up ------------------------------------------------------------
+const MATURE_AGE = 80 // seconds a duckling lives before it's ready to grow into an adult
+
 // --- World collision -------------------------------------------------------
 // Footprint vs. trees/rocks, tuned for the duckling and then scaled to a
 // subject's actual size (a drake is bigger, so it shoulders obstacles wider).
@@ -107,6 +110,7 @@ export class DuckSubject {
   private velZ = 0
   private heading = 0
   private bobPhase = 0
+  private age = 0 // seconds alive — a duckling grows up once it's old enough (and fed)
 
   // Animatable model pivots (grabbed from the model in the ctor) for idle fidgets.
   private readonly leftWing: THREE.Group
@@ -181,6 +185,24 @@ export class DuckSubject {
     return this.state === 'nesting'
   }
 
+  /** Is this a duckling that's lived long enough to grow into an adult? (Whether
+   *  she can afford the food to do so is checked by the Flock/Game.) */
+  get isReadyToMature(): boolean {
+    return this.kind === 'duckling' && this.isSubject && this.age >= MATURE_AGE
+  }
+
+  /** Free this subject's GPU resources (geometry + materials) — call when it's
+   *  removed from the world, e.g. when a duckling is replaced by its grown-up self. */
+  dispose(): void {
+    this.group.traverse((child) => {
+      const mesh = child as THREE.Mesh
+      if (mesh.geometry) mesh.geometry.dispose()
+      const mat = mesh.material
+      if (Array.isArray(mat)) mat.forEach((m) => m.dispose())
+      else if (mat) mat.dispose()
+    })
+  }
+
   /** Called when the Queen quacks a NEW subject in range: fall in behind her.
    *  A brooding hen ignores it — she's busy keeping her eggs warm. */
   recruit(): void {
@@ -245,6 +267,8 @@ export class DuckSubject {
   }
 
   update(delta: number, ctx: FlockContext): void {
+    this.age += delta
+
     // A little call now and then (in its own voice); startled subjects complain
     // more often while they scatter. A brooding hen sits quietly (she only clucks
     // when she lays — see brood()).

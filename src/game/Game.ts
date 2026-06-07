@@ -22,6 +22,7 @@ const RESOLVE_SHAKEN_PENALTY = 0.15
 const REGROUP_RADIUS = 5
 const REGROUP_CLEAR_RATIO = 0.6
 const NEST_COST = 10 // reeds spent to build one nest
+const MATURE_FOOD_COST = 4 // food spent to raise one duckling into an adult
 const SEAT_RANGE = 3 // how close the Queen must stand to a nest to seat a hen on it
 const SCARE_RANGE = 4 // a goose this close to a brooding hen scares her off (and grabs an egg)
 
@@ -187,6 +188,7 @@ export class Game {
     this.geese.update(delta)
     this.updateNestDefense()
     this.updateHatching(delta)
+    this.updateMaturation()
     this.splashFx.update(delta)
     this.hud.update(delta)
     this.cameraRig.update(delta)
@@ -242,6 +244,19 @@ export class Game {
       this.hud.showMessage('🥚 A hen settles in')
     }
     this.wasSeatDown = down
+  }
+
+  /**
+   * Growing up: a duckling that's old enough grows into an adult drake or hen, if
+   * the Queen can spare the food to raise it. That gives 🌿 Food a real purpose and
+   * refills the Chorus (and makes new hens for brooding) as the flock breeds.
+   */
+  private updateMaturation(): void {
+    for (const duckling of this.flock.maturableDucklings()) {
+      if (!this.food.spend(MATURE_FOOD_COST)) break // out of food — the rest wait their turn
+      this.flock.matureToAdult(duckling)
+      this.hud.showMessage('🦆 A duckling grew up!')
+    }
   }
 
   /**
