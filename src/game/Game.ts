@@ -212,7 +212,6 @@ export class Game {
     this.hud.setSubjects(this.flock.subjectBreakdown)
     this.hud.setFood(this.food.total)
     this.hud.setReeds(this.reeds.total)
-    this.hud.setStolen(this.food.stolen)
     this.hud.setNests(this.nests.count)
 
     this.renderer.render(this.scene, this.camera)

@@ -19,7 +19,6 @@ export interface Collectible {
 export class ResourcePatch {
   readonly items: Collectible[] = []
   private count = 0
-  private stolenCount = 0
 
   /** `regrowDelay` > 0 makes harvested items grow back after that many seconds
    *  (Food); 0 means once gathered they're gone for good (Reeds). */
@@ -31,11 +30,6 @@ export class ResourcePatch {
   /** How many WE have gathered (for the HUD). */
   get total(): number {
     return this.count
-  }
-
-  /** How many a rival (a goose) has taken — food we never got. */
-  get stolen(): number {
-    return this.stolenCount
   }
 
   /** Spend `n` of what we've gathered (e.g. reeds to build a nest). Returns
@@ -70,13 +64,12 @@ export class ResourcePatch {
     this.count++
   }
 
-  /** A rival snatches an item: same removal as collect(), but it counts against
-   *  us (toward `stolen`) instead of crediting our `total`. Same plant, opposite
+  /** A rival snatches an item: same removal as collect(), but it never credits
+   *  our `total` — the food is simply denied to us. Same plant, opposite
    *  outcome — that's the whole rivalry. */
   steal(item: Collectible): void {
     if (item.collected) return
     this.harvest(item)
-    this.stolenCount++
   }
 
   /** Take an item out of play. On a regrowing patch it's just hidden and scheduled
