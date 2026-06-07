@@ -1,5 +1,6 @@
 import * as THREE from 'three'
-import { Duckling, type FlockContext } from './Duckling'
+import { DuckSubject, type FlockContext } from './DuckSubject'
+import type { SubjectKind } from './subjectKinds'
 import type { Input } from './Input'
 import type { Sound } from './Sound'
 import type { Pond } from './Water'
@@ -7,7 +8,13 @@ import type { Food } from './Food'
 import type { Collider } from './collision'
 import type { Rng } from './rng'
 
-const DUCKLING_COUNT = 8
+// The flock roster: which kinds make up the subjects. A guaranteed mix (so you
+// always see some grown mallards), shuffled into random spawn slots by the seed.
+const COMPOSITION: SubjectKind[] = [
+  'duckling', 'duckling', 'duckling', 'duckling',
+  'drake', 'drake',
+  'hen', 'hen',
+]
 const QUACK_RANGE = 12 // a quack recruits idle ducks within this distance
 const SCATTER_RANGE = 10 // subjects this close to conflict briefly scatter
 
@@ -17,7 +24,7 @@ const SCATTER_RANGE = 10 // subjects this close to conflict briefly scatter
  * followerCount for the HUD.
  */
 export class Flock {
-  private readonly ducklings: Duckling[] = []
+  private readonly members: DuckSubject[] = []
   private wasQuackDown = false // edge-detect the Q key (one quack per press)
 
   constructor(
@@ -30,12 +37,20 @@ export class Flock {
     colliders: readonly Collider[],
     rng: Rng,
   ) {
-    for (let i = 0; i < DUCKLING_COUNT; i++) {
+    // Shuffle the roster into random spawn slots, deterministically from the seed
+    // (Fisher–Yates). So a given seed always yields the same mix in the same spots.
+    const kinds = [...COMPOSITION]
+    for (let i = kinds.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1))
+      ;[kinds[i], kinds[j]] = [kinds[j], kinds[i]]
+    }
+
+    for (const kind of kinds) {
       const angle = rng() * Math.PI * 2
       const radius = 6 + rng() * 8
-      const duckling = new Duckling(Math.cos(angle) * radius, Math.sin(angle) * radius, pond, food, this.sound, colliders, rng)
-      this.ducklings.push(duckling)
-      scene.add(duckling.group)
+      const subject = new DuckSubject(Math.cos(angle) * radius, Math.sin(angle) * radius, kind, pond, food, this.sound, colliders, rng)
+      this.members.push(subject)
+      scene.add(subject.group)
     }
   }
 
@@ -43,14 +58,14 @@ export class Flock {
    *  distracted — a lost duck no longer counts). */
   get subjectCount(): number {
     let n = 0
-    for (const d of this.ducklings) if (d.isSubject) n++
+    for (const d of this.members) if (d.isSubject) n++
     return n
   }
 
   /** Scatter current subjects near a conflict point. They still count as hers,
    *  just briefly panic-skitter before following again. */
   scatterFrom(x: number, z: number): void {
-    for (const d of this.ducklings) {
+    for (const d of this.members) {
       if (!d.isSubject) continue
       const pos = d.group.position
       if (Math.hypot(pos.x - x, pos.z - z) <= SCATTER_RANGE) d.scatterFrom(x, z)
@@ -65,7 +80,7 @@ export class Flock {
     let subjects = 0
     let nearby = 0
 
-    for (const d of this.ducklings) {
+    for (const d of this.members) {
       if (!d.isSubject) continue
       subjects++
       const pos = d.group.position
@@ -83,10 +98,10 @@ export class Flock {
     const ctx: FlockContext = {
       queenX: this.queen.position.x,
       queenZ: this.queen.position.z,
-      flock: this.ducklings,
+      flock: this.members,
     }
-    for (const duckling of this.ducklings) {
-      duckling.update(delta, ctx)
+    for (const subject of this.members) {
+      subject.update(delta, ctx)
     }
   }
 
@@ -100,7 +115,7 @@ export class Flock {
 
       const qx = this.queen.position.x
       const qz = this.queen.position.z
-      for (const d of this.ducklings) {
+      for (const d of this.members) {
         if (d.isSubject) {
           d.rally() // already hers — snap her back to following
         } else {

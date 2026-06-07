@@ -29,7 +29,7 @@ export interface DuckModelOptions {
 
 /**
  * Build a blocky duck out of boxes and return it as one Group. Used by BOTH the
- * Queen (Duck.ts) and her subjects (Duckling.ts) so they share exactly the same
+ * Queen (Duck.ts) and her subjects (DuckSubject.ts) so they share exactly the same
  * geometry — the Queen is just "this, plus a crown, full size".
  *
  * Convention (unchanged): the duck faces -Z, and the Group's origin is at her feet

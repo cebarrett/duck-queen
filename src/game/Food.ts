@@ -20,7 +20,7 @@ export type FoodItem = Collectible
 
 /**
  * Food is a ResourcePatch of edible plants — leafy sprouts on land, lily-pads in
- * the pond. The flock's followers gather these (see Duckling).
+ * the pond. The flock's followers gather these (see DuckSubject).
  */
 export class Food extends ResourcePatch {
   constructor(scene: THREE.Scene, private readonly pond: Pond, private readonly rng: Rng) {

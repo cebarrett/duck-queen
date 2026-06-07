@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { buildDuckModel } from './duckModel'
+import { type SubjectKind, SUBJECT_KINDS } from './subjectKinds'
 import { randRange, seekArrive, pointAround, faceHeading, easeFactor } from './mathUtils'
 import { type Collider, resolveWalls } from './collision'
 import type { Pond } from './Water'
@@ -7,15 +8,10 @@ import type { Food, FoodItem } from './Food'
 import type { Sound } from './Sound'
 import { type Rng, rngRange } from './rng'
 
-// Subjects are smaller than the Queen and duckling-yellow so they read as "hers"
-// at a glance (vs. her white).
-const DUCKLING_COLOR = 0xffe680
-const DUCKLING_SCALE = 0.4
-
 // --- Idle wander tuning ----------------------------------------------------
 const WANDER_SPEED = 1.5 // top amble speed (units/sec) — slow and unhurried
 const RESPONSIVENESS = 4 // how fast velocity eases toward the target (heavy/ducky)
-const WANDER_RADIUS = 5 // how far from "home" she picks her next spot
+const WANDER_RADIUS = 5 // how far from "home" it picks its next spot
 const ARRIVE_RADIUS = 1.5 // start slowing down once this close to the target
 const ARRIVE_STOP = 0.3 // close enough — stop and pause
 const PAUSE_MIN = 1.0 // shortest idle pause (seconds)
@@ -44,7 +40,7 @@ const SCATTER_SPREAD = 1.1 // radians of random fan-out around "away from troubl
 const SCATTER_SPEED = 4.4 // quick skitter away from conflict, but not a full sprint
 
 // --- Shared waddle ---------------------------------------------------------
-const TURN_SPEED = 8 // how fast she rotates to face travel direction
+const TURN_SPEED = 8 // how fast it rotates to face travel direction
 const BOB_HEIGHT = 0.05 // little waddle hop
 const ROLL = 0.18 // side-to-side waddle tilt (radians)
 
@@ -58,34 +54,39 @@ const FORAGE_RADIUS = 5 // how far a follower will notice a plant and go for it
 const FORAGE_RATE = 0.7 // per second: chance to peel off for an in-range plant
 const FORAGE_SPEED = 3 // eager amble toward a snack (quicker than idle wander)
 
-// --- Peeping ---------------------------------------------------------------
-const PEEP_RATE = 0.1 // per second: chance to let out a little peep ("now and then")
-const SCATTER_PEEP_RATE = 0.65 // startled subjects complain much more often
+// --- Vocalising ------------------------------------------------------------
+const VOICE_RATE = 0.1 // per second: chance to make its call ("now and then")
+const SCATTER_VOICE_RATE = 0.65 // startled subjects complain much more often
 
 // --- World collision -------------------------------------------------------
-const COLLIDE_RADIUS = 0.3 // her footprint vs. trees/rocks — small, she's little
-const COLLIDE_HEIGHT = 0.7 // her height; canopies float well above this (walk under)
+// Footprint vs. trees/rocks, tuned for the duckling and then scaled to a
+// subject's actual size (a drake is bigger, so it shoulders obstacles wider).
+const BASE_SCALE = 0.4 // the duckling scale the two constants below are tuned for
+const COLLIDE_RADIUS = 0.3 // footprint at BASE_SCALE — small, it's little
+const COLLIDE_HEIGHT = 0.7 // height at BASE_SCALE; canopies float well above (walk under)
 
-// A duckling is always in exactly one of these.
-type DucklingState = 'pausing' | 'wandering' | 'following' | 'distracted' | 'foraging' | 'scattered'
+// A subject is always in exactly one of these.
+type SubjectState = 'pausing' | 'wandering' | 'following' | 'distracted' | 'foraging' | 'scattered'
 
-/** What a following duckling needs to know about the world each frame: where the
+/** What a following subject needs to know about the world each frame: where the
  *  Queen is, and who its flockmates are (so it can avoid bunching up). */
 export interface FlockContext {
   queenX: number
   queenZ: number
-  flock: Duckling[]
+  flock: DuckSubject[]
 }
 
 /**
- * One duck subject. It wanders its home patch until the Queen quacks nearby, then
- * it `follow`s — seeking her with arrival (settling in a ring around her) plus
- * separation from its flockmates so the crowd spreads out instead of stacking.
+ * One flock subject — a yellow duckling, or an adult drake / hen. They all behave
+ * IDENTICALLY (this whole state machine is shared); the `kind` only swaps the model
+ * (palette + size) and the voice. It wanders its home patch until the Queen quacks
+ * nearby, then it `follow`s — seeking her with arrival (settling in a ring around
+ * her) plus separation from its flockmates so the crowd spreads out.
  */
-export class Duckling {
+export class DuckSubject {
   readonly group: THREE.Group
 
-  // Not readonly: when a duck gets "lost", we reset its home to wherever it
+  // Not readonly: when a subject gets "lost", we reset its home to wherever it
   // ended up, so it wanders off from there.
   private homeX: number
   private homeZ: number
@@ -95,50 +96,58 @@ export class Duckling {
   private heading = 0
   private bobPhase = 0
 
-  private state: DucklingState = 'pausing'
+  private state: SubjectState = 'pausing'
   private timer: number // counts down the current pause
   private distractTimer = 0 // counts down a distraction
   private targetX = 0
   private targetZ = 0
-  private targetFood: FoodItem | null = null // the plant she's foraging toward
+  private targetFood: FoodItem | null = null // the plant it's foraging toward
 
-  // Each duckling gets its own peep pitch, so the flock sounds like a crowd of
-  // little individuals rather than one cloned voice. Seeded (see constructor).
-  private readonly peepPitch: number
+  // Set from its kind (see constructor): overall size, its voice, and a per-
+  // individual pitch so the flock sounds like a crowd, not one cloned voice.
+  private readonly scale: number
+  private readonly voice: (sound: Sound, pitch: number) => void
+  private readonly voicePitch: number
+  // Collision footprint, scaled to this subject's size (bigger birds, wider).
+  private readonly collideRadius: number
+  private readonly collideHeight: number
 
   constructor(
     x: number,
     z: number,
+    kind: SubjectKind,
     private readonly pond: Pond,
     private readonly food: Food,
     private readonly sound: Sound,
     private readonly colliders: readonly Collider[],
     rng: Rng,
   ) {
-    const model = buildDuckModel({
-      featherColor: DUCKLING_COLOR,
-      crown: false,
-      scale: DUCKLING_SCALE,
-    })
+    const def = SUBJECT_KINDS[kind]
+    const model = buildDuckModel(def.model)
     this.group = model.group
     this.group.position.set(x, 0, z)
     this.homeX = x
     this.homeZ = z
 
+    this.scale = def.model.scale ?? 1
+    this.voice = def.voice
+    this.collideRadius = COLLIDE_RADIUS * (this.scale / BASE_SCALE)
+    this.collideHeight = COLLIDE_HEIGHT * (this.scale / BASE_SCALE)
+
     // Spawn-time values come from the seeded rng so the initial world is stable.
-    this.peepPitch = rngRange(rng, 0.85, 1.25)
+    this.voicePitch = rngRange(rng, def.pitch[0], def.pitch[1])
     this.heading = rng() * Math.PI * 2
     this.group.rotation.y = this.heading
     this.timer = randRange(0, PAUSE_MAX) // first-move timing — fine to stay unseeded
   }
 
-  /** Is she one of the Queen's — following, off foraging, or briefly distracted?
-   *  (These all still count as subjects; she'll return.) */
+  /** Is it one of the Queen's — following, off foraging, briefly distracted, or
+   *  scattered? (These all still count as subjects; it'll return.) */
   get isSubject(): boolean {
     return this.state === 'following' || this.state === 'distracted' || this.state === 'foraging' || this.state === 'scattered'
   }
 
-  /** Called when the Queen quacks a NEW duck in range: fall in behind her. */
+  /** Called when the Queen quacks a NEW subject in range: fall in behind her. */
   recruit(): void {
     this.state = 'following'
   }
@@ -170,10 +179,10 @@ export class Duckling {
   }
 
   update(delta: number, ctx: FlockContext): void {
-    // A cute little peep now and then (in her own voice); startled subjects
-    // complain more often while they scatter.
-    const peepRate = this.state === 'scattered' ? SCATTER_PEEP_RATE : PEEP_RATE
-    if (Math.random() < peepRate * delta) this.sound.peep(this.peepPitch)
+    // A little call now and then (in its own voice); startled subjects complain
+    // more often while they scatter.
+    const callRate = this.state === 'scattered' ? SCATTER_VOICE_RATE : VOICE_RATE
+    if (Math.random() < callRate * delta) this.voice(this.sound, this.voicePitch)
 
     switch (this.state) {
       case 'following':
@@ -211,16 +220,15 @@ export class Duckling {
     pos.x += this.velX * delta
     pos.z += this.velZ * delta
 
-    // Push out of any tree/rock she walked into. stepUp 0 = she doesn't climb, so
+    // Push out of any tree/rock it walked into. stepUp 0 = it doesn't climb, so
     // every obstacle is a wall to waddle around. (Wrap velX/velZ in an {x, z} so
     // the shared resolver can cancel the into-wall velocity, then read it back.)
     const vel = { x: this.velX, z: this.velZ }
-    resolveWalls(pos, vel, COLLIDE_RADIUS, 0, COLLIDE_HEIGHT, 0, this.colliders)
+    resolveWalls(pos, vel, this.collideRadius, 0, this.collideHeight, 0, this.colliders)
     this.velX = vel.x
     this.velZ = vel.z
 
     // Eat any plant we've come within reach of — followers only, for now.
-    // (Step 3 will make them actively seek food out instead of just bumping it.)
     if (this.state === 'following') {
       const plant = this.food.nearestUncollected(pos.x, pos.z, EAT_RADIUS)
       if (plant) this.food.collect(plant)
@@ -233,7 +241,7 @@ export class Duckling {
       // Over the pond: float like the Queen — settle at the (scaled) waterline
       // with a slow, gentle bob and sway, and NO waddle hop / side-wiggle.
       this.bobPhase += delta * 3
-      pos.y = this.pond.floatLine * DUCKLING_SCALE + Math.sin(this.bobPhase) * SWIM_BOB
+      pos.y = this.pond.floatLine * this.scale + Math.sin(this.bobPhase) * SWIM_BOB
       this.group.rotation.z = Math.sin(this.bobPhase * 0.7) * SWIM_SWAY
     } else {
       // On land: the little waddle hop + side-to-side tilt, scaled by speed.
@@ -278,7 +286,7 @@ export class Duckling {
       }
     }
 
-    // Don't let separation overspeed her past her top follow speed.
+    // Don't let separation overspeed it past its top follow speed.
     const mag = Math.hypot(vx, vz)
     if (mag > FOLLOW_SPEED) {
       vx = (vx / mag) * FOLLOW_SPEED
@@ -288,12 +296,12 @@ export class Duckling {
     this.ease(vx, vz, delta, FOLLOW_RESPONSIVENESS)
   }
 
-  /** If she's drifted too far from the Queen, she gives up and becomes a lost
-   *  wanderer again (no longer a subject). Returns true if she just got lost. */
+  /** If it's drifted too far from the Queen, it gives up and becomes a lost
+   *  wanderer again (no longer a subject). Returns true if it just got lost. */
   private checkLost(ctx: FlockContext): boolean {
     const pos = this.group.position
     if (Math.hypot(ctx.queenX - pos.x, ctx.queenZ - pos.z) > LOST_DISTANCE) {
-      this.homeX = pos.x // wander off from wherever she ended up
+      this.homeX = pos.x // wander off from wherever it ended up
       this.homeZ = pos.z
       this.state = 'pausing'
       this.timer = randRange(PAUSE_MIN, PAUSE_MAX)
@@ -313,13 +321,13 @@ export class Duckling {
     this.state = 'distracted'
   }
 
-  /** Amble to the distraction spot; once she arrives or the timer runs out,
-   *  curiosity is satisfied and she rejoins the Queen. */
+  /** Amble to the distraction spot; once it arrives or the timer runs out,
+   *  curiosity is satisfied and it rejoins the Queen. */
   private beDistracted(delta: number): void {
     this.distractTimer -= delta
     const s = seekArrive(this.group.position, this.targetX, this.targetZ, WANDER_SPEED, ARRIVE_RADIUS, ARRIVE_STOP)
     if (this.distractTimer <= 0 || s.arrived) {
-      this.state = 'following' // back to her duties
+      this.state = 'following' // back to its duties
       return
     }
     this.ease(s.vx, s.vz, delta)
@@ -337,7 +345,7 @@ export class Duckling {
   }
 
   /** Look for a plant within FORAGE_RADIUS; if there's one, target it and switch
-   *  to foraging. Returns whether she's now off to forage. */
+   *  to foraging. Returns whether it's now off to forage. */
   private tryForage(): boolean {
     const pos = this.group.position
     const plant = this.food.nearestUncollected(pos.x, pos.z, FORAGE_RADIUS)
