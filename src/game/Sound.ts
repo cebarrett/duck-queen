@@ -13,6 +13,8 @@
 const QUACK_URL = `${import.meta.env.BASE_URL}quack.mp3`
 const PEEP_URL = `${import.meta.env.BASE_URL}peep.mp3`
 const HONK_URL = `${import.meta.env.BASE_URL}honk.mp3`
+const DRAKE_URL = `${import.meta.env.BASE_URL}drake.mp3` // male-mallard call
+const HEN_URL = `${import.meta.env.BASE_URL}hen.mp3` // female-mallard quack
 
 /** An optional recorded sound: its bytes (once fetched), the decoded buffer (once
  *  ready), and a flag so we don't decode twice at once. */
@@ -37,6 +39,8 @@ export class Sound {
   private readonly quackSample = makeSample(QUACK_URL)
   private readonly peepSample = makeSample(PEEP_URL)
   private readonly honkSample = makeSample(HONK_URL)
+  private readonly drakeSample = makeSample(DRAKE_URL)
+  private readonly henSample = makeSample(HEN_URL)
 
   // The currently-playing quack (so a new quack can cut it off) + when it started.
   private quackVoice: AudioScheduledSourceNode | null = null
@@ -46,6 +50,8 @@ export class Sound {
     void this.fetch(this.quackSample) // optional — silently no-ops if absent
     void this.fetch(this.peepSample)
     void this.fetch(this.honkSample)
+    void this.fetch(this.drakeSample)
+    void this.fetch(this.henSample)
 
     const unlock = () => {
       this.getContext() // create + resume inside the gesture
@@ -108,6 +114,23 @@ export class Sound {
     this.playSampleOrSynth(ctx, this.honkSample, (c) => this.synthHonk(c, pitch), pitch, 0.8)
   }
 
+  /** A drake's (male mallard) call — soft, low and reedy, nothing like the female's
+   *  quack. `pitch` (~0.8–1.05) gives each drake its own voice. */
+  drakeCall(pitch = 1): void {
+    const ctx = this.getContext()
+    if (!ctx) return
+    this.playSampleOrSynth(ctx, this.drakeSample, (c) => this.synthDrake(c, pitch), pitch, 0.5)
+  }
+
+  /** A hen's (female mallard) quack — a rounded "quack-quack", quieter than the
+   *  Queen's command quack so it reads as ambient chatter, not a rally. `pitch`
+   *  (~0.95–1.2) gives each hen its own voice. */
+  henQuack(pitch = 1): void {
+    const ctx = this.getContext()
+    if (!ctx) return
+    this.playSampleOrSynth(ctx, this.henSample, (c) => this.synthHen(c, pitch), pitch, 0.7)
+  }
+
   /**
    * A little water splash. `strength` (~0–6) scales the volume. A short burst of
    * white noise pushed through a downward-sweeping lowpass — that "ploosh, fading
@@ -143,7 +166,7 @@ export class Sound {
     src.stop(now + dur)
   }
 
-  // --- Recorded-file path (shared by quack + peep) ---------------------------
+  // --- Recorded-file path (shared by every voiced sound) ---------------------
 
   private playSampleOrSynth(
     ctx: AudioContext,
@@ -293,6 +316,76 @@ export class Sound {
     osc.stop(now + dur + 0.02)
   }
 
+  /** A drake's reedy nasal call — a low sawtooth dropping a little, squeezed
+   *  through a narrow bandpass for a buzzy "rhaeb", and kept quiet (drakes are
+   *  much softer than the loud hen). `pitch` sets the voice. */
+  private synthDrake(ctx: AudioContext, pitch: number): void {
+    const now = ctx.currentTime
+    const dur = 0.2
+    const base = 175 * pitch
+
+    const osc = ctx.createOscillator()
+    osc.type = 'sawtooth'
+    const f = osc.frequency
+    f.setValueAtTime(base * 1.15, now)
+    f.linearRampToValueAtTime(base, now + 0.05)
+    f.exponentialRampToValueAtTime(base * 0.8, now + dur) // settle lower
+
+    const band = ctx.createBiquadFilter()
+    band.type = 'bandpass'
+    band.frequency.value = 1300 // a narrow, reedy/nasal band
+    band.Q.value = 9
+
+    const gain = ctx.createGain()
+    const g = gain.gain
+    g.setValueAtTime(0.0001, now)
+    g.exponentialRampToValueAtTime(0.12, now + 0.02) // quiet
+    g.exponentialRampToValueAtTime(0.0001, now + dur)
+
+    osc.connect(band)
+    band.connect(gain)
+    gain.connect(ctx.destination)
+    osc.start(now)
+    osc.stop(now + dur + 0.02)
+  }
+
+  /** A hen's two-syllable "quack-quack" — a sawtooth through a bandpass with the
+   *  pitch falling twice and two gain bumps, lower-volume than the Queen's command
+   *  quack so it reads as ambient chatter. `pitch` sets the voice. */
+  private synthHen(ctx: AudioContext, pitch: number): void {
+    const now = ctx.currentTime
+    const dur = 0.32
+    const base = 520 * pitch
+
+    const osc = ctx.createOscillator()
+    osc.type = 'sawtooth'
+    const f = osc.frequency
+    f.setValueAtTime(base * 1.1, now)
+    f.linearRampToValueAtTime(base, now + 0.04)
+    f.exponentialRampToValueAtTime(base * 0.65, now + 0.11) // first syllable falls
+    f.setValueAtTime(base * 1.0, now + 0.14) // jump up for the second
+    f.exponentialRampToValueAtTime(base * 0.55, now + dur) // second falls
+
+    const band = ctx.createBiquadFilter()
+    band.type = 'bandpass'
+    band.frequency.value = 900
+    band.Q.value = 3
+
+    const gain = ctx.createGain()
+    const g = gain.gain
+    g.setValueAtTime(0.0001, now)
+    g.exponentialRampToValueAtTime(0.22, now + 0.02) // first "quack"
+    g.exponentialRampToValueAtTime(0.05, now + 0.11) // dip between syllables
+    g.exponentialRampToValueAtTime(0.2, now + 0.16) // second "quack"
+    g.exponentialRampToValueAtTime(0.0001, now + dur)
+
+    osc.connect(band)
+    band.connect(gain)
+    gain.connect(ctx.destination)
+    osc.start(now)
+    osc.stop(now + dur + 0.02)
+  }
+
   // --- Context plumbing ------------------------------------------------------
 
   private getContext(): AudioContext | null {
@@ -305,6 +398,8 @@ export class Sound {
       void this.decode(this.quackSample) // decode anything already fetched
       void this.decode(this.peepSample)
       void this.decode(this.honkSample)
+      void this.decode(this.drakeSample)
+      void this.decode(this.henSample)
     }
     if (this.ctx.state === 'suspended') void this.ctx.resume()
     return this.ctx
