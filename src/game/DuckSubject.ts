@@ -185,6 +185,12 @@ export class DuckSubject {
     return this.state === 'nesting'
   }
 
+  /** Is she panic-skittering (e.g. split off by the Baron's honk)? Still hers, but
+   *  not calmly lending her voice to a honk-off while she scatters. */
+  get isScattered(): boolean {
+    return this.state === 'scattered'
+  }
+
   /** Is this a duckling that's lived long enough to grow into an adult? (Whether
    *  she can afford the food to do so is checked by the Flock/Game.) */
   get isReadyToMature(): boolean {

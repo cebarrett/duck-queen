@@ -32,12 +32,18 @@ const CHORUS_MULT = [0.6, 0.6, 0.8, 1.0]
 // --- The Marsh Baron boss fight --------------------------------------------
 const BOSS_TRIGGER_RANGE = 6 // the Queen must come this close to face the Baron
 const BOSS_DISENGAGE_RANGE = 11 // backing this far off forfeits the boss fight
-const BOSS_DRAIN = 0.55 // he pushes back far harder than a regular goose
-const BOSS_FLOCK_FILL = 0.06 // per follower — he needs a genuinely big flock to out-honk
-const BOSS_MAX_PASSIVE = 0.6 // cap on the crowd's help against him
+const BOSS_DRAIN = 0.6 // he pushes back far harder than a regular goose
+const BOSS_DRAKE_FILL = 0.06 // per CALM drake — drakes are what actually sustain the meter against him
+const BOSS_OTHER_FILL = 0.005 // ducklings/hens barely move it — only the deep drake rasp answers him
+const BOSS_MAX_PASSIVE = 0.55 // cap the support so even a drake host must out-last a couple of his splits
 const BOSS_START_RESOLVE = 0.15 // only a small head start — he's a boss
-const BOSS_MIN_FOLLOWERS = 8 // "formidable": at least this many subjects...
-const BOSS_MIN_DRAKES = 3 // ...including this many drakes (you'll need them against his splits)
+const BOSS_MIN_FOLLOWERS = 10 // "formidable": at least this many subjects...
+const BOSS_MIN_DRAKES = 8 // ...including this many drakes. The gate sits right at the win threshold:
+// fewer than 8 drakes and he just sneers (no fight, no penalty); at 8 it's a desperate nail-biter,
+// 9+ a cleaner win. So the only way to LOSE is to engage with a real host and then give up / get driven off.
+const BOSS_SPLIT_INTERVAL = 6 // seconds between his splitting honks
+const BOSS_FIRST_SPLIT = 4 // the first split lands a few seconds in
+const BOSS_SPLIT_KNOCKBACK = 0.2 // each splitting honk knocks the resolve meter back this much
 
 /** Game wires this to the HUD (active? + how full the resolve meter is, 0..1). */
 type OnHonkOff = (active: boolean, resolve: number) => void
@@ -69,10 +75,11 @@ export class Geese {
   private bossWasQuackDown = false
   private bossDefeated = false
   private bossGateCooldown = 0 // throttles the "you're not ready" sneer
+  private bossSplitTimer = 0 // counts down to his next splitting honk
 
   constructor(
     scene: THREE.Scene,
-    sound: Sound,
+    private readonly sound: Sound,
     food: Food,
     pond: Pond,
     nests: Nests,
@@ -219,12 +226,22 @@ export class Geese {
         this.endBossFight(false) // she fled the standoff
         return
       }
+      // His splitting honk: every so often he scatters one of your non-drake
+      // voices, dropping it from the chorus until it regroups. Drakes never break.
+      this.bossSplitTimer -= delta
+      if (this.bossSplitTimer <= 0) {
+        this.bossSplitTimer = BOSS_SPLIT_INTERVAL
+        this.doSplit()
+      }
+
       const qDown = this.input.isDown('KeyQ')
       if (qDown && !this.bossWasQuackDown) this.bossResolve += QUACK_GAIN
       this.bossWasQuackDown = qDown
 
-      const chorus = this.flock.chorus
-      const passive = Math.min(BOSS_FLOCK_FILL * chorus.size * CHORUS_MULT[chorus.layers], BOSS_MAX_PASSIVE)
+      // Drake-weighted support: drakes anchor (immune to his splits); ducklings and
+      // hens add to it while they're calm, but he keeps scattering those.
+      const { drakes, others } = this.flock.calmCounts()
+      const passive = Math.min(BOSS_DRAKE_FILL * drakes + BOSS_OTHER_FILL * others, BOSS_MAX_PASSIVE)
       this.bossResolve += (passive - BOSS_DRAIN) * delta
       this.bossResolve = Math.max(0, Math.min(1, this.bossResolve))
       this.onBossFight(true, this.bossResolve)
@@ -260,9 +277,21 @@ export class Geese {
     this.bossActive = true
     this.baron.startPosturing()
     this.bossResolve = BOSS_START_RESOLVE
+    this.bossSplitTimer = BOSS_FIRST_SPLIT
     this.bossWasQuackDown = this.input.isDown('KeyQ')
     this.onBaronMessage('👑 THE MARSH BARON squares up!')
     this.onBossFight(true, this.bossResolve)
+  }
+
+  /** His splitting honk: scatter one of the player's non-drake voices, knocking it
+   *  out of the supporting chorus for a few seconds. He can't split a drake wall. */
+  private doSplit(): void {
+    const bp = this.baron.group.position
+    const scattered = this.flock.splitNonDrakes(bp.x, bp.z)
+    if (scattered === 0) return // only drakes are calm — he can't break a drake wall
+    this.bossResolve = Math.max(0, this.bossResolve - BOSS_SPLIT_KNOCKBACK) // the wave knocks you back
+    this.sound.honk(0.5) // a deep, splitting honk
+    this.onBaronMessage('💥 The Baron scatters your soft voices — hold with the drakes!')
   }
 
   private endBossFight(won: boolean): void {

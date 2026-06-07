@@ -98,6 +98,33 @@ export class Flock {
     return this.members.filter((m) => m.isNesting)
   }
 
+  /** Calm (non-scattered) supporters split into drakes vs. the rest — for the boss
+   *  fight, where drakes anchor and the Baron splits the others off. */
+  calmCounts(): { drakes: number; others: number } {
+    let drakes = 0
+    let others = 0
+    for (const m of this.members) {
+      if (!m.isSubject || m.isScattered || m.isNesting) continue
+      if (m.kind === 'drake') drakes++
+      else others++
+    }
+    return { drakes, others }
+  }
+
+  /** The Baron's splitting honk: scatter every calm NON-drake subject (ducklings
+   *  and hens) away from (x, z), leaving only the drake wall to hold the chorus.
+   *  Returns how many it scattered (0 = a pure drake host he can't break). */
+  splitNonDrakes(x: number, z: number): number {
+    let n = 0
+    for (const m of this.members) {
+      if (m.kind !== 'drake' && m.isSubject && !m.isScattered && !m.isNesting) {
+        m.scatterFrom(x, z)
+        n++
+      }
+    }
+    return n
+  }
+
   /** The nearest following hen — one available to send off to a nest — or null.
    *  (A lost or already-nesting hen doesn't count.) */
   nearestFollowingHen(x: number, z: number): DuckSubject | null {
