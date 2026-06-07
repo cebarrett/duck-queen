@@ -44,10 +44,25 @@ export function buildNest(): THREE.Group {
     group.add(box(0.36, 0.24, 0.22, color, Math.cos(a) * R, 0.16, Math.sin(a) * R, a))
   }
 
-  // A little clutch of eggs nestled in the middle, peeking just over the rim.
-  group.add(box(0.2, 0.24, 0.26, EGG, -0.12, 0.2, 0.05))
-  group.add(box(0.2, 0.24, 0.26, EGG, 0.13, 0.2, -0.03))
-  group.add(box(0.2, 0.24, 0.26, EGG, 0.0, 0.2, 0.17))
-
+  // Eggs aren't baked in — a brooding hen lays them one at a time (see addEgg),
+  // so a fresh nest starts empty and fills as she sits.
   return group
+}
+
+/** Where eggs sit in the bowl, filled in order as the hen lays them. */
+const EGG_SLOTS: [number, number, number][] = [
+  [-0.12, 0.2, 0.05],
+  [0.13, 0.2, -0.03],
+  [0.0, 0.2, 0.17],
+  [-0.06, 0.2, -0.16],
+  [0.2, 0.2, 0.12],
+]
+
+/** How many eggs one nest can hold. */
+export const MAX_EGGS = EGG_SLOTS.length
+
+/** Drop the next egg into a nest's bowl. `index` is 0-based; callers cap at MAX_EGGS. */
+export function addEgg(group: THREE.Group, index: number): void {
+  const [x, y, z] = EGG_SLOTS[index % EGG_SLOTS.length]
+  group.add(box(0.2, 0.24, 0.26, EGG, x, y, z))
 }

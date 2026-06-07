@@ -5,6 +5,7 @@ import { randRange, seekArrive, pointAround, faceHeading, easeFactor } from './m
 import { type Collider, resolveWalls } from './collision'
 import type { Pond } from './Water'
 import type { Food, FoodItem } from './Food'
+import type { Nest } from './Nests'
 import type { Sound } from './Sound'
 import { type Rng, rngRange } from './rng'
 
@@ -58,6 +59,12 @@ const FORAGE_SPEED = 3 // eager amble toward a snack (quicker than idle wander)
 const VOICE_RATE = 0.1 // per second: chance to make its call ("now and then")
 const SCATTER_VOICE_RATE = 0.65 // startled subjects complain much more often
 
+// --- Nesting (a hen broods on a nest) --------------------------------------
+const SIT_RADIUS = 0.25 // how close to the nest centre counts as "settled on it"
+const LAY_MIN = 8 // shortest gap between eggs while sitting (seconds)
+const LAY_MAX = 16 // longest gap
+const SIT_BOB = 0.02 // gentle breathing bob while settled (no waddle)
+
 // --- World collision -------------------------------------------------------
 // Footprint vs. trees/rocks, tuned for the duckling and then scaled to a
 // subject's actual size (a drake is bigger, so it shoulders obstacles wider).
@@ -66,7 +73,7 @@ const COLLIDE_RADIUS = 0.3 // footprint at BASE_SCALE — small, it's little
 const COLLIDE_HEIGHT = 0.7 // height at BASE_SCALE; canopies float well above (walk under)
 
 // A subject is always in exactly one of these.
-type SubjectState = 'pausing' | 'wandering' | 'following' | 'distracted' | 'foraging' | 'scattered'
+type SubjectState = 'pausing' | 'wandering' | 'following' | 'distracted' | 'foraging' | 'scattered' | 'nesting'
 
 /** What a following subject needs to know about the world each frame: where the
  *  Queen is, and who its flockmates are (so it can avoid bunching up). */
@@ -102,6 +109,9 @@ export class DuckSubject {
   private targetX = 0
   private targetZ = 0
   private targetFood: FoodItem | null = null // the plant it's foraging toward
+  private targetNest: Nest | null = null // the nest a hen is brooding on
+  private layTimer = 0 // counts down to the next egg while she's sitting
+  private sitting = false // has she actually settled onto the nest yet?
 
   // Set from its kind (see constructor): overall size, its voice, and a per-
   // individual pitch so the flock sounds like a crowd, not one cloned voice.
@@ -147,14 +157,23 @@ export class DuckSubject {
     return this.state === 'following' || this.state === 'distracted' || this.state === 'foraging' || this.state === 'scattered'
   }
 
-  /** Called when the Queen quacks a NEW subject in range: fall in behind her. */
+  /** Is she currently brooding on a nest? She's still the Queen's, but off-duty —
+   *  she doesn't count toward the rallying flock while she sits. */
+  get isNesting(): boolean {
+    return this.state === 'nesting'
+  }
+
+  /** Called when the Queen quacks a NEW subject in range: fall in behind her.
+   *  A brooding hen ignores it — she's busy keeping her eggs warm. */
   recruit(): void {
+    if (this.state === 'nesting') return
     this.state = 'following'
   }
 
   /** The Queen quacked her existing flock: snap back to following, dropping any
-   *  foraging or distraction. This is the "to me!" recall. */
+   *  foraging or distraction. A brooding hen keeps her post (only a goose moves her). */
   rally(): void {
+    if (this.state === 'nesting') return
     this.targetFood = null
     this.state = 'following'
   }
@@ -178,11 +197,31 @@ export class DuckSubject {
     this.state = 'scattered'
   }
 
+  /** Send this hen to sit on `nest` and brood: she waddles over, settles, and lays
+   *  an egg now and then until something (a goose) startles her off. */
+  assignToNest(nest: Nest): void {
+    this.targetFood = null
+    this.targetNest = nest
+    nest.occupied = true
+    this.sitting = false
+    this.layTimer = randRange(LAY_MIN, LAY_MAX)
+    this.state = 'nesting'
+  }
+
+  /** Leave the nest (freeing it to be re-seated) and fall back into the flock. */
+  leaveNest(): void {
+    if (this.targetNest) this.targetNest.occupied = false
+    this.targetNest = null
+    this.sitting = false
+    this.state = 'following'
+  }
+
   update(delta: number, ctx: FlockContext): void {
     // A little call now and then (in its own voice); startled subjects complain
-    // more often while they scatter.
+    // more often while they scatter. A brooding hen sits quietly (she only clucks
+    // when she lays — see brood()).
     const callRate = this.state === 'scattered' ? SCATTER_VOICE_RATE : VOICE_RATE
-    if (Math.random() < callRate * delta) this.voice(this.sound, this.voicePitch)
+    if (this.state !== 'nesting' && Math.random() < callRate * delta) this.voice(this.sound, this.voicePitch)
 
     switch (this.state) {
       case 'following':
@@ -204,6 +243,9 @@ export class DuckSubject {
       case 'scattered':
         if (this.checkLost(ctx)) break
         this.beScattered(delta)
+        break
+      case 'nesting':
+        this.brood(delta) // walk to the nest, settle, lay eggs — no checkLost
         break
       case 'wandering':
         this.seekTarget(delta)
@@ -237,7 +279,12 @@ export class DuckSubject {
     // --- Face travel direction + a little waddle ---------------------------
     const speed = Math.hypot(this.velX, this.velZ)
     this.heading = faceHeading(this.heading, this.velX, this.velZ, TURN_SPEED, delta)
-    if (this.pond.isWater(pos.x, pos.z)) {
+    if (this.state === 'nesting' && this.sitting) {
+      // Settled on the nest: a calm breathing bob, no waddle hop or sway.
+      this.bobPhase += delta * 1.5
+      pos.y = Math.sin(this.bobPhase) * SIT_BOB
+      this.group.rotation.z = 0
+    } else if (this.pond.isWater(pos.x, pos.z)) {
       // Over the pond: float like the Queen — settle at the (scaled) waterline
       // with a slow, gentle bob and sway, and NO waddle hop / side-wiggle.
       this.bobPhase += delta * 3
@@ -342,6 +389,30 @@ export class DuckSubject {
       return
     }
     this.ease(s.vx, s.vz, delta, FOLLOW_RESPONSIVENESS)
+  }
+
+  /** Walk to the assigned nest, settle onto it, and lay an egg every so often. */
+  private brood(delta: number): void {
+    const nest = this.targetNest
+    if (!nest) {
+      this.state = 'following' // nest somehow gone — rejoin the flock
+      return
+    }
+    const s = seekArrive(this.group.position, nest.x, nest.z, FORAGE_SPEED, ARRIVE_RADIUS, SIT_RADIUS)
+    if (!s.arrived) {
+      this.sitting = false // still waddling over
+      this.ease(s.vx, s.vz, delta)
+      return
+    }
+    // Settled: hold still and lay on a timer.
+    this.sitting = true
+    this.ease(0, 0, delta)
+    this.layTimer -= delta
+    if (this.layTimer <= 0) {
+      nest.layEgg()
+      this.voice(this.sound, this.voicePitch) // a little cluck as the egg appears
+      this.layTimer = randRange(LAY_MIN, LAY_MAX)
+    }
   }
 
   /** Look for a plant within FORAGE_RADIUS; if there's one, target it and switch

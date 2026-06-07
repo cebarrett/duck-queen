@@ -1,28 +1,74 @@
 import * as THREE from 'three'
-import { buildNest } from './nestModel'
+import { buildNest, addEgg, MAX_EGGS } from './nestModel'
 
 /**
- * Nests owns the nests the player has built. For now it just spawns and counts
- * them — they don't DO anything yet — but keeping it as its own little system
- * gives a clean home for whatever nests grow into later (resting, hatching, …).
+ * A single nest in the world: where it sits, its mesh, how many eggs it holds,
+ * and whether a hen is currently brooding on it. (The eggs don't do anything yet.)
+ */
+export class Nest {
+  readonly group: THREE.Group
+  eggs = 0
+  occupied = false
+
+  constructor(
+    readonly x: number,
+    readonly z: number,
+  ) {
+    this.group = buildNest()
+    this.group.position.set(x, 0, z)
+    this.group.rotation.y = Math.random() * Math.PI * 2 // player-driven placement, not seeded
+  }
+
+  /** Lay one more egg into the bowl, up to the nest's capacity. */
+  layEgg(): void {
+    if (this.eggs >= MAX_EGGS) return
+    addEgg(this.group, this.eggs)
+    this.eggs++
+  }
+}
+
+/**
+ * Nests owns every nest the player has built. A hen can brood on one and slowly
+ * lay eggs; beyond that they don't DO anything yet — but this is the clean home
+ * for whatever they grow into later.
  */
 export class Nests {
-  private built = 0
+  readonly all: Nest[] = []
 
   constructor(private readonly scene: THREE.Scene) {}
 
-  /** How many nests stand in the world (for the HUD). */
+  /** How many nests stand in the world. */
   get count(): number {
-    return this.built
+    return this.all.length
   }
 
-  /** Drop a fresh nest on the ground at (x, z). Placement is player-driven during
-   *  play, not world generation, so a Math.random spin here is fine (not seeded). */
-  build(x: number, z: number): void {
-    const nest = buildNest()
-    nest.position.set(x, 0, z)
-    nest.rotation.y = Math.random() * Math.PI * 2
-    this.scene.add(nest)
-    this.built++
+  /** Total eggs laid across all nests (for the HUD). */
+  get eggCount(): number {
+    let n = 0
+    for (const nest of this.all) n += nest.eggs
+    return n
+  }
+
+  /** Build a fresh, empty nest on the ground at (x, z). */
+  build(x: number, z: number): Nest {
+    const nest = new Nest(x, z)
+    this.scene.add(nest.group)
+    this.all.push(nest)
+    return nest
+  }
+
+  /** The nearest unoccupied nest within `radius` of (x, z), or null. */
+  nearestEmpty(x: number, z: number, radius: number): Nest | null {
+    let best: Nest | null = null
+    let bestSq = radius * radius
+    for (const nest of this.all) {
+      if (nest.occupied) continue
+      const dSq = (nest.x - x) ** 2 + (nest.z - z) ** 2
+      if (dSq < bestSq) {
+        bestSq = dSq
+        best = nest
+      }
+    }
+    return best
   }
 }

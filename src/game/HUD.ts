@@ -12,12 +12,13 @@ export class HUD {
 
   // We store the pieces and re-render whenever any of them changes.
   private mode: DuckMode = 'waddle'
-  private subjects = { ducklings: 0, males: 0, females: 0 }
+  private subjects = { ducklings: 0, males: 0, females: 0, nesting: 0 }
   private food = 0
   private reeds = 0
   private stolen = 0
   private nests = 0
   private canBuildNest = false
+  private canSeatHen = false
   private resolveShaken = false
 
   // A centred banner + meter shown only during a honk-off.
@@ -95,7 +96,7 @@ export class HUD {
     this.render()
   }
 
-  setSubjects(breakdown: { ducklings: number; males: number; females: number }): void {
+  setSubjects(breakdown: { ducklings: number; males: number; females: number; nesting: number }): void {
     this.subjects = breakdown
     this.render()
   }
@@ -127,6 +128,12 @@ export class HUD {
     this.render()
   }
 
+  /** Whether the Queen can seat a hen on a nearby empty nest — drives the E prompt. */
+  setCanSeatHen(canSeat: boolean): void {
+    this.canSeatHen = canSeat
+    this.render()
+  }
+
   private render(): void {
     let line1: string
     if (this.mode === 'fly') {
@@ -136,14 +143,17 @@ export class HUD {
     } else {
       line1 = '🦆 WADDLE  ·  WASD move · Space to take off · Q quack'
     }
-    // Only nag about building when it's actually possible (enough reeds, on land).
+    // Only nag about building / seating when it's actually possible, so each
+    // control advertises itself exactly when it'll do something.
     if (this.canBuildNest) line1 += '   ·   🪺 Press B to build a nest!'
+    if (this.canSeatHen) line1 += '   ·   🥚 Press E to seat a hen'
 
     const shaken = this.resolveShaken ? '   Resolve shaken' : ''
     const s = this.subjects
     const total = s.ducklings + s.males + s.females
     // Ducklings have no sex in this game; drakes (♂) and hens (♀) are the adults.
-    const flock = `👑 Subjects: ${total}  (🐤${s.ducklings} ♂${s.males} ♀${s.females})`
+    const nesting = s.nesting > 0 ? `   🥚 ${s.nesting} nesting` : ''
+    const flock = `👑 Subjects: ${total}  (🐤${s.ducklings} ♂${s.males} ♀${s.females})${nesting}`
     const line2 = `${flock}   🌿 Food: ${this.food}   🌾 Reeds: ${this.reeds}   🪺 Nests: ${this.nests}   🪿 Stolen: ${this.stolen}${shaken}`
 
     // Two lines via <br>. The values are our own strings + an integer, so there's

@@ -63,18 +63,40 @@ export class Flock {
   }
 
   /** Current subjects split by kind, for the HUD. Ducklings have no sex (yet);
-   *  drakes are the males, hens the females. */
-  get subjectBreakdown(): { ducklings: number; males: number; females: number } {
+   *  drakes are the males, hens the females. Brooding hens are tallied separately
+   *  (they're off-duty, not in the rallying flock) so they don't look "lost". */
+  get subjectBreakdown(): { ducklings: number; males: number; females: number; nesting: number } {
     let ducklings = 0
     let males = 0
     let females = 0
+    let nesting = 0
     for (const d of this.members) {
+      if (d.isNesting) {
+        nesting++
+        continue
+      }
       if (!d.isSubject) continue
       if (d.kind === 'duckling') ducklings++
       else if (d.kind === 'drake') males++
       else females++
     }
-    return { ducklings, males, females }
+    return { ducklings, males, females, nesting }
+  }
+
+  /** The nearest following hen — one available to send off to a nest — or null.
+   *  (A lost or already-nesting hen doesn't count.) */
+  nearestFollowingHen(x: number, z: number): DuckSubject | null {
+    let best: DuckSubject | null = null
+    let bestSq = Infinity
+    for (const m of this.members) {
+      if (m.kind !== 'hen' || !m.isSubject) continue
+      const dSq = (m.group.position.x - x) ** 2 + (m.group.position.z - z) ** 2
+      if (dSq < bestSq) {
+        bestSq = dSq
+        best = m
+      }
+    }
+    return best
   }
 
   /** Scatter current subjects near a conflict point. They still count as hers,

@@ -22,6 +22,7 @@ const RESOLVE_SHAKEN_PENALTY = 0.15
 const REGROUP_RADIUS = 5
 const REGROUP_CLEAR_RATIO = 0.6
 const NEST_COST = 10 // reeds spent to build one nest
+const SEAT_RANGE = 3 // how close the Queen must stand to a nest to seat a hen on it
 
 function getWorldSeed(): number {
   const raw = new URLSearchParams(window.location.search).get('seed')
@@ -64,6 +65,7 @@ export class Game {
   private readonly hud = new HUD()
   private readonly nests: Nests
   private wasBuildDown = false // edge-detect the B key (one nest per press)
+  private wasSeatDown = false // edge-detect the E key (one hen seated per press)
   private resolveShakenTimer = 0
 
   constructor() {
@@ -185,6 +187,7 @@ export class Game {
     this.hud.update(delta)
     this.cameraRig.update(delta)
     this.handleNestBuild()
+    this.handleNestSeat()
 
     // Keep the HUD in sync (both only redraw on change).
     this.hud.setMode(this.duckController.getMode())
@@ -215,6 +218,26 @@ export class Game {
       this.hud.showMessage('🪺 Nest built!')
     }
     this.wasBuildDown = down
+  }
+
+  /**
+   * Seating a hen: when the Queen stands by an empty nest and has a hen in her
+   * flock, the HUD invites her to press E; pressing it sends the nearest hen off
+   * to brood on that nest. Like building, the prompt only shows when it'll work.
+   */
+  private handleNestSeat(): void {
+    const pos = this.duck.group.position
+    const nest = this.nests.nearestEmpty(pos.x, pos.z, SEAT_RANGE)
+    const hen = nest ? this.flock.nearestFollowingHen(nest.x, nest.z) : null
+    this.hud.setCanSeatHen(nest !== null && hen !== null)
+
+    const down = this.input.isDown('KeyE')
+    if (down && !this.wasSeatDown && nest && hen) {
+      hen.assignToNest(nest)
+      this.sound.henQuack() // a contented settling cluck
+      this.hud.showMessage('🥚 A hen settles in')
+    }
+    this.wasSeatDown = down
   }
 
   private handleQueenLostHonkOff(gooseX: number, gooseZ: number): void {
