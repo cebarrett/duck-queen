@@ -70,6 +70,11 @@ const FLEE_SPEED = 5 // it bolts away fast
 const FLEE_DISTANCE = 25 // how far it runs
 const COWED_TIME = 12 // after being beaten: won't forage or be re-engaged for this long
 
+// --- The Marsh Baron (boss goose) ------------------------------------------
+const BARON_COLOR = 0x3c3f45 // charcoal — far darker than the pale gaggle
+const BARON_SCALE = 1.4 // a head taller and broader than a regular goose
+const BARON_HONK_RATE = 0.16 // looses his deep menace more often than the gaggle
+
 type GooseState = 'pausing' | 'wandering' | 'foraging' | 'fleeing' | 'raiding'
 
 /**
@@ -105,6 +110,9 @@ export class Goose {
 
   // Its own honk pitch, so a gaggle sounds like distinct birds. Seeded (ctor).
   private readonly honkPitch: number
+  // Collision footprint — bigger for the (larger) Baron.
+  private readonly collideRadius: number
+  private readonly collideHeight: number
 
   // Honk-off state: while posturing it ignores its normal behaviour, squares up
   // to face the Queen (aimX/aimZ), and "puffs up" (a swelling scale).
@@ -125,8 +133,13 @@ export class Goose {
     private readonly nests: Nests,
     private readonly colliders: readonly Collider[],
     rng: Rng,
+    // The Marsh Baron is a boss goose: bigger, darker, crested, deep-voiced, and
+    // rooted to his spot (he doesn't wander, forage, or raid).
+    private readonly boss = false,
   ) {
-    const model = buildGoose()
+    const model = boss
+      ? buildGoose({ bodyColor: BARON_COLOR, scale: BARON_SCALE, crest: true })
+      : buildGoose()
     this.group = model.group
     this.leftWing = model.leftWing
     this.rightWing = model.rightWing
@@ -135,8 +148,12 @@ export class Goose {
     this.homeX = x
     this.homeZ = z
 
-    // Spawn-time values from the seeded rng so the initial world is stable.
-    this.honkPitch = rngRange(rng, 0.9, 1.15)
+    this.collideRadius = boss ? COLLIDE_RADIUS * BARON_SCALE : COLLIDE_RADIUS
+    this.collideHeight = boss ? COLLIDE_HEIGHT * BARON_SCALE : COLLIDE_HEIGHT
+
+    // Spawn-time values from the seeded rng so the initial world is stable. The
+    // Baron's voice sits much lower — a deep, ominous honk.
+    this.honkPitch = boss ? rngRange(rng, 0.5, 0.62) : rngRange(rng, 0.9, 1.15)
     this.heading = rng() * Math.PI * 2
     this.group.rotation.y = this.heading
     this.timer = randRange(0, PAUSE_MAX) // first-move timing — fine to stay unseeded
@@ -225,13 +242,15 @@ export class Goose {
     if (this.cowed > 0) this.cowed -= delta
     if (this.bold > 0) this.bold -= delta
 
-    // An occasional honk.
-    if (Math.random() < HONK_RATE * delta) this.sound.honk(this.honkPitch)
+    // An occasional honk (the Baron's deep menace, more often).
+    const honkRate = this.boss ? BARON_HONK_RATE : HONK_RATE
+    if (Math.random() < honkRate * delta) this.sound.honk(this.honkPitch)
 
     // While calmly milling about, pick a target: a brooding hen takes priority —
     // if one's nest is in range the goose stalks straight over (this is what makes
-    // geese actively menace your nests) — otherwise it eyes your plants.
-    if (this.state === 'wandering' || this.state === 'pausing') {
+    // geese actively menace your nests) — otherwise it eyes your plants. The Baron
+    // does none of this: he holds his ground and waits.
+    if (!this.boss && (this.state === 'wandering' || this.state === 'pausing')) {
       if (!this.tryRaid()) {
         const forageRate = this.isBold ? BOLD_FORAGE_RATE : FORAGE_RATE
         if (Math.random() < forageRate * delta) this.tryForage()
@@ -254,7 +273,7 @@ export class Goose {
       case 'pausing':
         this.ease(0, 0, delta)
         this.timer -= delta
-        if (this.timer <= 0) this.pickNewTarget()
+        if (!this.boss && this.timer <= 0) this.pickNewTarget() // the Baron never wanders off
         break
     }
 
@@ -265,7 +284,7 @@ export class Goose {
 
     // Push out of any tree/rock it walked into (stepUp 0 = it doesn't climb).
     const vel = { x: this.velX, z: this.velZ }
-    resolveWalls(pos, vel, COLLIDE_RADIUS, 0, COLLIDE_HEIGHT, 0, this.colliders)
+    resolveWalls(pos, vel, this.collideRadius, 0, this.collideHeight, 0, this.colliders)
     this.velX = vel.x
     this.velZ = vel.z
 

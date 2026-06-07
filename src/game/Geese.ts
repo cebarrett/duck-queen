@@ -13,6 +13,10 @@ const GOOSE_COUNT = 3
 const AREA_CENTER_Z = -50 // out past the pond (which sits at z = -26)
 const AREA_RADIUS = 12
 
+// The Marsh Baron holds his own patch of marsh, deeper out than the gaggle.
+const BARON_X = 0
+const BARON_Z = -72
+
 // --- Honk-off tuning -------------------------------------------------------
 const TRIGGER_RANGE = 5 // a honk-off begins when the Queen gets this close to a goose
 const DISENGAGE_RANGE = 9 // backing this far away ends it (counts as a loss)
@@ -39,6 +43,9 @@ type ResolvePenalty = () => number
  */
 export class Geese {
   private readonly geese: Goose[] = []
+  // The Marsh Baron — kept apart from the gaggle so the everyday honk-off / raid
+  // logic never touches him; his boss fight is run separately (later phases).
+  private readonly baron: Goose
 
   // Honk-off state.
   private active: Goose | null = null
@@ -67,11 +74,17 @@ export class Geese {
       this.geese.push(goose)
       scene.add(goose.group)
     }
+
+    // The Marsh Baron — a boss goose rooted in his marsh, deep past the pond.
+    this.baron = new Goose(BARON_X, BARON_Z, sound, food, pond, nests, colliders, rng, true)
+    scene.add(this.baron.group)
+    addMarshDressing(scene, BARON_X, BARON_Z, rng)
   }
 
   update(delta: number): void {
     this.updateHonkOff(delta)
     for (const goose of this.geese) goose.update(delta)
+    this.baron.update(delta)
   }
 
   /** The nearest goose to (x, z) with its position + distance, or null if there
@@ -167,5 +180,19 @@ export class Geese {
 
   private engageRange(goose: Goose): number {
     return goose.honkOffTriggerRange(TRIGGER_RANGE)
+  }
+}
+
+/** Light dressing for the Baron's turf: a few dark marsh reeds scattered around
+ *  his spot. Seeded (it's world dressing), shares one material, no collision. */
+function addMarshDressing(scene: THREE.Scene, cx: number, cz: number, rng: Rng): void {
+  const mat = new THREE.MeshStandardMaterial({ color: 0x2f4a38 }) // dark marsh reed
+  for (let i = 0; i < 14; i++) {
+    const a = rng() * Math.PI * 2
+    const r = 2.5 + rng() * 5
+    const h = 1.2 + rng() * 1.6
+    const reed = new THREE.Mesh(new THREE.BoxGeometry(0.12, h, 0.12), mat)
+    reed.position.set(cx + Math.cos(a) * r, h / 2, cz + Math.sin(a) * r)
+    scene.add(reed)
   }
 }
