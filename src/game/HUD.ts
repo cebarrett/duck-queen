@@ -15,7 +15,6 @@ export class HUD {
   private subjects = { ducklings: 0, males: 0, females: 0, nesting: 0 }
   private food = 0
   private reeds = 0
-  private stolen = 0
   private nests = 0
   private canBuildNest = false
   private canSeatHen = false
@@ -118,11 +117,6 @@ export class HUD {
     this.render()
   }
 
-  setStolen(count: number): void {
-    this.stolen = count
-    this.render()
-  }
-
   setNests(count: number): void {
     this.nests = count
     this.render()
@@ -165,7 +159,7 @@ export class HUD {
     const chorus = total > 0 ? `   🎵 ${voices}/3` : ''
     const nesting = s.nesting > 0 ? `   🥚 ${s.nesting} nesting` : ''
     const flock = `👑 Subjects: ${total}  (🐤${s.ducklings} ♂${s.males} ♀${s.females})${chorus}${nesting}`
-    const line2 = `${flock}   🌿 Food: ${this.food}   🌾 Reeds: ${this.reeds}   🪺 Nests: ${this.nests}   🪿 Stolen: ${this.stolen}${shaken}`
+    const line2 = `${flock}   🌿 Food: ${this.food}   🌾 Reeds: ${this.reeds}   🪺 Nests: ${this.nests}${shaken}`
 
     // Two lines via <br>. The values are our own strings + an integer, so there's
     // nothing untrusted going into innerHTML here.
