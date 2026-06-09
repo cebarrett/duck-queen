@@ -164,6 +164,7 @@ export class Game {
       this.flock,
       (active, resolve) => this.hud.setHonkOff(active, resolve),
       (active, resolve) => this.hud.setHonkOff(active, resolve, '👑 THE MARSH BARON — mash Q!', '#e23b3b'),
+      (active, resolve) => this.hud.setHonkOff(active, resolve, '⚖️ LORD BOUNDARY — hold the line!', '#88d66c'),
       (text) => this.hud.showMessage(text),
       (gooseX, gooseZ) => this.handleQueenLostHonkOff(gooseX, gooseZ),
       () => this.resolvePenalty(),

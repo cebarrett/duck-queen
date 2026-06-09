@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { Pond } from './Water'
 import type { Rng } from './rng'
 import type { Collider } from './collision'
+import { TREATY_FLATS } from './Biomes'
 
 // A calm sky blue and a grassy green. Defined once so the sky, the fog, and the
 // hemisphere light can all share the same palette (keeps everything cohesive).
@@ -26,9 +27,19 @@ export class World {
     this.addLights(scene)
     this.addGround(scene)
     // Scatter the extra ponds BEFORE the scenery so trees/rocks avoid them too.
+    this.addTreatyFlatsWater()
     this.addExtraPonds(pondRng)
     scene.add(this.pond.mesh)
+    this.addTreatyFlatsDressing(scene, rng)
     this.addScenery(scene, rng)
+  }
+
+  /** The Treaty Flats are visible from the beginning, but their boss remains
+   *  dormant until the Marsh Baron is broken. The water is registered as a pond
+   *  before random scenery scatters, so movement, swimming, reeds and collision
+   *  avoidance all treat it like a real biome rather than painted backdrop. */
+  private addTreatyFlatsWater(): void {
+    this.pond.addCircle(TREATY_FLATS.x, TREATY_FLATS.z, TREATY_FLATS.pondRadius)
   }
 
   /**
@@ -107,6 +118,81 @@ export class World {
     scene.add(ground)
   }
 
+  /** Old Fenna-era border country: windgrass, treaty posts, pale feathers, and a
+   *  half-sunk stone that makes the Flats read as a place with history. */
+  private addTreatyFlatsDressing(scene: THREE.Scene, rng: Rng): void {
+    const x = TREATY_FLATS.x
+    const z = TREATY_FLATS.z
+    const r = TREATY_FLATS.radius
+
+    const meadowMat = new THREE.MeshStandardMaterial({ color: 0x9bbf65, roughness: 0.9 })
+    const meadow = new THREE.Mesh(new THREE.CircleGeometry(r, 64), meadowMat)
+    meadow.rotation.x = -Math.PI / 2
+    meadow.position.set(x, 0.012, z)
+    meadow.receiveShadow = true
+    scene.add(meadow)
+
+    const stoneMat = new THREE.MeshStandardMaterial({ color: 0xb5b0a0, roughness: 0.8 })
+    const darkStoneMat = new THREE.MeshStandardMaterial({ color: 0x74766f, roughness: 0.9 })
+    const postMat = new THREE.MeshStandardMaterial({ color: 0x7a5230 })
+    const featherMat = new THREE.MeshStandardMaterial({ color: 0xf2efe5 })
+    const grassMats = [
+      new THREE.MeshStandardMaterial({ color: 0xb7c36b }),
+      new THREE.MeshStandardMaterial({ color: 0x86a957 }),
+      new THREE.MeshStandardMaterial({ color: 0xd0c178 }),
+    ]
+
+    const treatyStone = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.75, 1.2), darkStoneMat)
+    treatyStone.position.set(x - 3.5, 0.34, z - 2.5)
+    treatyStone.rotation.y = -0.35
+    treatyStone.castShadow = true
+    treatyStone.receiveShadow = true
+    scene.add(treatyStone)
+    this.colliders.push({ x: x - 3.5, z: z - 2.5, radius: 1.4, yMin: 0, yMax: 0.8 })
+
+    for (let i = 0; i < 8; i++) {
+      const t = i / 7
+      const px = x - r * 0.85 + t * r * 1.7
+      const pz = z + Math.sin(t * Math.PI * 2) * 2.2
+      const post = boxMesh(postMat, 0.2, 1.8, 0.2, px, 0.9, pz)
+      post.castShadow = true
+      scene.add(post)
+
+      const feather = boxMesh(featherMat, 0.16, 0.55, 0.08, px + 0.05, 1.95, pz)
+      feather.rotation.z = t % 2 === 0 ? 0.35 : -0.35
+      feather.castShadow = true
+      scene.add(feather)
+    }
+
+    for (let i = 0; i < 42; i++) {
+      const a = rng() * Math.PI * 2
+      const radius = TREATY_FLATS.pondRadius + 2 + rng() * (r - TREATY_FLATS.pondRadius - 3)
+      const gx = x + Math.cos(a) * radius
+      const gz = z + Math.sin(a) * radius
+      const h = 0.8 + rng() * 1.3
+      const mat = grassMats[i % grassMats.length]
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.09, h, 0.09), mat)
+      blade.position.set(gx, h / 2, gz)
+      blade.rotation.z = (rng() - 0.5) * 0.45
+      blade.rotation.y = rng() * Math.PI
+      blade.castShadow = true
+      scene.add(blade)
+    }
+
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2 + 0.25
+      const sx = x + Math.cos(a) * (r * 0.72)
+      const sz = z + Math.sin(a) * (r * 0.72)
+      const s = 0.8 + rng() * 0.55
+      const stone = boxMesh(stoneMat, s * 1.4, s * 0.55, s, sx, s * 0.23, sz)
+      stone.rotation.y = rng() * Math.PI
+      stone.castShadow = true
+      stone.receiveShadow = true
+      scene.add(stone)
+      this.colliders.push({ x: sx, z: sz, radius: s * 0.65, yMin: 0, yMax: s * 0.55 })
+    }
+  }
+
   /**
    * Scatter blocky trees and rocks so you can judge height, distance, and speed
    * — a flat plane gives your eye nothing to measure against. Tall trees double
@@ -139,6 +225,8 @@ export class World {
 
       // Keep a clear circle around the spawn point so nothing lands on the Queen.
       if (Math.hypot(x, z) < 10) continue
+      // Keep the Treaty Flats legible as a distinct biome and playable boss arena.
+      if (Math.hypot(x - TREATY_FLATS.x, z - TREATY_FLATS.z) < TREATY_FLATS.radius + 4) continue
       // Don't grow trees/rocks in the pond.
       if (this.pond.isWater(x, z)) continue
 

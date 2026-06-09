@@ -8,6 +8,7 @@ import type { Pond } from './Water'
 import type { Nests } from './Nests'
 import type { Collider } from './collision'
 import type { Rng } from './rng'
+import { TREATY_FLATS } from './Biomes'
 
 const GOOSE_COUNT = 3
 const AREA_CENTER_Z = -50 // out past the pond (which sits at z = -26)
@@ -45,6 +46,22 @@ const BOSS_SPLIT_INTERVAL = 6 // seconds between his splitting honks
 const BOSS_FIRST_SPLIT = 4 // the first split lands a few seconds in
 const BOSS_SPLIT_KNOCKBACK = 0.2 // each splitting honk knocks the resolve meter back this much
 
+// --- Lord Boundary, Treaty Flats boss ---------------------------------------
+const TREATY_TRIGGER_RANGE = 7 // close enough to the treaty stone to be challenged
+const TREATY_DISENGAGE_RANGE = 13 // leave the Flats mid-fight and the line moves back
+const TREATY_START_RESOLVE = 0.18
+const TREATY_DRAIN = 0.48 // he wins by slow pressure, not by one huge honk
+const TREATY_FLOCK_FILL = 0.018 // every calm active subject helps hold the line
+const TREATY_NEST_FILL = 0.04 // built nests prove the Flats are not empty claims
+const TREATY_OCCUPIED_FILL = 0.1 // brooding hens anchor the border hardest
+const TREATY_MAX_PASSIVE = 0.64
+const TREATY_MIN_NESTS = 3
+const TREATY_MIN_OCCUPIED = 2
+const TREATY_CLAUSE_INTERVAL = 5.5
+const TREATY_FIRST_CLAUSE = 3.5
+const TREATY_CLAUSE_KNOCKBACK = 0.22
+const TREATY_ANCHORED_KNOCKBACK = 0.06
+
 /** Game wires this to the HUD (active? + how full the resolve meter is, 0..1). */
 type OnHonkOff = (active: boolean, resolve: number) => void
 type OnQueenLost = (gooseX: number, gooseZ: number, queenX: number, queenZ: number) => void
@@ -63,6 +80,9 @@ export class Geese {
   // The Marsh Baron — kept apart from the gaggle so the everyday honk-off / raid
   // logic never touches him; his boss fight is run separately (later phases).
   private readonly baron: Goose
+  // Lord Boundary waits in the Treaty Flats. He is visible early, but his fight
+  // is locked until the Baron is broken and the Queen has settled the Flats.
+  private readonly treatyBoss: Goose
 
   // Honk-off state.
   private active: Goose | null = null
@@ -77,17 +97,28 @@ export class Geese {
   private bossGateCooldown = 0 // throttles the "you're not ready" sneer
   private bossSplitTimer = 0 // counts down to his next splitting honk
 
+  // Treaty Flats fight state.
+  private treatyActive = false
+  private treatyResolve = 0
+  private treatyWasQuackDown = false
+  private treatyDefeated = false
+  private treatyGateCooldown = 0
+  private treatyClauseTimer = 0
+  private treatyUnlockAnnounced = false
+  private treatyUnlockDelay = 0
+
   constructor(
     scene: THREE.Scene,
     private readonly sound: Sound,
     food: Food,
     pond: Pond,
-    nests: Nests,
+    private readonly nests: Nests,
     private readonly input: Input,
     private readonly queen: THREE.Object3D,
     private readonly flock: Flock,
     private readonly onHonkOff: OnHonkOff,
     private readonly onBossFight: OnHonkOff,
+    private readonly onTreatyFight: OnHonkOff,
     private readonly onBaronMessage: OnMessage,
     private readonly onQueenLost: OnQueenLost,
     private readonly resolvePenalty: ResolvePenalty,
@@ -97,22 +128,40 @@ export class Geese {
     for (let i = 0; i < GOOSE_COUNT; i++) {
       const angle = rng() * Math.PI * 2
       const radius = rng() * AREA_RADIUS
-      const goose = new Goose(Math.cos(angle) * radius, AREA_CENTER_Z + Math.sin(angle) * radius, sound, food, pond, nests, colliders, rng)
+      const goose = new Goose(Math.cos(angle) * radius, AREA_CENTER_Z + Math.sin(angle) * radius, sound, food, pond, this.nests, colliders, rng)
       this.geese.push(goose)
       scene.add(goose.group)
     }
 
     // The Marsh Baron — a boss goose rooted in his marsh, deep past the pond.
-    this.baron = new Goose(BARON_X, BARON_Z, sound, food, pond, nests, colliders, rng, true)
+    this.baron = new Goose(BARON_X, BARON_Z, sound, food, pond, this.nests, colliders, rng, true)
     scene.add(this.baron.group)
     addMarshDressing(scene, BARON_X, BARON_Z, rng)
+
+    // Lord Boundary — pale, formal, and planted beside the old Treaty Stone. He
+    // does not begin his challenge until the Marsh Baron has fallen.
+    this.treatyBoss = new Goose(
+      TREATY_FLATS.x - 3,
+      TREATY_FLATS.z - 5,
+      sound,
+      food,
+      pond,
+      this.nests,
+      colliders,
+      rng,
+      true,
+      { bodyColor: 0x9fa8a3, scale: 1.28, crest: false, honkPitch: [0.66, 0.76], honkRate: 0.1 },
+    )
+    scene.add(this.treatyBoss.group)
   }
 
   update(delta: number): void {
     this.updateHonkOff(delta)
     this.updateBossFight(delta)
+    this.updateTreatyFight(delta)
     for (const goose of this.geese) goose.update(delta)
     this.baron.update(delta)
+    this.treatyBoss.update(delta)
   }
 
   /** Whether the Marsh Baron has been broken for good. Lets others (the swan)
@@ -138,7 +187,7 @@ export class Geese {
   }
 
   private updateHonkOff(delta: number): void {
-    if (this.bossActive) return // the boss fight takes over the standoff
+    if (this.bossActive || this.treatyActive) return // boss fights take over the standoff
     const qx = this.queen.position.x
     const qz = this.queen.position.z
 
@@ -306,6 +355,7 @@ export class Geese {
     this.baron.stopPosturing(won) // won → he breaks and flees; lost → he struts
     if (won) {
       this.bossDefeated = true
+      this.treatyUnlockDelay = 2.6
       this.flock.liftFollowerCap() // her leadership is proven — gather without limit now
       this.onBaronMessage('👑 THE MARSH BARON is broken — the marsh is yours!')
     } else {
@@ -315,6 +365,144 @@ export class Geese {
     this.bossActive = false
     this.bossResolve = 0
     this.onBossFight(false, 0)
+  }
+
+  // --- Lord Boundary, Treaty Flats boss --------------------------------------
+
+  private updateTreatyFight(delta: number): void {
+    if (this.treatyDefeated || this.bossActive) return
+
+    const qx = this.queen.position.x
+    const qz = this.queen.position.z
+    const gp = this.treatyBoss.group.position
+
+    if (!this.bossDefeated) {
+      this.updateLockedTreatyHint(delta, qx, qz, gp)
+      return
+    }
+
+    if (!this.treatyUnlockAnnounced) {
+      if (this.treatyUnlockDelay > 0) {
+        this.treatyUnlockDelay -= delta
+        return
+      }
+      this.onBaronMessage('⚖️ The Treaty Flats are open — settle them before the next gander moves the line.')
+      this.treatyUnlockAnnounced = true
+    }
+
+    if (this.treatyActive) {
+      this.treatyBoss.aimAt(qx, qz)
+      if (Math.hypot(gp.x - qx, gp.z - qz) > TREATY_DISENGAGE_RANGE) {
+        this.endTreatyFight(false)
+        return
+      }
+
+      this.treatyClauseTimer -= delta
+      if (this.treatyClauseTimer <= 0) {
+        this.treatyClauseTimer = TREATY_CLAUSE_INTERVAL
+        this.applyTreatyClause()
+      }
+
+      const qDown = this.input.isDown('KeyQ')
+      if (qDown && !this.treatyWasQuackDown) this.treatyResolve += QUACK_GAIN
+      this.treatyWasQuackDown = qDown
+
+      const { drakes, others } = this.flock.calmCounts()
+      const calmSubjects = drakes + others
+      const nests = this.treatyNestCount()
+      const occupied = this.treatyOccupiedCount()
+      const passive = Math.min(
+        TREATY_FLOCK_FILL * calmSubjects + TREATY_NEST_FILL * nests + TREATY_OCCUPIED_FILL * occupied,
+        TREATY_MAX_PASSIVE,
+      )
+      this.treatyResolve += (passive - TREATY_DRAIN) * delta
+      this.treatyResolve = Math.max(0, Math.min(1, this.treatyResolve))
+      this.onTreatyFight(true, this.treatyResolve)
+
+      if (this.treatyResolve >= 1) this.endTreatyFight(true)
+      else if (this.treatyResolve <= 0) this.endTreatyFight(false)
+      return
+    }
+
+    if (this.treatyGateCooldown > 0) this.treatyGateCooldown -= delta
+    if (Math.hypot(gp.x - qx, gp.z - qz) > TREATY_TRIGGER_RANGE) return
+    if (this.hasTreatyFoothold()) {
+      this.startTreatyFight()
+    } else if (this.treatyGateCooldown <= 0) {
+      this.onBaronMessage(this.treatyGateHint())
+      this.treatyGateCooldown = 5
+    }
+  }
+
+  private updateLockedTreatyHint(delta: number, qx: number, qz: number, gp: THREE.Vector3): void {
+    if (this.treatyGateCooldown > 0) this.treatyGateCooldown -= delta
+    if (this.treatyGateCooldown > 0) return
+    if (Math.hypot(gp.x - qx, gp.z - qz) > TREATY_TRIGGER_RANGE) return
+    this.onBaronMessage('⚖️ The treaty stones wait. Break the Marsh Baron first.')
+    this.treatyGateCooldown = 5
+  }
+
+  private hasTreatyFoothold(): boolean {
+    return this.treatyNestCount() >= TREATY_MIN_NESTS && this.treatyOccupiedCount() >= TREATY_MIN_OCCUPIED
+  }
+
+  private treatyNestCount(): number {
+    return this.nests.countWithin(TREATY_FLATS.x, TREATY_FLATS.z, TREATY_FLATS.radius)
+  }
+
+  private treatyOccupiedCount(): number {
+    return this.nests.occupiedWithin(TREATY_FLATS.x, TREATY_FLATS.z, TREATY_FLATS.radius)
+  }
+
+  private treatyGateHint(): string {
+    const nests = this.treatyNestCount()
+    const occupied = this.treatyOccupiedCount()
+    if (nests < TREATY_MIN_NESTS) return `⚖️ Lord Boundary taps the stone — build nests in the Flats (${nests}/${TREATY_MIN_NESTS})`
+    return `⚖️ Lord Boundary smiles thinly — seat hens to hold the Flats (${occupied}/${TREATY_MIN_OCCUPIED})`
+  }
+
+  private startTreatyFight(): void {
+    this.treatyActive = true
+    this.treatyBoss.startPosturing()
+    this.treatyResolve = TREATY_START_RESOLVE
+    this.treatyClauseTimer = TREATY_FIRST_CLAUSE
+    this.treatyWasQuackDown = this.input.isDown('KeyQ')
+    this.onBaronMessage('⚖️ LORD BOUNDARY invokes the old treaty!')
+    this.onTreatyFight(true, this.treatyResolve)
+  }
+
+  /** Boundary's pressure is bureaucratic and territorial: every "clause" tests
+   *  whether the Flats are occupied by actual duck care. Empty claims scatter;
+   *  brooding hens make the border hold. */
+  private applyTreatyClause(): void {
+    const occupied = this.treatyOccupiedCount()
+    if (occupied >= TREATY_MIN_OCCUPIED) {
+      this.treatyResolve = Math.max(0, this.treatyResolve - TREATY_ANCHORED_KNOCKBACK)
+      this.sound.honk(0.72)
+      this.onBaronMessage('🪺 Your brooding hens hold the line.')
+      return
+    }
+
+    this.treatyResolve = Math.max(0, this.treatyResolve - TREATY_CLAUSE_KNOCKBACK)
+    this.flock.scatterFrom(TREATY_FLATS.x, TREATY_FLATS.z)
+    this.sound.honk(0.7)
+    this.onBaronMessage('⚖️ Boundary moves the line — settle the Flats, do not merely claim them!')
+  }
+
+  private endTreatyFight(won: boolean): void {
+    const gp = this.treatyBoss.group.position
+    const qp = this.queen.position
+    this.treatyBoss.stopPosturing(won)
+    if (won) {
+      this.treatyDefeated = true
+      this.onBaronMessage('⚖️ LORD BOUNDARY yields — the Treaty Flats hold!')
+    } else {
+      this.onQueenLost(gp.x, gp.z, qp.x, qp.z)
+      this.treatyGateCooldown = 6
+    }
+    this.treatyActive = false
+    this.treatyResolve = 0
+    this.onTreatyFight(false, 0)
   }
 }
 

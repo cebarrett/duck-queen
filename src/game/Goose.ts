@@ -79,6 +79,14 @@ const BARON_HONK_RATE = 0.16 // looses his deep menace more often than the gaggl
 
 type GooseState = 'pausing' | 'wandering' | 'foraging' | 'fleeing' | 'raiding'
 
+interface BossGooseOptions {
+  bodyColor?: number
+  scale?: number
+  crest?: boolean
+  honkPitch?: readonly [number, number]
+  honkRate?: number
+}
+
 /**
  * A rival goose. For now it just wanders its patch and honks occasionally — the
  * same "seek a target, ease toward it, pause" shape as the duckling, since that
@@ -118,6 +126,7 @@ export class Goose {
   // Base size (1, or the Baron's bigger scale); puff multiplies this so posturing
   // swells him from his real size rather than snapping him back to 1.
   private readonly baseScale: number
+  private readonly bossHonkRate: number
 
   // Honk-off state: while posturing it ignores its normal behaviour, squares up
   // to face the Queen (aimX/aimZ), and "puffs up" (a swelling scale).
@@ -141,9 +150,15 @@ export class Goose {
     // The Marsh Baron is a boss goose: bigger, darker, crested, deep-voiced, and
     // rooted to his spot (he doesn't wander, forage, or raid).
     private readonly boss = false,
+    bossOptions: BossGooseOptions = {},
   ) {
+    const bossScale = bossOptions.scale ?? BARON_SCALE
     const model = boss
-      ? buildGoose({ bodyColor: BARON_COLOR, scale: BARON_SCALE, crest: true })
+      ? buildGoose({
+          bodyColor: bossOptions.bodyColor ?? BARON_COLOR,
+          scale: bossScale,
+          crest: bossOptions.crest ?? true,
+        })
       : buildGoose()
     this.group = model.group
     this.leftWing = model.leftWing
@@ -153,13 +168,15 @@ export class Goose {
     this.homeX = x
     this.homeZ = z
 
-    this.collideRadius = boss ? COLLIDE_RADIUS * BARON_SCALE : COLLIDE_RADIUS
-    this.collideHeight = boss ? COLLIDE_HEIGHT * BARON_SCALE : COLLIDE_HEIGHT
-    this.baseScale = boss ? BARON_SCALE : 1
+    this.collideRadius = boss ? COLLIDE_RADIUS * bossScale : COLLIDE_RADIUS
+    this.collideHeight = boss ? COLLIDE_HEIGHT * bossScale : COLLIDE_HEIGHT
+    this.baseScale = boss ? bossScale : 1
+    this.bossHonkRate = bossOptions.honkRate ?? BARON_HONK_RATE
 
     // Spawn-time values from the seeded rng so the initial world is stable. The
     // Baron's voice sits much lower — a deep, ominous honk.
-    this.honkPitch = boss ? rngRange(rng, 0.5, 0.62) : rngRange(rng, 0.9, 1.15)
+    const bossPitch = bossOptions.honkPitch ?? [0.5, 0.62]
+    this.honkPitch = boss ? rngRange(rng, bossPitch[0], bossPitch[1]) : rngRange(rng, 0.9, 1.15)
     this.heading = rng() * Math.PI * 2
     this.group.rotation.y = this.heading
     this.timer = randRange(0, PAUSE_MAX) // first-move timing — fine to stay unseeded
@@ -270,7 +287,7 @@ export class Goose {
     if (this.bold > 0) this.bold -= delta
 
     // An occasional honk (the Baron's deep menace, more often).
-    const honkRate = this.boss ? BARON_HONK_RATE : HONK_RATE
+    const honkRate = this.boss ? this.bossHonkRate : HONK_RATE
     if (Math.random() < honkRate * delta) this.sound.honk(this.honkPitch)
 
     // While calmly milling about, pick a target: a brooding hen takes priority —

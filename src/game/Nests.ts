@@ -117,6 +117,17 @@ export class Nests {
     return this.nearest(x, z, radius, null)
   }
 
+  /** How many nests stand within a circular area. Bosses/biomes use this to ask
+   *  whether the Queen has built an actual foothold, not merely marched through. */
+  countWithin(x: number, z: number, radius: number): number {
+    return this.countWhere(x, z, radius, null)
+  }
+
+  /** How many nests in an area are actively held by brooding hens. */
+  occupiedWithin(x: number, z: number, radius: number): number {
+    return this.countWhere(x, z, radius, true)
+  }
+
   private nearest(x: number, z: number, radius: number, occupied: boolean | null): Nest | null {
     let best: Nest | null = null
     let bestSq = radius * radius
@@ -129,5 +140,16 @@ export class Nests {
       }
     }
     return best
+  }
+
+  private countWhere(x: number, z: number, radius: number, occupied: boolean | null): number {
+    let n = 0
+    const rSq = radius * radius
+    for (const nest of this.all) {
+      if (occupied !== null && nest.occupied !== occupied) continue
+      const dSq = (nest.x - x) ** 2 + (nest.z - z) ** 2
+      if (dSq <= rSq) n++
+    }
+    return n
   }
 }
