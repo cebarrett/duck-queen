@@ -39,48 +39,51 @@ export function buildSwan(): SwanModel {
   const group = new THREE.Group()
 
   // Short orange legs + webbed feet — tucked low, mostly submerged while afloat.
-  group.add(box(0.3, 0.1, 0.5, ORANGE, [-0.26, 0.05, -0.05]))
-  group.add(box(0.3, 0.1, 0.5, ORANGE, [0.26, 0.05, -0.05]))
-  group.add(box(0.12, 0.3, 0.12, ORANGE, [-0.26, 0.2, 0]))
-  group.add(box(0.12, 0.3, 0.12, ORANGE, [0.26, 0.2, 0]))
+  group.add(box(0.32, 0.1, 0.55, ORANGE, [-0.28, 0.05, -0.05]))
+  group.add(box(0.32, 0.1, 0.55, ORANGE, [0.28, 0.05, -0.05]))
+  group.add(box(0.13, 0.32, 0.13, ORANGE, [-0.28, 0.22, 0]))
+  group.add(box(0.13, 0.32, 0.13, ORANGE, [0.28, 0.22, 0]))
 
-  // Body — long and boat-like, broad in the middle.
-  group.add(box(1.1, 0.85, 2.0, WHITE, [0, 0.62, 0.1]))
+  // Body — wide and boat-like, noticeably broader than the goose.
+  group.add(box(1.55, 1.05, 2.5, WHITE, [0, 0.68, 0.1]))
 
-  // A pert tail tilted up at the back (+Z).
-  const tail = box(0.4, 0.42, 0.5, WHITE, [0, 0.9, 1.05])
-  tail.rotation.x = -0.6
+  // A tall, swept tail at the back (+Z) — more upright than the goose's stub.
+  const tail = box(0.58, 0.68, 0.68, WHITE, [0, 1.05, 1.3])
+  tail.rotation.x = -0.75
   group.add(tail)
 
-  // Arched folded wings — the swan's signature raised-wing posture. Static (it
-  // never flaps): a box each side, lifted and tilted outward over the back.
+  // Wings — the swan's signature busking posture: large boxes arched well above
+  // the body and tilted steeply outward. Static (it never flaps).
   group.add(makeWing(-1))
   group.add(makeWing(1))
 
   // Neck + head as ONE pivot at the base of the neck, near the front of the body.
-  // It rises tall and mostly upright, with just a gentle forward lean up top and a
-  // refined head held high — the stately swan poise, read in blocks.
+  // S-curve: lower segment rises vertically, upper segment leans clearly forward,
+  // head is held high — the stately swan silhouette, read in blocks.
   const neck = new THREE.Group()
-  neck.position.set(0, 1.0, -0.7)
-  neck.add(box(0.28, 0.98, 0.28, WHITE, [0, 0.49, 0])) // lower neck — tall and vertical
-  const upper = box(0.26, 0.58, 0.26, WHITE, [0, 1.1, -0.1]) // upper neck — leans gently forward
-  upper.rotation.x = -0.26
+  neck.position.set(0, 1.12, -0.82)
+  neck.add(box(0.32, 1.15, 0.32, WHITE, [0, 0.58, 0])) // lower neck — tall and vertical
+  const upper = box(0.28, 0.72, 0.28, WHITE, [0, 1.37, -0.18]) // upper neck — leans forward
+  upper.rotation.x = -0.38
   neck.add(upper)
-  neck.add(box(0.36, 0.36, 0.46, WHITE, [0, 1.46, -0.32])) // head — held high
-  neck.add(box(0.2, 0.15, 0.42, ORANGE, [0, 1.4, -0.62])) // beak
-  neck.add(box(0.18, 0.18, 0.13, BLACK, [0, 1.56, -0.35])) // the mute swan's black knob
-  neck.add(box(0.07, 0.07, 0.07, BLACK, [-0.15, 1.48, -0.4])) // eyes
-  neck.add(box(0.07, 0.07, 0.07, BLACK, [0.15, 1.48, -0.4]))
+  neck.add(box(0.42, 0.42, 0.54, WHITE, [0, 1.78, -0.46])) // head — held high
+  neck.add(box(0.22, 0.17, 0.46, ORANGE, [0, 1.72, -0.80])) // beak — prominent
+  neck.add(box(0.21, 0.21, 0.15, BLACK, [0, 1.92, -0.48])) // the mute swan's black knob
+  neck.add(box(0.08, 0.08, 0.08, BLACK, [-0.18, 1.80, -0.54])) // eyes
+  neck.add(box(0.08, 0.08, 0.08, BLACK, [0.18, 1.80, -0.54]))
   group.add(neck)
+
+  // Scale the whole thing up so it reads as clearly bigger than the goose.
+  group.scale.setScalar(1.28)
 
   return { group, neck }
 }
 
-/** One arched folded wing, side = -1 (left) / +1 (right). A simple static box,
- *  hugging the body and tilted gently outward at the top so it reads as puffed up
- *  without sticking out like a fin. */
+/** One wing in the swan's busking posture, side = -1 (left) / +1 (right).
+ *  A large box lifted above the body and tilted steeply outward — that dramatic
+ *  arched silhouette that makes swans look nothing like geese. */
 function makeWing(side: number): THREE.Mesh {
-  const wing = box(0.2, 0.55, 1.3, WHITE, [side * 0.54, 0.9, 0.15])
-  wing.rotation.z = side * 0.13 // top edge flares slightly outward
+  const wing = box(0.3, 0.92, 1.75, WHITE, [side * 0.76, 1.12, 0.12])
+  wing.rotation.z = side * 0.48 // ~27° — dramatically arched over the back
   return wing
 }
