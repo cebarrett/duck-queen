@@ -77,8 +77,17 @@ export class World {
     // DirectionalLight = parallel rays from one direction, like the sun. This
     // is what gives boxes a bright side and a dim side so they read as 3D.
     // Its `position` only sets the *direction* the light comes from.
-    const sun = new THREE.DirectionalLight(0xffffff, 2.0)
+    const sun = new THREE.DirectionalLight(0xfff4e0, 2.0)
     sun.position.set(8, 15, 6)
+    sun.castShadow = true
+    sun.shadow.mapSize.width = 2048
+    sun.shadow.mapSize.height = 2048
+    sun.shadow.camera.near = 1
+    sun.shadow.camera.far = 200
+    sun.shadow.camera.left = -70
+    sun.shadow.camera.right = 70
+    sun.shadow.camera.top = 70
+    sun.shadow.camera.bottom = -70
     scene.add(sun)
   }
 
@@ -94,6 +103,7 @@ export class World {
     const material = new THREE.MeshStandardMaterial({ color: GROUND_COLOR })
     const ground = new THREE.Mesh(geometry, material)
     ground.rotation.x = -Math.PI / 2
+    ground.receiveShadow = true
     scene.add(ground)
   }
 
@@ -110,7 +120,13 @@ export class World {
     // object. Identical materials can be reused, and it keeps the GPU happy once
     // there are lots of objects — a good habit to start now.
     const trunkMat = new THREE.MeshStandardMaterial({ color: 0x8a5a2b })
-    const leafMat = new THREE.MeshStandardMaterial({ color: 0x3f7d34 })
+    const leafMats = [
+      new THREE.MeshStandardMaterial({ color: 0x3f7d34 }),
+      new THREE.MeshStandardMaterial({ color: 0x4a8c2f }),
+      new THREE.MeshStandardMaterial({ color: 0x355e2a }),
+      new THREE.MeshStandardMaterial({ color: 0x527a35 }),
+      new THREE.MeshStandardMaterial({ color: 0x2e6b28 }),
+    ]
     const rockMat = new THREE.MeshStandardMaterial({ color: 0x8b929c })
 
     const COUNT = 70
@@ -132,8 +148,14 @@ export class World {
         const trunkH = 2.5 + rng() * 3.5
         const leaf = 2 + rng() * 1.8
         const leafCenterY = trunkH + leaf * 0.35
-        scene.add(boxMesh(trunkMat, 0.6, trunkH, 0.6, x, trunkH / 2, z))
-        scene.add(boxMesh(leafMat, leaf, leaf, leaf, x, leafCenterY, z))
+        const leafMat = leafMats[Math.abs(Math.round(x * 7.3 + z * 11.7)) % leafMats.length]
+        const trunk = boxMesh(trunkMat, 0.6, trunkH, 0.6, x, trunkH / 2, z)
+        trunk.castShadow = true
+        trunk.receiveShadow = true
+        scene.add(trunk)
+        const canopy = boxMesh(leafMat, leaf, leaf, leaf, x, leafCenterY, z)
+        canopy.castShadow = true
+        scene.add(canopy)
 
         // Two colliders: a thin trunk (so you can walk right up to it) and the
         // wider canopy up at leaf height (so you bonk it only while flying through).
@@ -148,7 +170,10 @@ export class World {
       } else {
         // Rock = a squat block sitting low to the ground.
         const s = 1 + rng() * 2
-        scene.add(boxMesh(rockMat, s, s * 0.7, s, x, s * 0.25, z))
+        const rock = boxMesh(rockMat, s, s * 0.7, s, x, s * 0.25, z)
+        rock.castShadow = true
+        rock.receiveShadow = true
+        scene.add(rock)
         this.colliders.push({ x, z, radius: s * 0.5, yMin: 0, yMax: s * 0.6 })
       }
     }

@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 
-/** One circular patch of water. */
-interface Circle {
+/** One circular patch of water — its centre and radius. */
+export interface PondCircle {
   x: number
   z: number
   radius: number
@@ -31,7 +31,7 @@ export class Pond {
 
   // One Group holds every disc; World adds it to the scene once.
   readonly mesh = new THREE.Group()
-  private readonly circles: Circle[] = []
+  private readonly circles: PondCircle[] = []
   // Share one material across every disc — cheaper, and they all look identical.
   private readonly material = new THREE.MeshStandardMaterial({
     color: 0x3a8ee6,
@@ -61,6 +61,12 @@ export class Pond {
     this.circles.push({ x, z, radius })
   }
 
+  /** Every water circle (the main pond first, then the extras). Lets callers that
+   *  want to dress each pond — e.g. the reeds — walk all of them. */
+  get patches(): readonly PondCircle[] {
+    return this.circles
+  }
+
   /** Is the point (x, z) over any pond? Cheapest possible region test: compare
    *  squared distance to squared radius (no square root needed). */
   isWater(x: number, z: number): boolean {
@@ -80,5 +86,12 @@ export class Pond {
       if (Math.hypot(x - c.x, z - c.z) < radius + c.radius) return true
     }
     return false
+  }
+
+  private time = 0
+
+  update(dt: number): void {
+    this.time += dt
+    this.material.opacity = 0.72 + Math.sin(this.time * 0.8) * 0.06
   }
 }

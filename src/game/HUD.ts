@@ -18,6 +18,7 @@ export class HUD {
   private nests = 0
   private canBuildNest = false
   private canSeatHen = false
+  private canTalk = false
   private resolveShaken = false
 
   // A centred banner + meter shown only during a honk-off (or boss fight).
@@ -26,6 +27,12 @@ export class HUD {
   private readonly honkFill: HTMLElement
   private readonly messageBanner: HTMLElement
   private messageTimer = 0
+
+  // A bottom-centre dialogue box, shown only while talking with an NPC (the swan).
+  private readonly dialogueBox: HTMLElement
+  private readonly dialogueName: HTMLElement
+  private readonly dialogueText: HTMLElement
+  private readonly dialogueHint: HTMLElement
 
   constructor() {
     const el = document.getElementById('hud')
@@ -64,6 +71,48 @@ export class HUD {
       'pointer-events:none;user-select:none;display:none;'
     document.body.appendChild(message)
     this.messageBanner = message
+
+    // The dialogue box: a wide, calm panel near the bottom. Built in code (like the
+    // honk banner) and hidden until a conversation opens.
+    const dialogue = document.createElement('div')
+    dialogue.style.cssText =
+      'position:fixed;left:50%;bottom:7%;transform:translateX(-50%);' +
+      'width:min(700px,88vw);background:rgba(16,20,27,.82);' +
+      'border:2px solid rgba(238,241,245,.85);border-radius:14px;' +
+      'padding:16px 22px;color:#f3f6f9;text-shadow:0 1px 2px rgba(0,0,0,.55);' +
+      'pointer-events:none;user-select:none;display:none;'
+    const dName = document.createElement('div')
+    dName.style.cssText = 'font-size:17px;font-weight:800;color:#cfe0f5;margin-bottom:7px;letter-spacing:.2px;'
+    const dText = document.createElement('div')
+    dText.style.cssText = 'font-size:18px;line-height:1.55;font-weight:500;'
+    const dHint = document.createElement('div')
+    dHint.style.cssText = 'font-size:13px;font-weight:600;opacity:.65;margin-top:12px;text-align:right;'
+    dialogue.appendChild(dName)
+    dialogue.appendChild(dText)
+    dialogue.appendChild(dHint)
+    document.body.appendChild(dialogue)
+    this.dialogueBox = dialogue
+    this.dialogueName = dName
+    this.dialogueText = dText
+    this.dialogueHint = dHint
+  }
+
+  /** Show a line of NPC dialogue, or hide the box when `name` is null. */
+  setDialogue(name: string | null, text = '', hint = ''): void {
+    if (name === null) {
+      this.dialogueBox.style.display = 'none'
+      return
+    }
+    this.dialogueName.textContent = name
+    this.dialogueText.textContent = text
+    this.dialogueHint.textContent = hint
+    this.dialogueBox.style.display = 'block'
+  }
+
+  /** Whether the Queen is close enough to strike up a conversation — drives the F prompt. */
+  setCanTalk(canTalk: boolean): void {
+    this.canTalk = canTalk
+    this.render()
   }
 
   /** Show/hide the honk-off banner and set the resolve meter (0..1). `label` and
@@ -148,6 +197,7 @@ export class HUD {
     // control advertises itself exactly when it'll do something.
     if (this.canBuildNest) line1 += '   ·   🪺 Press B to build a nest!'
     if (this.canSeatHen) line1 += '   ·   🥚 Press E to seat a hen'
+    if (this.canTalk) line1 += '   ·   🦢 Press F to speak with the swan'
 
     const shaken = this.resolveShaken ? '   Resolve shaken' : ''
     const s = this.subjects

@@ -17,6 +17,8 @@ function box(
 ): THREE.Mesh {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color }))
   m.position.set(...position)
+  m.castShadow = true
+  m.receiveShadow = true
   return m
 }
 

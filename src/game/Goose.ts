@@ -65,10 +65,12 @@ const HONKOFF_COOLDOWN = 5 // after losing a honk-off (it won), brief no-re-figh
 const BOLD_TIME = 12 // after winning a honk-off, it struts and steals harder
 const BOLD_TRIGGER_SCALE = 1.25 // Geese can use this to slightly widen trigger range
 
-// --- Defeat (the Queen won the honk-off) -----------------------------------
+// --- Defeat / routing (the Queen won the honk-off) -------------------------
 const FLEE_SPEED = 5 // it bolts away fast
 const FLEE_DISTANCE = 25 // how far it runs
-const COWED_TIME = 12 // after being beaten: won't forage or be re-engaged for this long
+const COWED_TIME = 12 // after being beaten: won't forage or raid for this long
+const ROUT_RECHALLENGE = 2 // ...but she can re-challenge it this soon — press the rout to herd it farther
+const ROUT_NEST_RANGE = RAID_RADIUS // if a nest is within this when it's beaten, it flees away from the NEST too
 
 // --- The Marsh Baron (boss goose) ------------------------------------------
 const BARON_COLOR = 0x3c3f45 // charcoal — far darker than the pale gaggle
@@ -201,18 +203,39 @@ export class Goose {
     this.posturing = false
 
     if (won) {
-      // Beaten! Let out a low, defeated honk, then bolt directly away from her
-      // and stay cowed (no foraging / re-fighting) for a while.
+      // Routed! A low, defeated honk, then it bolts. It flees away from the Queen
+      // and — if it was menacing one of her nests — away from that nest too, so a
+      // win clears it OFF the nest instead of just nudging it sideways. Crucially it
+      // RE-HOMES where it lands (its patch moves outward), so it won't drift back to
+      // the nest; it stays cowed (no foraging / raiding) but can be re-challenged
+      // after only a short beat, so she can chase it down and herd it even farther.
       this.sound.honk(this.honkPitch * 0.8)
       const pos = this.group.position
-      let dx = pos.x - this.aimX // aim = the Queen's last position
+      let dx = pos.x - this.aimX // away from the Queen's last position
       let dz = pos.z - this.aimZ
       const d = Math.hypot(dx, dz) || 1
-      this.targetX = pos.x + (dx / d) * FLEE_DISTANCE
-      this.targetZ = pos.z + (dz / d) * FLEE_DISTANCE
+      dx /= d
+      dz /= d
+      const nest = this.nests.nearestNest(pos.x, pos.z, ROUT_NEST_RANGE)
+      if (nest) {
+        // Blend in an "away from the nest" push so it leaves no matter which side
+        // she drove it from, then re-normalise to a clean unit heading.
+        const nx = pos.x - nest.x
+        const nz = pos.z - nest.z
+        const nd = Math.hypot(nx, nz) || 1
+        dx += nx / nd
+        dz += nz / nd
+        const bd = Math.hypot(dx, dz) || 1
+        dx /= bd
+        dz /= bd
+      }
+      this.targetX = pos.x + dx * FLEE_DISTANCE
+      this.targetZ = pos.z + dz * FLEE_DISTANCE
+      this.homeX = this.targetX // claim new ground out here — don't drift back to the nest
+      this.homeZ = this.targetZ
       this.state = 'fleeing'
-      this.cooldown = COWED_TIME
-      this.cowed = COWED_TIME
+      this.cooldown = ROUT_RECHALLENGE // she can press the rout again soon
+      this.cowed = COWED_TIME // but it's too rattled to forage / raid for a while
       this.bold = 0
     } else {
       // It held its ground: a smug honk, then straight back to its business.

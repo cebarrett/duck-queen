@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { buildSwan } from './swanModel'
-import { seekArrive, faceHeading, easeFactor, randRange, pointAround } from './mathUtils'
+import { seekArrive, faceHeading, easeFactor, randRange, pointAround, approachAngle } from './mathUtils'
+import { BEFORE_BARON, AFTER_BARON, type Discourse } from './swanDialogue'
 import type { Pond } from './Water'
 import type { Rng } from './rng'
 
@@ -24,11 +25,20 @@ const NECK_SWAY = 0.18 // slow, graceful neck turn
 
 type SwanState = 'gliding' | 'pausing'
 
+/** One page of a conversation handed back to the HUD: the line, plus whether it's
+ *  the last one (so the prompt can say "leave" instead of "continue"). */
+export interface DialoguePage {
+  text: string
+  last: boolean
+}
+
 /**
- * A single stately swan that swims the pond and nothing more. It has no awareness
- * of the Queen, the flock, the geese, or food — it never honks, forages, or reacts
- * to a quack. Pure ambient wildlife: pick a spot on the water, glide there, pause,
- * repeat. It never leaves the pond, so it needs no land collision.
+ * A single stately swan, Aldermere, who glides the pond — and, when the Queen
+ * comes near and speaks to him, talks. He is otherwise pure ambient wildlife: no
+ * honk-offs, no foraging, no reacting to a quack. Left alone he just picks a spot
+ * on the water, glides there, pauses, repeats; he never leaves the pond, so he
+ * needs no land collision. While a conversation is open he holds still and turns
+ * to face her; his actual words live in swanDialogue.ts.
  */
 export class Swan {
   readonly group: THREE.Group
@@ -45,8 +55,20 @@ export class Swan {
   private targetX = 0
   private targetZ = 0
 
+  // Dialogue. `talking` freezes the glide and turns him to face the Queen; `active`
+  // is the discourse (list of pages) currently being read out, `page` the spot in
+  // it. The two indices remember which discourse to deliver next in each phase, so
+  // repeat visits rotate through his musings rather than replaying one block.
+  private talking = false
+  private active: Discourse | null = null
+  private page = 0
+  private beforeIndex = 0
+  private afterIndex = 0
+  private afterBaron = false
+
   constructor(
     private readonly pond: Pond,
+    private readonly queen: THREE.Object3D,
     rng: Rng,
   ) {
     const model = buildSwan()
@@ -69,8 +91,12 @@ export class Swan {
   }
 
   update(delta: number): void {
-    // Glide → pause → glide. No context argument: it watches nothing and no one.
-    if (this.state === 'pausing') {
+    // While he's talking he attends to the Queen: glide to a halt (no new wander
+    // target), and below he'll turn to face her instead of his travel direction.
+    if (this.talking) {
+      this.ease(0, 0, delta)
+    } else if (this.state === 'pausing') {
+      // Glide → pause → glide. He watches no one and nothing the rest of the time.
       this.ease(0, 0, delta)
       this.timer -= delta
       if (this.timer <= 0) {
@@ -94,11 +120,69 @@ export class Swan {
     pos.x += this.velX * delta
     pos.z += this.velZ * delta
 
-    // Face travel direction, turning slowly.
-    this.heading = faceHeading(this.heading, this.velX, this.velZ, TURN_SPEED, delta)
+    // Face the Queen while talking, otherwise face the way he's gliding.
+    if (this.talking) this.faceQueen(delta)
+    else this.heading = faceHeading(this.heading, this.velX, this.velZ, TURN_SPEED, delta)
     this.group.rotation.y = this.heading
 
     this.floatPose(delta)
+  }
+
+  // --- Dialogue --------------------------------------------------------------
+
+  /** True while a conversation is open (the Queen is reading him page by page). */
+  get isTalking(): boolean {
+    return this.talking
+  }
+
+  /** Begin a conversation, choosing the script by whether the Marsh Baron has
+   *  fallen. Returns the opening page. */
+  beginDialogue(baronDefeated: boolean): DialoguePage {
+    this.afterBaron = baronDefeated
+    const pool = baronDefeated ? AFTER_BARON : BEFORE_BARON
+    const index = baronDefeated ? this.afterIndex : this.beforeIndex
+    this.active = pool[index % pool.length]
+    this.page = 0
+    this.talking = true
+    return this.pageAt(0)
+  }
+
+  /** Advance to the next page. Returns it, or null when the conversation is over
+   *  (which also closes it and rotates this phase to its next discourse). */
+  advanceDialogue(): DialoguePage | null {
+    if (!this.active) return null
+    if (this.page >= this.active.length - 1) {
+      if (this.afterBaron) this.afterIndex++
+      else this.beforeIndex++
+      this.endDialogue()
+      return null
+    }
+    this.page++
+    return this.pageAt(this.page)
+  }
+
+  /** Close the conversation without finishing it (e.g. the Queen swam off). */
+  endDialogue(): void {
+    this.talking = false
+    this.active = null
+    this.page = 0
+  }
+
+  private pageAt(i: number): DialoguePage {
+    const lines = this.active!
+    return { text: lines[i], last: i >= lines.length - 1 }
+  }
+
+  /** Turn slowly to face the Queen — the same heading convention the goose uses
+   *  when it squares up (the model faces −Z at heading 0). */
+  private faceQueen(delta: number): void {
+    const pos = this.group.position
+    const dx = this.queen.position.x - pos.x
+    const dz = this.queen.position.z - pos.z
+    if (Math.hypot(dx, dz) > 0.01) {
+      const target = Math.atan2(-dx, -dz)
+      this.heading = approachAngle(this.heading, target, TURN_SPEED * delta)
+    }
   }
 
   /** Ride the waterline with a slow bob + roll and a lazy, graceful neck sway. */

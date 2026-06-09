@@ -7,25 +7,31 @@ const STALK = 0x6fae3c // reed green
 const STALK2 = 0x8fbf4a // a lighter green, for variety
 const CATTAIL = 0x7a5230 // brown cattail head
 
-const REED_COUNT = 16
+const REEDS_PER_RADIUS = 1.6 // shoreline density (the main pond: 16 reeds, radius 10)
 
 /**
- * Reeds grow in a band around the pond's shoreline (some just in the shallows,
+ * Reeds grow in a band around every pond's shoreline (some just in the shallows,
  * some on the bank). They're gathered ONLY by the Duck Queen — the ducklings
- * ignore them — and will later be the material for building nests.
+ * ignore them — and are the material for building nests. Each pond gets a fringe
+ * scaled to its size, so the smaller extra ponds get proportionally fewer reeds.
  */
 export class Reeds extends ResourcePatch {
   constructor(scene: THREE.Scene, pond: Pond, rng: Rng) {
     super(scene)
-    for (let i = 0; i < REED_COUNT; i++) {
-      const angle = rng() * Math.PI * 2
-      // A ring hugging the shoreline: from just inside the water to just onto land.
-      const r = pond.radius + rngRange(rng, -1.5, 2.5)
-      const x = pond.centerX + Math.cos(angle) * r
-      const z = pond.centerZ + Math.sin(angle) * r
-      const clump = makeReedClump()
-      clump.rotation.y = rng() * Math.PI * 2
-      this.add(clump, x, 0, z) // reeds stand up from the shoreline (base at y=0)
+    // Walk every water patch (the main pond first, then the extras). Doing the
+    // main pond first with the same per-reed draws keeps its layout unchanged.
+    for (const patch of pond.patches) {
+      const count = Math.round(REEDS_PER_RADIUS * patch.radius)
+      for (let i = 0; i < count; i++) {
+        const angle = rng() * Math.PI * 2
+        // A ring hugging the shoreline: from just inside the water to just onto land.
+        const r = patch.radius + rngRange(rng, -1.5, 2.5)
+        const x = patch.x + Math.cos(angle) * r
+        const z = patch.z + Math.sin(angle) * r
+        const clump = makeReedClump()
+        clump.rotation.y = rng() * Math.PI * 2
+        this.add(clump, x, 0, z) // reeds stand up from the shoreline (base at y=0)
+      }
     }
   }
 }

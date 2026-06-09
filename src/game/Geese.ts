@@ -115,6 +115,12 @@ export class Geese {
     this.baron.update(delta)
   }
 
+  /** Whether the Marsh Baron has been broken for good. Lets others (the swan)
+   *  react to the turning point in the war. */
+  get baronDefeated(): boolean {
+    return this.bossDefeated
+  }
+
   /** The nearest goose to (x, z) with its position + distance, or null if there
    *  are none. Used to tell whether a goose is menacing a nesting hen. */
   nearestGoose(x: number, z: number): { x: number; z: number; dist: number } | null {

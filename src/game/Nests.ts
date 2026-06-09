@@ -111,11 +111,17 @@ export class Nests {
     return this.nearest(x, z, radius, true)
   }
 
-  private nearest(x: number, z: number, radius: number, occupied: boolean): Nest | null {
+  /** The nearest nest of ANY kind (occupied or not) within `radius`, or null. A
+   *  routed goose uses this to flee *away from* the nest it was menacing. */
+  nearestNest(x: number, z: number, radius: number): Nest | null {
+    return this.nearest(x, z, radius, null)
+  }
+
+  private nearest(x: number, z: number, radius: number, occupied: boolean | null): Nest | null {
     let best: Nest | null = null
     let bestSq = radius * radius
     for (const nest of this.all) {
-      if (nest.occupied !== occupied) continue
+      if (occupied !== null && nest.occupied !== occupied) continue
       const dSq = (nest.x - x) ** 2 + (nest.z - z) ** 2
       if (dSq < bestSq) {
         bestSq = dSq

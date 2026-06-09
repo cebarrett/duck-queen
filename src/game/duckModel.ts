@@ -134,6 +134,8 @@ function box(
     new THREE.MeshStandardMaterial({ color }),
   )
   mesh.position.set(...position)
+  mesh.castShadow = true
+  mesh.receiveShadow = true
   return mesh
 }
 

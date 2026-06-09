@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { World } from './World'
+import type { Pond } from './Water'
 import { Duck } from './Duck'
 import { Input } from './Input'
 import { ThirdPersonCamera } from './ThirdPersonCamera'
@@ -7,6 +8,7 @@ import { DuckController } from './DuckController'
 import { Flock } from './Flock'
 import { Geese } from './Geese'
 import { Swan } from './Swan'
+import { SWAN_NAME } from './swanDialogue'
 import { Food } from './Food'
 import { Reeds } from './Reeds'
 import { Sound } from './Sound'
@@ -27,6 +29,8 @@ const MATURE_FOOD_COST = 4 // food spent to raise one duckling into an adult
 const HATCH_FOOD_COST = 5 // food the flock must have saved up — and spends — to hatch one egg
 const SEAT_RANGE = 3 // how close the Queen must stand to a nest to seat a hen on it
 const SCARE_RANGE = 4 // a goose this close to a brooding hen scares her off (and grabs an egg)
+const SWAN_TALK_RANGE = 4.5 // how close the Queen must be to start talking with the swan
+const SWAN_LEAVE_RANGE = 8 // drift this far from the swan mid-talk and the conversation closes
 
 function getWorldSeed(): number {
   const raw = new URLSearchParams(window.location.search).get('seed')
@@ -69,8 +73,10 @@ export class Game {
   private readonly splashFx: Splash
   private readonly hud = new HUD()
   private readonly nests: Nests
+  private readonly pond: Pond
   private wasBuildDown = false // edge-detect the B key (one nest per press)
   private wasSeatDown = false // edge-detect the E key (one hen seated per press)
+  private wasTalkDown = false // edge-detect the F key (one line advanced per press)
   private resolveShakenTimer = 0
 
   constructor() {
@@ -81,6 +87,10 @@ export class Game {
     // On retina/high-DPI screens devicePixelRatio can be 2–3. Rendering at 3x
     // is 9x the pixels and tanks perf, so we cap it at 2. (Beginner footgun.)
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    this.renderer.shadowMap.enabled = true
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping
+    this.renderer.toneMappingExposure = 0.9
     document.body.appendChild(this.renderer.domElement)
 
     // --- World seed -------------------------------------------------------
@@ -94,6 +104,7 @@ export class Game {
     // World adds the ground, sky, fog, lights, and scenery to the scene, and
     // exposes the scenery's colliders so the duck can bump into them.
     const world = new World(this.scene, deriveRng(seed, 'scenery'), deriveRng(seed, 'ponds'))
+    this.pond = world.pond
 
     // --- Camera -----------------------------------------------------------
     // PerspectiveCamera(fov, aspect, near, far):
@@ -160,10 +171,12 @@ export class Game {
       deriveRng(seed, 'geese'),
     )
 
-    // A lone, stately swan glides about the pond — pure ambient wildlife. It keeps
-    // to itself (no honk-offs, no foraging, no reacting to the Queen's quack); its
-    // spawn spot comes from the seeded rng so the world stays deterministic.
-    this.swan = new Swan(world.pond, deriveRng(seed, 'swan'))
+    // A lone, stately swan — Aldermere — glides about the pond. He keeps to himself
+    // (no honk-offs, no foraging, no reacting to a quack), but the Queen can swim up
+    // and speak with him: an ancient witness who advises her on the past and the war
+    // to come. His spawn spot comes from the seeded rng so the world stays
+    // deterministic; he takes the Queen's Group so he can turn to face her mid-talk.
+    this.swan = new Swan(world.pond, this.duck.group, deriveRng(seed, 'swan'))
     this.scene.add(this.swan.group)
 
     // Keep the camera/canvas correct when the window resizes.
@@ -202,11 +215,13 @@ export class Game {
     this.updateHatching(delta)
     this.updateMaturation()
     this.food.update(delta) // foraged/stolen plants slowly grow back
+    this.pond.update(delta)
     this.splashFx.update(delta)
     this.hud.update(delta)
     this.cameraRig.update(delta)
     this.handleNestBuild()
     this.handleNestSeat()
+    this.handleSwanDialogue()
 
     // Keep the HUD in sync (both only redraw on change).
     this.hud.setMode(this.duckController.getMode())
@@ -256,6 +271,49 @@ export class Game {
       this.hud.showMessage('🥚 A hen settles in')
     }
     this.wasSeatDown = down
+  }
+
+  /**
+   * Talking with the swan: when the Queen swims up to Aldermere, the HUD invites
+   * her to press F; pressing it opens a conversation and then steps through it a
+   * line at a time. Which script he gives depends on whether she's broken the Marsh
+   * Baron yet. Drifting away mid-talk lets him trail off. Like the other prompts, F
+   * only advertises itself when it'll do something.
+   */
+  private handleSwanDialogue(): void {
+    const pos = this.duck.group.position
+    const sp = this.swan.group.position
+    const dist = Math.hypot(sp.x - pos.x, sp.z - pos.z)
+
+    // Wandered off mid-conversation? The swan lets her go.
+    if (this.swan.isTalking && dist > SWAN_LEAVE_RANGE) {
+      this.swan.endDialogue()
+      this.hud.setDialogue(null)
+    }
+
+    const inRange = dist <= SWAN_TALK_RANGE
+    this.hud.setCanTalk(inRange && !this.swan.isTalking)
+
+    // One press = one action (edge-detected): open the talk, or advance / close it.
+    const down = this.input.isDown('KeyF')
+    if (down && !this.wasTalkDown) {
+      if (this.swan.isTalking) {
+        this.showDialoguePage(this.swan.advanceDialogue())
+      } else if (inRange) {
+        this.showDialoguePage(this.swan.beginDialogue(this.geese.baronDefeated))
+      }
+    }
+    this.wasTalkDown = down
+  }
+
+  /** Draw a dialogue page in the HUD, or hide the box when the talk is over (null). */
+  private showDialoguePage(page: { text: string; last: boolean } | null): void {
+    if (page === null) {
+      this.hud.setDialogue(null)
+      return
+    }
+    const hint = page.last ? 'Press F to leave' : 'Press F to continue  ▸'
+    this.hud.setDialogue(SWAN_NAME, page.text, hint)
   }
 
   /**
