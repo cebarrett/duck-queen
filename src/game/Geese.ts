@@ -39,9 +39,9 @@ const BOSS_OTHER_FILL = 0.005 // ducklings/hens barely move it — only the deep
 const BOSS_MAX_PASSIVE = 0.55 // cap the support so even a drake host must out-last a couple of his splits
 const BOSS_START_RESOLVE = 0.15 // only a small head start — he's a boss
 const BOSS_MIN_FOLLOWERS = 10 // "formidable": at least this many subjects...
-const BOSS_MIN_DRAKES = 8 // ...including this many drakes. The gate sits right at the win threshold:
-// fewer than 8 drakes and he just sneers (no fight, no penalty); at 8 it's a desperate nail-biter,
-// 9+ a cleaner win. So the only way to LOSE is to engage with a real host and then give up / get driven off.
+const BOSS_MIN_DRAKES = 5 // ...including this many drakes. Fewer than 5 and he just sneers;
+// at 5 it's a nail-biter, 6+ a cleaner win. So the only way to LOSE is to engage with a real
+// host and then give up / get driven off.
 const BOSS_SPLIT_INTERVAL = 6 // seconds between his splitting honks
 const BOSS_FIRST_SPLIT = 4 // the first split lands a few seconds in
 const BOSS_SPLIT_KNOCKBACK = 0.2 // each splitting honk knocks the resolve meter back this much
