@@ -60,6 +60,17 @@ const FORAGE_RADIUS = 5 // how far a follower will notice a plant and go for it
 const FORAGE_RATE = 0.7 // per second: chance to peel off for an in-range plant
 const FORAGE_SPEED = 3 // eager amble toward a snack (quicker than idle wander)
 
+// --- Holding home (when the Queen is away) ---------------------------------
+const HOLD_SPEED = 2.2 // purposeful but not chase-the-Queen fast
+const HOLD_RADIUS = 4.5 // how wide the local home milling circle is
+const HOLD_RETARGET_MIN = 1.5 // shortest time before choosing a fresh home job
+const HOLD_RETARGET_MAX = 3.5 // longest time before choosing a fresh home job
+const HOLD_FORAGE_RADIUS = 4 // home ducks only work plants close to their post
+const HOLD_FORAGE_RATE = 0.35 // per second: quieter than active following forage
+const GUARD_OFFSET = 2.2 // adults stand just off the nest instead of on top of it
+const HUDDLE_RADIUS = 7 // ducklings look this far for an adult to shelter near
+const HUDDLE_OFFSET = 1.2 // ducklings settle close to the adult they trust
+
 // --- Vocalising ------------------------------------------------------------
 const VOICE_RATE = 0.1 // per second: chance to make its call ("now and then")
 const SCATTER_VOICE_RATE = 0.65 // startled subjects complain much more often
@@ -81,22 +92,27 @@ const COLLIDE_RADIUS = 0.3 // footprint at BASE_SCALE — small, it's little
 const COLLIDE_HEIGHT = 0.7 // height at BASE_SCALE; canopies float well above (walk under)
 
 // A subject is always in exactly one of these.
-type SubjectState = 'pausing' | 'wandering' | 'following' | 'distracted' | 'foraging' | 'scattered' | 'nesting'
+type SubjectState = 'pausing' | 'wandering' | 'following' | 'distracted' | 'foraging' | 'scattered' | 'holding' | 'nesting'
 
 /** What a following subject needs to know about the world each frame: where the
- *  Queen is, and who its flockmates are (so it can avoid bunching up). */
+ *  Queen is, who its flockmates are, and where the flock's current home is. */
 export interface FlockContext {
   queenX: number
   queenZ: number
+  homeX: number
+  homeZ: number
+  nests: readonly Nest[]
   flock: DuckSubject[]
 }
 
 /**
  * One flock subject — a yellow duckling, or an adult drake / hen. They all behave
- * IDENTICALLY (this whole state machine is shared); the `kind` only swaps the model
- * (palette + size) and the voice. It wanders its home patch until the Queen quacks
- * nearby, then it `follow`s — seeking her with arrival (settling in a ring around
- * her) plus separation from its flockmates so the crowd spreads out.
+ * the same broad state machine, but kind nudges local jobs: adults can hold a
+ * nest, while ducklings huddle near grown ducks. It wanders its home patch until
+ * the Queen quacks nearby, then it `follow`s — seeking her with arrival (settling
+ * in a ring around her) plus separation from its flockmates so the crowd spreads
+ * out. If the Queen leaves it behind, it keeps its subjecthood and holds home
+ * instead of becoming an aimless lost duck.
  */
 export class DuckSubject {
   readonly group: THREE.Group
@@ -129,6 +145,7 @@ export class DuckSubject {
   private targetZ = 0
   private targetFood: FoodItem | null = null // the plant it's foraging toward
   private targetNest: Nest | null = null // the nest a hen is brooding on
+  private holdTimer = 0 // counts down to choosing a new local home job
   private layTimer = 0 // counts down to the next egg while she's sitting
   private sitting = false // has she actually settled onto the nest yet?
 
@@ -176,7 +193,18 @@ export class DuckSubject {
   /** Is it one of the Queen's — following, off foraging, briefly distracted, or
    *  scattered? (These all still count as subjects; it'll return.) */
   get isSubject(): boolean {
-    return this.state === 'following' || this.state === 'distracted' || this.state === 'foraging' || this.state === 'scattered'
+    return this.state === 'following' || this.state === 'distracted' || this.state === 'foraging' || this.state === 'scattered' || this.state === 'holding'
+  }
+
+  /** Holding ducks still belong to the Queendom, but they're tending home rather
+   *  than lending their voices to a honk-off at the Queen's side. */
+  get isHoldingHome(): boolean {
+    return this.state === 'holding'
+  }
+
+  /** Can this subject currently add its voice to the Queen's chorus? */
+  get supportsChorus(): boolean {
+    return this.isSubject && !this.isHoldingHome && !this.isScattered
   }
 
   /** Is she currently brooding on a nest? She's still the Queen's, but off-duty —
@@ -229,6 +257,13 @@ export class DuckSubject {
   scatterFrom(x: number, z: number): void {
     if (!this.isSubject) return
     this.scatterTo(x, z)
+  }
+
+  /** Is this adult posted close enough to help protect this nest? */
+  guardsNest(nest: Nest, radius: number): boolean {
+    if (this.kind === 'duckling' || !this.isHoldingHome) return false
+    const pos = this.group.position
+    return Math.hypot(pos.x - nest.x, pos.z - nest.z) <= radius
   }
 
   /** Fling this subject into a brief panic-skitter away from (x, z). */
@@ -302,6 +337,9 @@ export class DuckSubject {
         if (this.checkLost(ctx)) break
         this.beScattered(delta)
         break
+      case 'holding':
+        this.holdHome(delta, ctx)
+        break
       case 'nesting':
         this.brood(delta) // walk to the nest, settle, lay eggs — no checkLost
         break
@@ -328,8 +366,8 @@ export class DuckSubject {
     this.velX = vel.x
     this.velZ = vel.z
 
-    // Eat any plant we've come within reach of — followers only, for now.
-    if (this.state === 'following') {
+    // Eat any plant we've come within reach of while working near Queen or home.
+    if (this.state === 'following' || this.state === 'holding') {
       const plant = this.food.nearestUncollected(pos.x, pos.z, EAT_RADIUS)
       if (plant) this.food.collect(plant)
     }
@@ -415,13 +453,90 @@ export class DuckSubject {
   private checkLost(ctx: FlockContext): boolean {
     const pos = this.group.position
     if (Math.hypot(ctx.queenX - pos.x, ctx.queenZ - pos.z) > LOST_DISTANCE) {
-      this.homeX = pos.x // wander off from wherever it ended up
-      this.homeZ = pos.z
-      this.state = 'pausing'
-      this.timer = randRange(PAUSE_MIN, PAUSE_MAX)
+      this.startHolding(ctx)
       return true
     }
     return false
+  }
+
+  /** The Queen has gone far enough away that chasing her would turn the flock into
+   *  a leash. Keep the subject local: near nests, adults, and familiar water. */
+  private startHolding(ctx: FlockContext): void {
+    this.targetFood = null
+    this.state = 'holding'
+    this.holdTimer = 0
+    this.pickHoldTarget(ctx)
+  }
+
+  /** Hold the remembered home area: adults tend nests, ducklings huddle, and
+   *  everyone does short-range useful foraging instead of drifting away. */
+  private holdHome(delta: number, ctx: FlockContext): void {
+    this.holdTimer -= delta
+    if (Math.random() < HOLD_FORAGE_RATE * delta && this.tryForage(HOLD_FORAGE_RADIUS, true)) return
+    if (this.holdTimer <= 0) this.pickHoldTarget(ctx)
+
+    const s = seekArrive(this.group.position, this.targetX, this.targetZ, HOLD_SPEED, ARRIVE_RADIUS, ARRIVE_STOP)
+    if (s.arrived) this.holdTimer = Math.min(this.holdTimer, 0.5)
+    this.ease(s.vx, s.vz, delta)
+  }
+
+  /** Choose the next local job target. This stays intentionally simple: adults
+   *  orbit nests as guards, ducklings huddle near adults, everyone else mills home. */
+  private pickHoldTarget(ctx: FlockContext): void {
+    if (this.kind === 'duckling') {
+      const adult = this.nearestHoldingAdult(ctx)
+      if (adult) {
+        const p = pointAround(adult.group.position.x, adult.group.position.z, HUDDLE_OFFSET)
+        this.targetX = p.x
+        this.targetZ = p.z
+        this.holdTimer = randRange(HOLD_RETARGET_MIN, HOLD_RETARGET_MAX)
+        return
+      }
+    }
+
+    const nest = this.nearestNest(ctx)
+    if (this.kind !== 'duckling' && nest) {
+      const p = pointAround(nest.x, nest.z, GUARD_OFFSET)
+      this.targetX = p.x
+      this.targetZ = p.z
+      this.holdTimer = randRange(HOLD_RETARGET_MIN, HOLD_RETARGET_MAX)
+      return
+    }
+
+    const p = pointAround(ctx.homeX, ctx.homeZ, HOLD_RADIUS)
+    this.targetX = p.x
+    this.targetZ = p.z
+    this.holdTimer = randRange(HOLD_RETARGET_MIN, HOLD_RETARGET_MAX)
+  }
+
+  private nearestHoldingAdult(ctx: FlockContext): DuckSubject | null {
+    const pos = this.group.position
+    let best: DuckSubject | null = null
+    let bestSq = HUDDLE_RADIUS * HUDDLE_RADIUS
+    for (const other of ctx.flock) {
+      if (other === this || other.kind === 'duckling' || !other.isSubject || other.isNesting) continue
+      const dSq = (other.group.position.x - pos.x) ** 2 + (other.group.position.z - pos.z) ** 2
+      if (dSq < bestSq) {
+        bestSq = dSq
+        best = other
+      }
+    }
+    return best
+  }
+
+  private nearestNest(ctx: FlockContext): Nest | null {
+    const pos = this.group.position
+    let best: Nest | null = null
+    let bestSq = Infinity
+    for (const nest of ctx.nests) {
+      const occupiedBias = nest.occupied ? -4 : 0 // occupied nests pull adults first
+      const dSq = (nest.x - pos.x) ** 2 + (nest.z - pos.z) ** 2 + occupiedBias
+      if (dSq < bestSq) {
+        bestSq = dSq
+        best = nest
+      }
+    }
+    return best
   }
 
   /** Pick a nearby spot to be nosy about, and a short timer; then amble there. */
@@ -484,12 +599,17 @@ export class DuckSubject {
 
   /** Look for a plant within FORAGE_RADIUS; if there's one, target it and switch
    *  to foraging. Returns whether it's now off to forage. */
-  private tryForage(): boolean {
+  private tryForage(radius = FORAGE_RADIUS, holdAfter = false): boolean {
     const pos = this.group.position
-    const plant = this.food.nearestUncollected(pos.x, pos.z, FORAGE_RADIUS)
+    const plant = this.food.nearestUncollected(pos.x, pos.z, radius)
     if (!plant) return false
     this.targetFood = plant
-    this.state = 'foraging'
+    this.state = holdAfter ? 'holding' : 'foraging'
+    if (holdAfter) {
+      this.targetX = plant.x
+      this.targetZ = plant.z
+      this.holdTimer = HOLD_RETARGET_MAX
+    }
     return true
   }
 

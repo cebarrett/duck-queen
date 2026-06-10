@@ -63,6 +63,9 @@ work, so you don't have to memorize them.
   **seat a hen** on it (**E**). She'll settle in and lay eggs over time. An egg
   hatches into a duckling only once you've foraged **5 food** to feed it — and
   hatching spends that food, so keep your ducklings gathering.
+- **Leave the flock with duties.** If the Queen travels too far, her subjects
+  hold the home pond instead of wandering off: adults post near nests, ducklings
+  huddle close, and nearby food still gets foraged.
 - **Defend your nests.** Geese actively hunt brooding hens — if one reaches a
   nest it scares the hen off and steals an egg. Keep geese honked away (a beaten
   goose stays cowed) so your hens can brood in peace.

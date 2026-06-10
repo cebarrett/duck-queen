@@ -243,7 +243,7 @@ export class Geese {
     goose.startPosturing()
     // Head start from the flock — a crowd at your back is intimidating; alone she
     // starts low and the goose quickly drains her.
-    const baseResolve = Math.min(0.55, 0.22 + this.flock.subjectCount * 0.05)
+    const baseResolve = Math.min(0.55, 0.22 + this.flock.chorus.size * 0.05)
     this.resolve = Math.max(0.05, baseResolve - this.resolvePenalty())
     this.wasQuackDown = this.input.isDown('KeyQ') // don't count an already-held Q
     this.onHonkOff(true, this.resolve)
@@ -319,13 +319,14 @@ export class Geese {
   }
 
   private isFlockFormidable(): boolean {
-    return this.flock.subjectCount >= BOSS_MIN_FOLLOWERS && this.flock.subjectBreakdown.males >= BOSS_MIN_DRAKES
+    const { drakes, others } = this.flock.calmCounts()
+    return drakes + others >= BOSS_MIN_FOLLOWERS && drakes >= BOSS_MIN_DRAKES
   }
 
   private gateHint(): string {
-    const drakes = this.flock.subjectBreakdown.males
+    const { drakes, others } = this.flock.calmCounts()
     if (drakes < BOSS_MIN_DRAKES) return `🪿 The Baron sneers — bring more drakes (${drakes}/${BOSS_MIN_DRAKES})`
-    return `🪿 The Baron sneers — bring a bigger flock (${this.flock.subjectCount}/${BOSS_MIN_FOLLOWERS})`
+    return `🪿 The Baron sneers — bring a bigger flock (${drakes + others}/${BOSS_MIN_FOLLOWERS})`
   }
 
   private startBossFight(): void {

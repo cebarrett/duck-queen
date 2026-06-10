@@ -5,6 +5,7 @@ import type { Input } from './Input'
 import type { Sound } from './Sound'
 import type { Pond } from './Water'
 import type { Food } from './Food'
+import type { Nest, Nests } from './Nests'
 import type { Collider } from './collision'
 import type { Rng } from './rng'
 
@@ -17,6 +18,7 @@ const COMPOSITION: SubjectKind[] = [
 ]
 const QUACK_RANGE = 12 // a quack recruits idle ducks within this distance
 const SCATTER_RANGE = 10 // subjects this close to conflict briefly scatter
+const GUARD_RADIUS = 4.5 // adults holding this close to a nest slow a raid
 // How many subjects the Queen may lead at once — for now, until she bests the
 // Marsh Baron and proves her leadership, which lifts the cap (see liftFollowerCap).
 // It sits right at the boss gate (BOSS_MIN_FOLLOWERS), so a full flock is exactly
@@ -43,6 +45,7 @@ export class Flock {
     private readonly sound: Sound,
     private readonly pond: Pond,
     private readonly food: Food,
+    private readonly nests: Nests,
     private readonly colliders: readonly Collider[],
     private readonly onMessage: OnMessage,
     rng: Rng,
@@ -109,9 +112,17 @@ export class Flock {
    *  many of the three voices (duckling / drake / hen) are represented. A full
    *  3-voice chorus out-honks a same-size flock of a single kind. */
   get chorus(): { size: number; layers: number } {
-    const b = this.subjectBreakdown
-    const size = b.ducklings + b.males + b.females
-    const layers = (b.ducklings > 0 ? 1 : 0) + (b.males > 0 ? 1 : 0) + (b.females > 0 ? 1 : 0)
+    let ducklings = 0
+    let males = 0
+    let females = 0
+    for (const d of this.members) {
+      if (!d.supportsChorus) continue
+      if (d.kind === 'duckling') ducklings++
+      else if (d.kind === 'drake') males++
+      else females++
+    }
+    const size = ducklings + males + females
+    const layers = (ducklings > 0 ? 1 : 0) + (males > 0 ? 1 : 0) + (females > 0 ? 1 : 0)
     return { size, layers }
   }
 
@@ -126,7 +137,7 @@ export class Flock {
     let drakes = 0
     let others = 0
     for (const m of this.members) {
-      if (!m.isSubject || m.isScattered || m.isNesting) continue
+      if (!m.supportsChorus || m.isNesting) continue
       if (m.kind === 'drake') drakes++
       else others++
     }
@@ -139,7 +150,7 @@ export class Flock {
   splitNonDrakes(x: number, z: number): number {
     let n = 0
     for (const m of this.members) {
-      if (m.kind !== 'drake' && m.isSubject && !m.isScattered && !m.isNesting) {
+      if (m.kind !== 'drake' && m.supportsChorus && !m.isNesting) {
         m.scatterFrom(x, z)
         n++
       }
@@ -226,14 +237,27 @@ export class Flock {
     return subjects === 0 ? 1 : nearby / subjects
   }
 
+  /** Adults posted near a nest buy the brooding hen more time before a goose can
+   *  scare her off. This is a first-pass guard job: presence and alarm, not combat. */
+  guardCoverage(nest: Nest): number {
+    let n = 0
+    for (const d of this.members) if (d.guardsNest(nest, GUARD_RADIUS)) n++
+    return n
+  }
+
   update(delta: number): void {
     this.handleQuack()
 
     // The shared context each follower needs: where the Queen is + who the
-    // flockmates are (for separation).
+    // flockmates are (for separation), plus the home/nest memory used when the
+    // Queen leaves them to hold the pond.
+    const home = this.homeAnchor()
     const ctx: FlockContext = {
       queenX: this.queen.position.x,
       queenZ: this.queen.position.z,
+      homeX: home.x,
+      homeZ: home.z,
+      nests: this.nests.all,
       flock: this.members,
     }
     for (const subject of this.members) {
@@ -267,5 +291,42 @@ export class Flock {
       }
     }
     this.wasQuackDown = down
+  }
+
+  private homeAnchor(): { x: number; z: number } {
+    const anchor = this.flockAnchorPoint()
+    const occupied = this.nearestNestTo(anchor.x, anchor.z, true)
+    if (occupied) return { x: occupied.x, z: occupied.z }
+    const nest = this.nearestNestTo(anchor.x, anchor.z, null)
+    if (nest) return { x: nest.x, z: nest.z }
+    return { x: this.pond.centerX, z: this.pond.centerZ }
+  }
+
+  private flockAnchorPoint(): { x: number; z: number } {
+    let x = 0
+    let z = 0
+    let n = 0
+    for (const d of this.members) {
+      if (!d.isSubject) continue
+      x += d.group.position.x
+      z += d.group.position.z
+      n++
+    }
+    if (n === 0) return { x: this.queen.position.x, z: this.queen.position.z }
+    return { x: x / n, z: z / n }
+  }
+
+  private nearestNestTo(x: number, z: number, occupied: boolean | null): Nest | null {
+    let best: Nest | null = null
+    let bestSq = Infinity
+    for (const nest of this.nests.all) {
+      if (occupied !== null && nest.occupied !== occupied) continue
+      const dSq = (nest.x - x) ** 2 + (nest.z - z) ** 2
+      if (dSq < bestSq) {
+        bestSq = dSq
+        best = nest
+      }
+    }
+    return best
   }
 }

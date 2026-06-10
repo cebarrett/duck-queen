@@ -149,7 +149,7 @@ export class Game {
 
     // The duck subjects. The Flock spawns and updates them; it needs Input (to
     // hear the Queen's quack) and the Queen's Group (to know where she is).
-    this.flock = new Flock(this.scene, this.input, this.duck.group, this.sound, world.pond, this.food, world.colliders, (text) => this.hud.showMessage(text), deriveRng(seed, 'flock'))
+    this.flock = new Flock(this.scene, this.input, this.duck.group, this.sound, world.pond, this.food, this.nests, world.colliders, (text) => this.hud.showMessage(text), deriveRng(seed, 'flock'))
 
     // The rival geese — they wander, honk, forage your plants, and face off with
     // the Queen in honk-offs (which read Input + flock size, and drive the HUD meter).
@@ -358,10 +358,14 @@ export class Game {
       if (!goose || goose.dist > SCARE_RANGE) continue
 
       const nest = hen.nest
+      const guards = nest ? this.flock.guardCoverage(nest) : 0
+      const scareRange = Math.max(1.6, SCARE_RANGE - guards * 1.1)
+      if (goose.dist > scareRange) continue
+
       hen.spookFromNest(goose.x, goose.z)
       if (nest && nest.takeEgg()) {
         this.sound.honk() // the goose honks, triumphant
-        this.hud.showMessage('🪿 A goose raided the nest!')
+        this.hud.showMessage(guards > 0 ? '🪿 The guard ducks delayed a raid, but the goose broke through!' : '🪿 A goose raided the nest!')
       }
     }
   }
