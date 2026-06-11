@@ -62,7 +62,6 @@ export class HUD {
   private nests = 0
   private canBuildNest = false
   private canSeatHen = false
-  private canTalk = false
   private resolveShaken = false
 
   // A centred banner + meter shown only during a honk-off (or boss fight).
@@ -70,6 +69,7 @@ export class HUD {
   private readonly honkLabel: HTMLElement
   private readonly honkFill: HTMLElement
   private readonly messageBanner: HTMLElement
+  private readonly talkPrompt: HTMLElement
   private messageTimer = 0
 
   // A bottom-centre dialogue box, shown only while talking with an NPC (the swan).
@@ -132,6 +132,16 @@ export class HUD {
     document.body.appendChild(message)
     this.messageBanner = message
 
+    const talkPrompt = document.createElement('div')
+    talkPrompt.textContent = '🦢 Press F to talk to the swan'
+    talkPrompt.style.cssText =
+      'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);' +
+      'color:#fff;font-size:26px;font-weight:800;text-align:center;' +
+      'text-shadow:0 2px 5px rgba(0,0,0,.75);' +
+      'pointer-events:none;user-select:none;display:none;'
+    document.body.appendChild(talkPrompt)
+    this.talkPrompt = talkPrompt
+
     // The dialogue box: a wide, calm panel near the bottom. Built in code (like the
     // honk banner) and hidden until a conversation opens.
     const dialogue = document.createElement('div')
@@ -171,8 +181,7 @@ export class HUD {
 
   /** Whether the Queen is close enough to strike up a conversation — drives the F prompt. */
   setCanTalk(canTalk: boolean): void {
-    this.canTalk = canTalk
-    this.render()
+    this.talkPrompt.style.display = canTalk ? 'block' : 'none'
   }
 
   /** Show/hide the honk-off banner and set the resolve meter (0..1). `label` and
@@ -262,7 +271,6 @@ export class HUD {
     // control advertises itself exactly when it'll do something.
     if (this.canBuildNest) line1 += '   ·   🪺 Press B to build a nest!'
     if (this.canSeatHen) line1 += '   ·   🥚 Press E to seat a hen'
-    if (this.canTalk) line1 += '   ·   🦢 Press F to speak with the swan'
 
     const shaken = this.resolveShaken ? '   Resolve shaken' : ''
     const s = this.subjects
