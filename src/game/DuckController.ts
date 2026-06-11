@@ -5,6 +5,7 @@ import type { Duck } from './Duck'
 import { type Collider, resolveWalls, floorHeightAt } from './collision'
 import type { Pond } from './Water'
 import type { Reeds } from './Reeds'
+import type { Food } from './Food'
 import { faceHeading } from './mathUtils'
 
 // The ways the Queen gets around. Exported so the HUD can label it.
@@ -63,6 +64,7 @@ const STEP_UP = 0.6 // surfaces within this height of her feet are floors she ca
 //                     stand on / step up onto; taller ones act as solid walls
 const GROUND_EPS = 0.05 // how far above her floor counts as "in the air"
 const REED_REACH = 1.3 // how close the Queen must be to gather a reed
+const FOOD_REACH = 1.0 // how close the Queen must be to gather food
 
 /**
  * DuckController moves the Queen in one of three modes, chosen by her situation:
@@ -105,6 +107,8 @@ export class DuckController {
     private readonly pond: Pond,
     // Reeds only the Queen can gather (the ducklings never touch these).
     private readonly reeds: Reeds,
+    // Food can be gathered by either the Queen or her subjects.
+    private readonly food: Food,
     // Called when she breaks the water surface (x, z, strength) so Game can play
     // the splash sound + ripple. The controller decides WHEN; Game decides WHAT.
     private readonly onSplash: (x: number, z: number, strength: number) => void,
@@ -195,12 +199,13 @@ export class DuckController {
       : floorHeightAt(pos.x, pos.z, this.altitude, DUCK_RADIUS, STEP_UP, this.colliders)
     this.updateAltitude(delta)
 
-    // --- The Queen gathers reeds she comes within reach of, on foot or while
-    //     swimming (not from the air). Ducklings never gather reeds — this lives
-    //     on the Queen's controller alone.
+    // --- The Queen gathers nearby resources on foot or while swimming (not from
+    //     the air). Ducklings never gather reeds; food is shared with subjects.
     if (this.mode !== 'fly') {
       const reed = this.reeds.nearestUncollected(pos.x, pos.z, REED_REACH)
       if (reed) this.reeds.collect(reed)
+      const food = this.food.nearestUncollected(pos.x, pos.z, FOOD_REACH)
+      if (food) this.food.collect(food)
     }
 
     // --- Splash when she breaks the surface (landing from air, or taking off) -

@@ -66,8 +66,14 @@ const BOLD_TIME = 12 // after winning a honk-off, it struts and steals harder
 const BOLD_TRIGGER_SCALE = 1.25 // Geese can use this to slightly widen trigger range
 
 // --- Defeat / routing (the Queen won the honk-off) -------------------------
-const FLEE_SPEED = 5 // it bolts away fast
-const FLEE_DISTANCE = 25 // how far it runs
+const FLEE_SPEED = 8 // it bolts away fast
+const FLEE_DISTANCE = 32 // how far it flees
+const FLEE_ALTITUDE = 7 // peak height of the panic flight arc
+const FLEE_FLAP_SPEED = 18 // frantic wingbeats while routed
+const FLEE_WING_REST = 0.75 // baseline wing spread in flight
+const FLEE_WING_FLAP = 0.45 // extra up/down flap amplitude
+const FLEE_BANK = 0.16 // anxious side roll while airborne
+const FLEE_NECK_LIFT = -0.2 // head up and away from the Queen
 const COWED_TIME = 12 // after being beaten: won't forage or raid for this long
 const ROUT_RECHALLENGE = 2 // ...but she can re-challenge it this soon — press the rout to herd it farther
 const ROUT_NEST_RANGE = RAID_RADIUS // if a nest is within this when it's beaten, it flees away from the NEST too
@@ -117,6 +123,9 @@ export class Goose {
   private targetZ = 0
   private targetFood: FoodItem | null = null // the plant it's stealing toward
   private targetNest: Nest | null = null // the brooding hen's nest it's stalking
+  private fleeStartX = 0
+  private fleeStartZ = 0
+  private fleeDistance = 1
 
   // Its own honk pitch, so a gaggle sounds like distinct birds. Seeded (ctor).
   private readonly honkPitch: number
@@ -246,8 +255,11 @@ export class Goose {
         dx /= bd
         dz /= bd
       }
+      this.fleeStartX = pos.x
+      this.fleeStartZ = pos.z
       this.targetX = pos.x + dx * FLEE_DISTANCE
       this.targetZ = pos.z + dz * FLEE_DISTANCE
+      this.fleeDistance = Math.max(1, Math.hypot(this.targetX - this.fleeStartX, this.targetZ - this.fleeStartZ))
       this.homeX = this.targetX // claim new ground out here — don't drift back to the nest
       this.homeZ = this.targetZ
       this.state = 'fleeing'
@@ -327,10 +339,14 @@ export class Goose {
     pos.z += this.velZ * delta
 
     // Push out of any tree/rock it walked into (stepUp 0 = it doesn't climb).
-    const vel = { x: this.velX, z: this.velZ }
-    resolveWalls(pos, vel, this.collideRadius, 0, this.collideHeight, 0, this.colliders)
-    this.velX = vel.x
-    this.velZ = vel.z
+    // Routed geese are airborne, so they clear obstacles instead of shuffling
+    // around them on the ground.
+    if (this.state !== 'fleeing') {
+      const vel = { x: this.velX, z: this.velZ }
+      resolveWalls(pos, vel, this.collideRadius, 0, this.collideHeight, 0, this.colliders)
+      this.velX = vel.x
+      this.velZ = vel.z
+    }
 
     // Face travel direction.
     const speed = Math.hypot(this.velX, this.velZ)
@@ -342,6 +358,11 @@ export class Goose {
   /** Float on the pond, stride deliberately on land, or — when standing — fidget. */
   private applyPose(delta: number, speed: number): void {
     const pos = this.group.position
+
+    if (this.state === 'fleeing') {
+      this.flyPose(delta)
+      return
+    }
 
     // Over the pond it swims: it floats at the waterline instead of walking on it.
     if (this.pond.isWater(pos.x, pos.z)) {
@@ -394,6 +415,24 @@ export class Goose {
     this.neck.rotation.set(0, 0, 0)
     this.leftWing.rotation.z = 0
     this.rightWing.rotation.z = 0
+  }
+
+  /** Routed geese panic into the air: a fast shallow arc away from the Queen,
+   *  with frantic wingbeats and a little unstable banking. */
+  private flyPose(delta: number): void {
+    const pos = this.group.position
+    this.idleAction = 'none'
+    this.walkPhase += delta * FLEE_FLAP_SPEED
+
+    const traveled = Math.hypot(pos.x - this.fleeStartX, pos.z - this.fleeStartZ)
+    const progress = Math.min(1, traveled / this.fleeDistance)
+    pos.y = Math.sin(progress * Math.PI) * FLEE_ALTITUDE
+    this.group.rotation.z = Math.sin(this.walkPhase * 0.45) * FLEE_BANK
+    this.neck.rotation.set(FLEE_NECK_LIFT, 0, 0)
+
+    const flap = FLEE_WING_REST + Math.sin(this.walkPhase) * FLEE_WING_FLAP
+    this.leftWing.rotation.z = -flap
+    this.rightWing.rotation.z = flap
   }
 
   /** Stand around, occasionally flapping, looking about, or pecking the ground. */
@@ -485,6 +524,10 @@ export class Goose {
     // arriveRadius 0 = a flat-out bolt, no easing down as it nears the escape point.
     const s = seekArrive(this.group.position, this.targetX, this.targetZ, FLEE_SPEED, 0, ARRIVE_STOP)
     if (s.arrived) {
+      this.velX = 0
+      this.velZ = 0
+      this.group.position.y = this.pond.isWater(this.group.position.x, this.group.position.z) ? SWIM_FLOAT_Y : 0
+      this.group.rotation.z = 0
       this.state = 'pausing'
       this.timer = randRange(PAUSE_MIN, PAUSE_MAX)
       return

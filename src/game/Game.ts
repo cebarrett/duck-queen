@@ -141,6 +141,7 @@ export class Game {
       world.colliders,
       world.pond,
       this.reeds,
+      this.food,
       (x, z, strength) => {
         this.sound.splash(strength)
         this.splashFx.spawn(x, z, strength)
