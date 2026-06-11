@@ -209,7 +209,7 @@ export class Game {
 
     // Move the duck first, then let the camera follow her new position.
     this.duckController.update(delta)
-    this.flock.update(delta)
+    this.flock.update(delta, this.duckController.getMode())
     this.updateResolveShaken(delta)
     this.geese.update(delta)
     this.swan.update(delta)

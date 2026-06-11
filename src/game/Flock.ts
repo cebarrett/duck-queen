@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { DuckSubject, type FlockContext } from './DuckSubject'
+import type { DuckMode } from './DuckController'
 import type { SubjectKind } from './subjectKinds'
 import type { Input } from './Input'
 import type { Sound } from './Sound'
@@ -266,7 +267,7 @@ export class Flock {
     return n
   }
 
-  update(delta: number): void {
+  update(delta: number, queenMode: DuckMode): void {
     this.handleQuack()
 
     // The shared context each follower needs: where the Queen is + who the
@@ -276,6 +277,7 @@ export class Flock {
     const ctx: FlockContext = {
       queenX: this.queen.position.x,
       queenZ: this.queen.position.z,
+      queenMode,
       homeX: home.x,
       homeZ: home.z,
       nests: this.nests.all,

@@ -4,6 +4,7 @@ import { type SubjectKind, SUBJECT_KINDS } from './subjectKinds'
 import { randRange, seekArrive, pointAround, faceHeading, easeFactor } from './mathUtils'
 import { type Collider, resolveWalls } from './collision'
 import type { Pond } from './Water'
+import type { DuckMode } from './DuckController'
 import type { Food, FoodItem } from './Food'
 import type { Nest } from './Nests'
 import type { Sound } from './Sound'
@@ -33,6 +34,7 @@ const DISTRACT_MAX = 3.5 // longest distraction
 const DISTRACT_NEAR = 2 // nearest a distraction spot can be
 const DISTRACT_FAR = 4 // farthest a distraction spot can be
 const LOST_DISTANCE = 18 // a subject stranded past this from the Queen gives up
+const FLIGHT_HOLD_DISTANCE = 6 // if the Queen flies off, stop chasing and hold home sooner
 const SCATTER_NEAR = 3 // closest a startled subject's target can be to trouble
 const SCATTER_FAR = 6 // farthest a startled subject's target can be to trouble
 const SCATTER_MIN = 2.5 // shortest time before a scattered duck regroups
@@ -106,6 +108,7 @@ type SubjectState = 'pausing' | 'wandering' | 'following' | 'distracted' | 'fora
 export interface FlockContext {
   queenX: number
   queenZ: number
+  queenMode: DuckMode
   homeX: number
   homeZ: number
   nests: readonly Nest[]
@@ -477,7 +480,9 @@ export class DuckSubject {
    *  wanderer again (no longer a subject). Returns true if it just got lost. */
   private checkLost(ctx: FlockContext): boolean {
     const pos = this.group.position
-    if (Math.hypot(ctx.queenX - pos.x, ctx.queenZ - pos.z) > LOST_DISTANCE) {
+    const distance = Math.hypot(ctx.queenX - pos.x, ctx.queenZ - pos.z)
+    const holdDistance = ctx.queenMode === 'fly' ? FLIGHT_HOLD_DISTANCE : LOST_DISTANCE
+    if (distance > holdDistance) {
       this.startHolding(ctx)
       return true
     }
