@@ -19,7 +19,7 @@ const WADDLE_ROLL = 0.15 // how far she tilts side-to-side (radians)
 const LAND_SPEED = 4 // how fast she sinks back to the ground after flying
 
 // --- Fly tuning: heavier (more glide/inertia) but still settles ------------
-const FLY_SPEED = 7 // top horizontal fly speed
+const FLY_SPEED = 8.2 // top horizontal fly speed
 const FLY_RISE_SPEED = 5 // upward speed while holding Space
 const FLY_FALL_SPEED = 3 // gentle downward drift when Space is released
 const FLY_RESPONSIVENESS = 3 // lower than waddle => more inertia, less floaty-twitchy
@@ -38,7 +38,7 @@ const SPLASH_MIN_SPEED = 0.8 // ignore gentle settling; only splash on a real im
 const TAKEOFF_SPLASH = 2 // splash strength when launching off the water
 
 // --- Wing flap (fly only) --------------------------------------------------
-const FLAP_SPEED = 14 // how fast the phase advances (radians/sec)
+const FLAP_SPEED = 18 // how fast the phase advances (radians/sec)
 const FLAP_AMPLITUDE = 0.5 // half the up/down swing (radians)
 const FLAP_REST = 0.9 // wings sit spread out this far while flying (radians)
 const FLAP_EASE = 10 // how fast flapping ramps up/down as Space is held/released
