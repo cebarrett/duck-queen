@@ -14,7 +14,7 @@ import { Reeds } from './Reeds'
 import { Sound } from './Sound'
 import { Splash } from './Splash'
 import { Nests } from './Nests'
-import { HUD } from './HUD'
+import { HUD, type MinimapSnapshot } from './HUD'
 import { deriveRng } from './rng'
 
 // The default world seed. A given seed always generates the same layout; pass
@@ -230,8 +230,29 @@ export class Game {
     this.hud.setFood(this.food.total)
     this.hud.setReeds(this.reeds.total)
     this.hud.setNests(this.nests.count)
+    this.updateMinimap()
 
     this.renderer.render(this.scene, this.camera)
+  }
+
+  private updateMinimap(): void {
+    const q = this.duck.group.position
+    const snapshot: MinimapSnapshot = {
+      queen: { x: q.x, z: q.z, heading: this.duck.group.rotation.y },
+      ponds: this.pond.patches,
+      food: this.food.available,
+      reeds: this.reeds.available,
+      allies: this.flock.minimapAllies,
+      enemies: this.geese.minimapEnemies,
+      neutrals: [{ x: this.swan.group.position.x, z: this.swan.group.position.z }],
+      nests: this.nests.all.map((nest) => ({
+        x: nest.x,
+        z: nest.z,
+        occupied: nest.occupied,
+        eggs: nest.eggs,
+      })),
+    }
+    this.hud.setMinimap(snapshot)
   }
 
   /**

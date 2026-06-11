@@ -68,6 +68,13 @@ type OnQueenLost = (gooseX: number, gooseZ: number, queenX: number, queenZ: numb
 type ResolvePenalty = () => number
 type OnMessage = (text: string) => void
 
+export interface EnemyMarker {
+  x: number
+  z: number
+  boss: boolean
+  defeated: boolean
+}
+
 /**
  * Geese owns the rival geese and runs the honk-off — the non-violent standoff.
  * When the Queen gets close to a goose, both square up; the player mashes Q to
@@ -168,6 +175,31 @@ export class Geese {
    *  react to the turning point in the war. */
   get baronDefeated(): boolean {
     return this.bossDefeated
+  }
+
+  /** Compact enemy positions for HUD/minimap rendering. Bosses stay visible so
+   *  the player can understand the territory even before engaging them. */
+  get minimapEnemies(): EnemyMarker[] {
+    return [
+      ...this.geese.map((goose) => ({
+        x: goose.group.position.x,
+        z: goose.group.position.z,
+        boss: false,
+        defeated: false,
+      })),
+      {
+        x: this.baron.group.position.x,
+        z: this.baron.group.position.z,
+        boss: true,
+        defeated: this.bossDefeated,
+      },
+      {
+        x: this.treatyBoss.group.position.x,
+        z: this.treatyBoss.group.position.z,
+        boss: true,
+        defeated: this.treatyDefeated,
+      },
+    ]
   }
 
   /** The nearest goose to (x, z) with its position + distance, or null if there

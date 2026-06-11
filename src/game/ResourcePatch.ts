@@ -32,6 +32,12 @@ export class ResourcePatch {
     return this.count
   }
 
+  /** Current uncollected items for UI/AI that needs to know what remains in the
+   *  world without being allowed to mutate the patch. */
+  get available(): readonly Collectible[] {
+    return this.items.filter((item) => !item.collected)
+  }
+
   /** Spend `n` of what we've gathered (e.g. reeds to build a nest). Returns
    *  whether we could afford it; on success the total drops by `n`. */
   spend(n: number): boolean {

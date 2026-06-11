@@ -1,5 +1,47 @@
 import type { DuckMode } from './DuckController'
 
+interface MinimapPoint {
+  x: number
+  z: number
+}
+
+interface MinimapCircle extends MinimapPoint {
+  radius: number
+}
+
+interface MinimapAlly extends MinimapPoint {
+  kind: 'duckling' | 'drake' | 'hen'
+  subject: boolean
+  nesting: boolean
+  holding: boolean
+}
+
+interface MinimapEnemy extends MinimapPoint {
+  boss: boolean
+  defeated: boolean
+}
+
+interface MinimapNest extends MinimapPoint {
+  occupied: boolean
+  eggs: number
+}
+
+export interface MinimapSnapshot {
+  queen: MinimapPoint & { heading: number }
+  ponds: readonly MinimapCircle[]
+  food: readonly MinimapPoint[]
+  reeds: readonly MinimapPoint[]
+  allies: readonly MinimapAlly[]
+  enemies: readonly MinimapEnemy[]
+  neutrals: readonly MinimapPoint[]
+  nests: readonly MinimapNest[]
+}
+
+const MAP_SIZE = 282
+const MAP_RANGE = 105 // world units from centre to edge
+const MAP_BG = 'rgba(92, 132, 58, 0.86)'
+const MAP_EDGE = 'rgba(244, 248, 251, 0.72)'
+
 /**
  * HUD owns the on-screen overlay text (the #hud div from index.html). It shows
  * the current movement mode + controls on one line and the subject count on a
@@ -9,6 +51,8 @@ import type { DuckMode } from './DuckController'
 export class HUD {
   private readonly element: HTMLElement
   private lastHtml = '' // remember what we drew so we only touch the DOM on change
+  private readonly minimapCanvas: HTMLCanvasElement
+  private readonly minimapCtx: CanvasRenderingContext2D
 
   // We store the pieces and re-render whenever any of them changes.
   private mode: DuckMode = 'waddle'
@@ -39,6 +83,22 @@ export class HUD {
     // A clear error beats a silent no-op if the HTML and code drift apart.
     if (!el) throw new Error('HUD: #hud element not found in index.html')
     this.element = el
+
+    const minimapWrap = document.createElement('div')
+    minimapWrap.style.cssText =
+      'position:fixed;top:12px;right:14px;width:282px;height:282px;' +
+      'border:2px solid rgba(255,255,255,.72);border-radius:8px;overflow:hidden;' +
+      'background:rgba(92,132,58,.86);box-shadow:0 2px 8px rgba(0,0,0,.35);' +
+      'pointer-events:none;user-select:none;'
+    const minimap = document.createElement('canvas')
+    minimap.style.cssText = 'display:block;width:100%;height:100%;'
+    minimapWrap.appendChild(minimap)
+    document.body.appendChild(minimapWrap)
+    this.minimapCanvas = minimap
+    const ctx = minimap.getContext('2d')
+    if (!ctx) throw new Error('HUD: minimap canvas context not available')
+    this.minimapCtx = ctx
+    this.resizeMinimap()
 
     // Build the honk-off banner in code (it's not in index.html). Centred,
     // hidden until a honk-off starts.
@@ -146,6 +206,11 @@ export class HUD {
     }
   }
 
+  setMinimap(snapshot: MinimapSnapshot): void {
+    this.resizeMinimap()
+    this.drawMinimap(snapshot)
+  }
+
   setMode(mode: DuckMode): void {
     this.mode = mode
     this.render()
@@ -218,5 +283,181 @@ export class HUD {
       this.element.innerHTML = html
       this.lastHtml = html
     }
+  }
+
+  private resizeMinimap(): void {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2)
+    const w = Math.round(MAP_SIZE * dpr)
+    if (this.minimapCanvas.width === w && this.minimapCanvas.height === w) return
+    this.minimapCanvas.width = w
+    this.minimapCanvas.height = w
+    this.minimapCtx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  }
+
+  private drawMinimap(snapshot: MinimapSnapshot): void {
+    const ctx = this.minimapCtx
+    const size = MAP_SIZE
+    const mid = size / 2
+    const scale = mid / MAP_RANGE
+    const toMap = (p: MinimapPoint, clamp = false): { x: number; y: number; edge: boolean } => {
+      const rawX = mid + (p.x - snapshot.queen.x) * scale
+      const rawY = mid + (p.z - snapshot.queen.z) * scale
+      if (!clamp) return { x: rawX, y: rawY, edge: rawX < 0 || rawX > size || rawY < 0 || rawY > size }
+      const pad = 8
+      return {
+        x: Math.max(pad, Math.min(size - pad, rawX)),
+        y: Math.max(pad, Math.min(size - pad, rawY)),
+        edge: rawX < pad || rawX > size - pad || rawY < pad || rawY > size - pad,
+      }
+    }
+
+    ctx.clearRect(0, 0, size, size)
+    ctx.fillStyle = MAP_BG
+    ctx.fillRect(0, 0, size, size)
+    this.drawMapGrid(ctx, size, mid)
+
+    for (const pond of snapshot.ponds) {
+      const p = toMap(pond)
+      const r = pond.radius * scale
+      if (p.x + r < 0 || p.x - r > size || p.y + r < 0 || p.y - r > size) continue
+      ctx.beginPath()
+      ctx.arc(p.x, p.y, Math.max(2, r), 0, Math.PI * 2)
+      ctx.fillStyle = 'rgba(70, 155, 226, 0.58)'
+      ctx.fill()
+      ctx.strokeStyle = 'rgba(184, 225, 255, 0.82)'
+      ctx.lineWidth = 1
+      ctx.stroke()
+    }
+
+    this.drawPoints(ctx, snapshot.food, toMap, '#72d84d', 1.9)
+    this.drawPoints(ctx, snapshot.reeds, toMap, '#d3c15b', 2.0)
+
+    for (const nest of snapshot.nests) {
+      const p = toMap(nest, true)
+      this.drawDiamond(ctx, p.x, p.y, nest.occupied ? '#f6d17b' : '#c79858', nest.eggs > 0 ? 4.5 : 3.4, p.edge ? 0.55 : 1)
+    }
+
+    for (const ally of snapshot.allies) {
+      const p = toMap(ally, true)
+      const color = ally.nesting ? '#f6d17b' : ally.holding ? '#79d5a3' : ally.subject ? '#ffd84a' : '#fff1a8'
+      const radius = ally.kind === 'duckling' ? 2.3 : 3.1
+      this.drawDot(ctx, p.x, p.y, color, radius, p.edge ? 0.55 : 1)
+    }
+
+    for (const neutral of snapshot.neutrals) {
+      const p = toMap(neutral, true)
+      this.drawDot(ctx, p.x, p.y, '#d9ecff', 3.5, p.edge ? 0.55 : 1)
+    }
+
+    for (const enemy of snapshot.enemies) {
+      const p = toMap(enemy, true)
+      const color = enemy.defeated ? '#8d9aa3' : enemy.boss ? '#ff5f61' : '#ff9a4d'
+      this.drawEnemy(ctx, p.x, p.y, color, enemy.boss ? 4.8 : 3.5, p.edge ? 0.55 : 1)
+    }
+
+    this.drawQueen(ctx, mid, mid, snapshot.queen.heading)
+    ctx.strokeStyle = MAP_EDGE
+    ctx.lineWidth = 2
+    ctx.strokeRect(1, 1, size - 2, size - 2)
+  }
+
+  private drawMapGrid(ctx: CanvasRenderingContext2D, size: number, mid: number): void {
+    ctx.strokeStyle = 'rgba(255,255,255,.09)'
+    ctx.lineWidth = 1
+    for (let x = 24; x < size; x += 24) {
+      ctx.beginPath()
+      ctx.moveTo(x, 0)
+      ctx.lineTo(x, size)
+      ctx.stroke()
+    }
+    for (let y = 24; y < size; y += 24) {
+      ctx.beginPath()
+      ctx.moveTo(0, y)
+      ctx.lineTo(size, y)
+      ctx.stroke()
+    }
+    ctx.strokeStyle = 'rgba(255,255,255,.18)'
+    ctx.beginPath()
+    ctx.moveTo(mid, 0)
+    ctx.lineTo(mid, size)
+    ctx.moveTo(0, mid)
+    ctx.lineTo(size, mid)
+    ctx.stroke()
+  }
+
+  private drawPoints(
+    ctx: CanvasRenderingContext2D,
+    points: readonly MinimapPoint[],
+    toMap: (p: MinimapPoint, clamp?: boolean) => { x: number; y: number; edge: boolean },
+    color: string,
+    radius: number,
+  ): void {
+    for (const point of points) {
+      const p = toMap(point)
+      if (p.edge) continue
+      this.drawDot(ctx, p.x, p.y, color, radius, 0.9)
+    }
+  }
+
+  private drawDot(ctx: CanvasRenderingContext2D, x: number, y: number, color: string, radius: number, alpha = 1): void {
+    ctx.save()
+    ctx.globalAlpha = alpha
+    ctx.beginPath()
+    ctx.arc(x, y, radius, 0, Math.PI * 2)
+    ctx.fillStyle = color
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(0,0,0,.5)'
+    ctx.lineWidth = 1
+    ctx.stroke()
+    ctx.restore()
+  }
+
+  private drawDiamond(ctx: CanvasRenderingContext2D, x: number, y: number, color: string, radius: number, alpha = 1): void {
+    ctx.save()
+    ctx.globalAlpha = alpha
+    ctx.beginPath()
+    ctx.moveTo(x, y - radius)
+    ctx.lineTo(x + radius, y)
+    ctx.lineTo(x, y + radius)
+    ctx.lineTo(x - radius, y)
+    ctx.closePath()
+    ctx.fillStyle = color
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(0,0,0,.55)'
+    ctx.lineWidth = 1
+    ctx.stroke()
+    ctx.restore()
+  }
+
+  private drawEnemy(ctx: CanvasRenderingContext2D, x: number, y: number, color: string, radius: number, alpha = 1): void {
+    ctx.save()
+    ctx.globalAlpha = alpha
+    ctx.strokeStyle = color
+    ctx.lineWidth = 2.2
+    ctx.beginPath()
+    ctx.moveTo(x - radius, y - radius)
+    ctx.lineTo(x + radius, y + radius)
+    ctx.moveTo(x + radius, y - radius)
+    ctx.lineTo(x - radius, y + radius)
+    ctx.stroke()
+    ctx.restore()
+  }
+
+  private drawQueen(ctx: CanvasRenderingContext2D, x: number, y: number, heading: number): void {
+    ctx.save()
+    ctx.translate(x, y)
+    ctx.rotate(-heading)
+    ctx.beginPath()
+    ctx.moveTo(0, -7)
+    ctx.lineTo(5.5, 5.5)
+    ctx.lineTo(0, 2.5)
+    ctx.lineTo(-5.5, 5.5)
+    ctx.closePath()
+    ctx.fillStyle = '#ffffff'
+    ctx.fill()
+    ctx.strokeStyle = '#ffd84a'
+    ctx.lineWidth = 2
+    ctx.stroke()
+    ctx.restore()
   }
 }

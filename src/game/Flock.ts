@@ -28,6 +28,15 @@ const FOLLOWER_CAP = 10
 /** Game wires this to the HUD so the flock can explain why a duck won't join. */
 type OnMessage = (text: string) => void
 
+export interface AllyMarker {
+  x: number
+  z: number
+  kind: SubjectKind
+  subject: boolean
+  nesting: boolean
+  holding: boolean
+}
+
 /**
  * The Flock owns all the duck subjects: spawns them, updates them, and turns the
  * Queen's quack into recruitment. Game just calls flock.update(delta) and reads
@@ -129,6 +138,18 @@ export class Flock {
   /** Every hen currently brooding on a nest (so Game can check geese near them). */
   get nestingHens(): DuckSubject[] {
     return this.members.filter((m) => m.isNesting)
+  }
+
+  /** Compact positions for HUD/minimap rendering. */
+  get minimapAllies(): AllyMarker[] {
+    return this.members.map((m) => ({
+      x: m.group.position.x,
+      z: m.group.position.z,
+      kind: m.kind,
+      subject: m.isSubject,
+      nesting: m.isNesting,
+      holding: m.isHoldingHome,
+    }))
   }
 
   /** Calm (non-scattered) supporters split into drakes vs. the rest — for the boss
