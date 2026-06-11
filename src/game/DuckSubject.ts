@@ -60,6 +60,13 @@ const FORAGE_RADIUS = 5 // how far a follower will notice a plant and go for it
 const FORAGE_RATE = 0.7 // per second: chance to peel off for an in-range plant
 const FORAGE_SPEED = 3 // eager amble toward a snack (quicker than idle wander)
 
+// --- Worm tugging ----------------------------------------------------------
+const WORM_RATE = 0.0018 // per second: rare enough that a flock only does it now and then
+const WORM_DURATION = 4.3 // the whole little distraction, including a proud beat after the pop
+const WORM_POP_TIME = 2.9 // when the worm comes free and credits food
+const WORM_TUG_SPEED = 12 // quick determined little tugs
+const WORM_HEAD_DIP = -0.95 // beak-down angle while pulling
+
 // --- Holding home (when the Queen is away) ---------------------------------
 const HOLD_SPEED = 2.2 // purposeful but not chase-the-Queen fast
 const HOLD_RADIUS = 4.5 // how wide the local home milling circle is
@@ -92,7 +99,7 @@ const COLLIDE_RADIUS = 0.3 // footprint at BASE_SCALE — small, it's little
 const COLLIDE_HEIGHT = 0.7 // height at BASE_SCALE; canopies float well above (walk under)
 
 // A subject is always in exactly one of these.
-type SubjectState = 'pausing' | 'wandering' | 'following' | 'distracted' | 'foraging' | 'scattered' | 'holding' | 'nesting'
+type SubjectState = 'pausing' | 'wandering' | 'following' | 'distracted' | 'foraging' | 'scattered' | 'holding' | 'nesting' | 'worming'
 
 /** What a following subject needs to know about the world each frame: where the
  *  Queen is, who its flockmates are, and where the flock's current home is. */
@@ -132,6 +139,8 @@ export class DuckSubject {
   private readonly leftWing: THREE.Group
   private readonly rightWing: THREE.Group
   private readonly head: THREE.Group
+  private readonly worm: THREE.Group
+  private readonly wormScale: number
   // Idle fidget state: which daft thing it's doing, how long it's been at it, and
   // the countdown to the next one.
   private idleAction: 'none' | 'flap' | 'look' | 'peck' | 'skyGaze' | 'stretch' = 'none'
@@ -148,6 +157,9 @@ export class DuckSubject {
   private holdTimer = 0 // counts down to choosing a new local home job
   private layTimer = 0 // counts down to the next egg while she's sitting
   private sitting = false // has she actually settled onto the nest yet?
+  private wormTimer = 0
+  private wormRewarded = false
+  private wormReturnState: 'following' | 'holding' = 'following'
 
   // Set from its kind (see constructor): overall size, its voice, and a per-
   // individual pitch so the flock sounds like a crowd, not one cloned voice.
@@ -174,6 +186,9 @@ export class DuckSubject {
     this.leftWing = model.leftWing
     this.rightWing = model.rightWing
     this.head = model.head
+    this.worm = makeWorm()
+    this.worm.visible = false
+    this.group.add(this.worm)
     this.group.position.set(x, 0, z)
     this.homeX = x
     this.homeZ = z
@@ -182,6 +197,7 @@ export class DuckSubject {
     this.voice = def.voice
     this.collideRadius = COLLIDE_RADIUS * (this.scale / BASE_SCALE)
     this.collideHeight = COLLIDE_HEIGHT * (this.scale / BASE_SCALE)
+    this.wormScale = 1 / this.scale
 
     // Spawn-time values come from the seeded rng so the initial world is stable.
     this.voicePitch = rngRange(rng, def.pitch[0], def.pitch[1])
@@ -193,7 +209,7 @@ export class DuckSubject {
   /** Is it one of the Queen's — following, off foraging, briefly distracted, or
    *  scattered? (These all still count as subjects; it'll return.) */
   get isSubject(): boolean {
-    return this.state === 'following' || this.state === 'distracted' || this.state === 'foraging' || this.state === 'scattered' || this.state === 'holding'
+    return this.state === 'following' || this.state === 'distracted' || this.state === 'foraging' || this.state === 'scattered' || this.state === 'holding' || this.state === 'worming'
   }
 
   /** Holding ducks still belong to the Queendom, but they're tending home rather
@@ -204,7 +220,7 @@ export class DuckSubject {
 
   /** Can this subject currently add its voice to the Queen's chorus? */
   get supportsChorus(): boolean {
-    return this.isSubject && !this.isHoldingHome && !this.isScattered
+    return this.isSubject && !this.isHoldingHome && !this.isScattered && this.state !== 'worming'
   }
 
   /** Is she currently brooding on a nest? She's still the Queen's, but off-duty —
@@ -240,14 +256,15 @@ export class DuckSubject {
   /** Called when the Queen quacks a NEW subject in range: fall in behind her.
    *  A brooding hen ignores it — she's busy keeping her eggs warm. */
   recruit(): void {
-    if (this.state === 'nesting') return
+    if (this.state === 'nesting' || this.state === 'worming') return
     this.state = 'following'
   }
 
   /** The Queen quacked her existing flock: snap back to following, dropping any
-   *  foraging or distraction. A brooding hen keeps her post (only a goose moves her). */
+   *  foraging or distraction. A brooding hen keeps her post (only a goose moves her);
+   *  a worm-fixated duck is simply too committed to listen. */
   rally(): void {
-    if (this.state === 'nesting') return
+    if (this.state === 'nesting' || this.state === 'worming') return
     this.targetFood = null
     this.state = 'following'
   }
@@ -314,11 +331,13 @@ export class DuckSubject {
     // more often while they scatter. A brooding hen sits quietly (she only clucks
     // when she lays — see brood()).
     const callRate = this.state === 'scattered' ? SCATTER_VOICE_RATE : VOICE_RATE
-    if (this.state !== 'nesting' && Math.random() < callRate * delta) this.voice(this.sound, this.voicePitch)
+    if (this.state !== 'nesting' && this.state !== 'worming' && Math.random() < callRate * delta) this.voice(this.sound, this.voicePitch)
 
     switch (this.state) {
       case 'following':
         if (this.checkLost(ctx)) break // stranded too far — gives up
+        // Very occasionally, snacks are not ON the ground but suspiciously IN it.
+        if (this.tryStartWorming(delta, 'following')) break
         // Notice a nearby plant and peel off to go gather it...
         if (Math.random() < FORAGE_RATE * delta && this.tryForage()) break
         // ...or, less usefully, get distracted and wander off for a bit.
@@ -338,10 +357,14 @@ export class DuckSubject {
         this.beScattered(delta)
         break
       case 'holding':
+        if (this.tryStartWorming(delta, 'holding')) break
         this.holdHome(delta, ctx)
         break
       case 'nesting':
         this.brood(delta) // walk to the nest, settle, lay eggs — no checkLost
+        break
+      case 'worming':
+        this.pullWorm(delta)
         break
       case 'wandering':
         this.seekTarget(delta)
@@ -375,7 +398,9 @@ export class DuckSubject {
     // --- Face travel direction + a little waddle ---------------------------
     const speed = Math.hypot(this.velX, this.velZ)
     this.heading = faceHeading(this.heading, this.velX, this.velZ, TURN_SPEED, delta)
-    if (this.state === 'nesting' && this.sitting) {
+    if (this.state === 'worming') {
+      this.applyWormPose(delta)
+    } else if (this.state === 'nesting' && this.sitting) {
       // Settled on the nest: a calm breathing bob, no waddle hop or sway.
       this.resetFidget()
       this.bobPhase += delta * 1.5
@@ -632,6 +657,60 @@ export class DuckSubject {
     this.ease(s.vx, s.vz, delta)
   }
 
+  /** A rare subject-only distraction: stop dead, tug an earthworm out, and earn
+   *  one food. While doing this it ignores the Queen's rally quack. */
+  private tryStartWorming(delta: number, returnState: 'following' | 'holding'): boolean {
+    const pos = this.group.position
+    if (this.pond.isWater(pos.x, pos.z)) return false
+    if (Math.random() >= WORM_RATE * delta) return false
+
+    this.targetFood = null
+    this.wormTimer = 0
+    this.wormRewarded = false
+    this.wormReturnState = returnState
+    this.worm.visible = true
+    this.state = 'worming'
+    return true
+  }
+
+  private pullWorm(delta: number): void {
+    this.ease(0, 0, delta, FOLLOW_RESPONSIVENESS)
+    this.wormTimer += delta
+
+    if (!this.wormRewarded && this.wormTimer >= WORM_POP_TIME) {
+      this.wormRewarded = true
+      this.food.gain()
+      this.voice(this.sound, this.voicePitch * 1.08)
+    }
+
+    if (this.wormTimer >= WORM_DURATION) {
+      this.worm.visible = false
+      this.wormTimer = 0
+      this.state = this.wormReturnState
+      if (this.state === 'holding') this.holdTimer = 0
+    }
+  }
+
+  private applyWormPose(delta: number): void {
+    const progress = Math.min(1, this.wormTimer / WORM_POP_TIME)
+    const popped = this.wormRewarded
+    const tug = Math.max(0, Math.sin(this.wormTimer * WORM_TUG_SPEED))
+    const proud = popped ? Math.min(1, (this.wormTimer - WORM_POP_TIME) / (WORM_DURATION - WORM_POP_TIME)) : 0
+
+    this.idleAction = 'none'
+    this.bobPhase += delta * 5
+    this.group.position.y = popped ? Math.sin(this.bobPhase) * 0.03 : tug * 0.025
+    this.group.rotation.z = popped ? Math.sin(this.bobPhase * 0.7) * 0.05 : Math.sin(this.wormTimer * WORM_TUG_SPEED) * 0.08
+    this.head.rotation.set(WORM_HEAD_DIP * (1 - proud) + 0.35 * proud, Math.sin(this.wormTimer * 8) * 0.1 * (1 - proud), 0)
+    this.leftWing.rotation.z = -0.18 - tug * 0.1
+    this.rightWing.rotation.z = 0.18 + tug * 0.1
+
+    this.worm.visible = true
+    this.worm.position.set(0, popped ? 0.34 + proud * 0.12 : 0.03 + progress * 0.22 + tug * 0.06, -1.08)
+    this.worm.scale.set(this.wormScale, (popped ? 1 : 0.3 + progress * 0.9) * this.wormScale, this.wormScale)
+    this.worm.rotation.set(0, 0, Math.sin(this.wormTimer * (popped ? 10 : 18)) * (popped ? 0.28 : 0.12))
+  }
+
   /** Seek the current wander target, slowing on arrival, then pause. */
   private seekTarget(delta: number): void {
     const s = seekArrive(this.group.position, this.targetX, this.targetZ, WANDER_SPEED, ARRIVE_RADIUS, ARRIVE_STOP)
@@ -666,6 +745,7 @@ export class DuckSubject {
     this.head.rotation.set(0, 0, 0)
     this.leftWing.rotation.z = 0
     this.rightWing.rotation.z = 0
+    this.worm.visible = false
   }
 
   /** Standing around being a daft duck: now and then pick a fidget — stretch, flap,
@@ -751,4 +831,29 @@ export class DuckSubject {
     this.leftWing.rotation.z = -spread
     this.rightWing.rotation.z = spread
   }
+}
+
+function makeWorm(): THREE.Group {
+  const g = new THREE.Group()
+  g.name = 'earthworm-distraction'
+  const wormMat = new THREE.MeshStandardMaterial({ color: 0xd46f78 })
+  const wormDark = new THREE.MeshStandardMaterial({ color: 0xa94b55 })
+  const dirtMat = new THREE.MeshStandardMaterial({ color: 0x7a5230 })
+
+  const dirt = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.07, 0.36), dirtMat)
+  dirt.position.set(0, -0.03, 0)
+  dirt.castShadow = true
+  dirt.receiveShadow = true
+  g.add(dirt)
+
+  for (let i = 0; i < 5; i++) {
+    const segment = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.18, 0.14), i === 4 ? wormDark : wormMat)
+    segment.name = 'earthworm-segment'
+    segment.position.set(Math.sin(i * 0.85) * 0.05, 0.07 + i * 0.12, -0.02)
+    segment.rotation.z = (i - 1.5) * 0.12
+    segment.castShadow = true
+    g.add(segment)
+  }
+
+  return g
 }

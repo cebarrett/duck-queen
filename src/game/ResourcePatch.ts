@@ -46,6 +46,12 @@ export class ResourcePatch {
     return true
   }
 
+  /** Add gathered resources that did not come from a visible patch item, such as
+   *  a duck triumphantly yanking a worm out of the ground. */
+  gain(n = 1): void {
+    this.count += n
+  }
+
   /** The closest uncollected item within `radius` of (x, z), or null. Plain O(n)
    *  scan — fine for a few dozen items. */
   nearestUncollected(x: number, z: number, radius: number): Collectible | null {
