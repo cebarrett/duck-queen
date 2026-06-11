@@ -26,6 +26,7 @@ const RESOLVE_SHAKEN_PENALTY = 0.15
 const REGROUP_RADIUS = 5
 const REGROUP_CLEAR_RATIO = 0.6
 const NEST_COST = 10 // reeds spent to build one nest
+const NEST_REFUND = Math.floor(NEST_COST / 2) // reeds recovered when razing a nest (half, rounded down)
 const MATURE_FOOD_COST = 4 // food spent to raise one duckling into an adult
 const HATCH_FOOD_COST = 5 // food the flock must have saved up — and spends — to hatch one egg
 const SEAT_RANGE = 3 // how close the Queen must stand to a nest to seat a hen on it
@@ -78,6 +79,8 @@ export class Game {
   private readonly frontier: Frontier
   private wasBuildDown = false // edge-detect the B key (one nest per press)
   private wasSeatDown = false // edge-detect the E key (one hen seated per press)
+  private wasKickDown = false // edge-detect the R key (one hen roused per press)
+  private wasRazeDown = false // edge-detect the X key (one nest razed per press)
   private wasTalkDown = false // edge-detect the F key (one line advanced per press)
   private resolveShakenTimer = 0
 
@@ -230,6 +233,8 @@ export class Game {
     this.cameraRig.update(delta)
     this.handleNestBuild()
     this.handleNestSeat()
+    this.handleNestKick()
+    this.handleNestRaze()
     this.handleSwanDialogue()
 
     // Keep the HUD in sync (both only redraw on change).
@@ -303,6 +308,52 @@ export class Game {
       this.hud.showMessage('🥚 A hen settles in')
     }
     this.wasSeatDown = down
+  }
+
+  /**
+   * Rousing a hen: when the Queen stands by a nest with a hen brooding on it, the
+   * HUD invites her to press R; pressing it stands the hen up and falls her back
+   * in behind the flock, freeing the nest. The eggs stay in the bowl, so a hen
+   * seated here later picks the incubation back up. The prompt only shows when a
+   * hen is actually there to rouse.
+   */
+  private handleNestKick(): void {
+    const pos = this.duck.group.position
+    const nest = this.nests.nearestOccupied(pos.x, pos.z, SEAT_RANGE)
+    const hen = nest ? this.flock.henOnNest(nest) : null
+    this.hud.setCanKickHen(hen !== null)
+
+    const down = this.input.isDown('KeyR')
+    if (down && !this.wasKickDown && hen) {
+      hen.leaveNest()
+      this.sound.henQuack() // an indignant cluck as she's shooed off
+      this.hud.showMessage('🐤 The hen is roused off')
+    }
+    this.wasKickDown = down
+  }
+
+  /**
+   * Razing a nest: when the Queen stands on land by a nest she's built, the HUD
+   * invites her to press X; pressing it tears the nest down and refunds half the
+   * reeds it cost. A hen brooding on it is roused off first; any eggs in the bowl
+   * are lost. Like building, the prompt only advertises itself when it'll work.
+   */
+  private handleNestRaze(): void {
+    const pos = this.duck.group.position
+    const onLand = this.duckController.getMode() === 'waddle'
+    const nest = onLand ? this.nests.nearestNest(pos.x, pos.z, SEAT_RANGE) : null
+    this.hud.setCanRazeNest(nest !== null)
+
+    const down = this.input.isDown('KeyX')
+    if (down && !this.wasRazeDown && nest) {
+      const hen = this.flock.henOnNest(nest)
+      if (hen) hen.leaveNest()
+      this.nests.remove(nest)
+      this.reeds.gain(NEST_REFUND)
+      this.sound.nestBuilt() // a thud as the bowl comes apart
+      this.hud.showMessage(`♻️ Nest razed · +${NEST_REFUND} reeds recovered`)
+    }
+    this.wasRazeDown = down
   }
 
   /**

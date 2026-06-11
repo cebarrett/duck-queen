@@ -48,9 +48,11 @@ are verified by eye in the browser, not by tests.
 | **Q** | Quack — rally nearby ducks to follow you (and your weapon in a honk-off) |
 | **B** | Build a nest (costs 10 reeds) |
 | **E** | Seat a hen on a nearby empty nest |
+| **R** | Rouse a brooding hen off a nearby nest (she rejoins the flock; eggs stay) |
+| **X** | Raze a nearby nest, recovering half the reeds it cost (5) |
 
-The **B** and **E** prompts only appear in the HUD when the action will actually
-work, so you don't have to memorize them.
+The **B**, **E**, **R**, and **X** prompts only appear in the HUD when the action
+will actually work, so you don't have to memorize them.
 
 ## What you can do
 

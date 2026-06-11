@@ -328,6 +328,16 @@ export class DuckSubject {
     this.scatterTo(gooseX, gooseZ)
   }
 
+  /** The Queen rouses her off the nest: she stands, frees it, and falls back in
+   *  behind the flock. Unlike a goose's scare she doesn't bolt — and the eggs are
+   *  left in the bowl, so seating a hen here again resumes incubation. */
+  leaveNest(): void {
+    if (this.targetNest) this.targetNest.occupied = false
+    this.targetNest = null
+    this.sitting = false
+    this.state = 'following'
+  }
+
   update(delta: number, ctx: FlockContext): void {
     this.age += delta
 

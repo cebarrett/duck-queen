@@ -67,6 +67,8 @@ export class HUD {
   private nests = 0
   private canBuildNest = false
   private canSeatHen = false
+  private canKickHen = false
+  private canRazeNest = false
   private resolveShaken = false
   // The frontier (Act III) objective — shown only once the phase has opened.
   private frontierActive = false
@@ -276,6 +278,18 @@ export class HUD {
     this.render()
   }
 
+  /** Whether a hen is brooding on a nearby nest the Queen could rouse — drives the R prompt. */
+  setCanKickHen(canKick: boolean): void {
+    this.canKickHen = canKick
+    this.render()
+  }
+
+  /** Whether the Queen stands by a nest she could raze for a refund — drives the X prompt. */
+  setCanRazeNest(canRaze: boolean): void {
+    this.canRazeNest = canRaze
+    this.render()
+  }
+
   private render(): void {
     let line1: string
     if (this.mode === 'fly') {
@@ -289,6 +303,8 @@ export class HUD {
     // control advertises itself exactly when it'll do something.
     if (this.canBuildNest) line1 += '   ·   🪺 Press B to build a nest!'
     if (this.canSeatHen) line1 += '   ·   🥚 Press E to seat a hen'
+    if (this.canKickHen) line1 += '   ·   🐤 Press R to rouse the hen'
+    if (this.canRazeNest) line1 += '   ·   ♻️ Press X to raze the nest'
 
     const shaken = this.resolveShaken ? '   Resolve shaken' : ''
     const s = this.subjects
