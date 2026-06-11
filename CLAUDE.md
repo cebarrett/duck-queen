@@ -41,5 +41,8 @@ colliders)`. Two knobs shape the feel:
 - **Audio**: voiced sounds (quack/peep/honk) load an optional `public/<name>.mp3` and
   fall back to a synth, via the shared `Sample` loader in [`Sound.ts`](src/game/Sound.ts).
 - **Verify with `npx tsc --noEmit`** after changes (the dev server doesn't type-check).
+- **Update `README.md` when making substantial changes**: if a change affects setup,
+  controls, gameplay, features, architecture, or other user-facing behavior, update the
+  README in the same change.
 - Each creature is a small state machine with shared steering helpers
   (`mathUtils.ts`) — the duckling, goose, etc. all follow that shape.
