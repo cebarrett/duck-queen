@@ -146,8 +146,9 @@ export class DuckSubject {
   private readonly wormScale: number
   // Idle fidget state: which daft thing it's doing, how long it's been at it, and
   // the countdown to the next one.
-  private idleAction: 'none' | 'flap' | 'look' | 'peck' | 'skyGaze' | 'stretch' = 'none'
+  private idleAction: 'none' | 'flap' | 'look' | 'peck' | 'skyGaze' | 'stretch' | 'preen' = 'none'
   private idleTime = 0
+  private idleSide = 1 // −1 = preen left side, +1 = right; set on preen start
   private nextIdle = randRange(IDLE_GAP_MIN, IDLE_GAP_MAX)
 
   private state: SubjectState = 'pausing'
@@ -764,7 +765,8 @@ export class DuckSubject {
       if (this.nextIdle <= 0) {
         const r = Math.random()
         this.idleAction =
-          r < 0.28 ? 'peck' : r < 0.5 ? 'look' : r < 0.68 ? 'flap' : r < 0.85 ? 'skyGaze' : 'stretch'
+          r < 0.25 ? 'peck' : r < 0.44 ? 'look' : r < 0.61 ? 'flap' : r < 0.74 ? 'skyGaze' : r < 0.88 ? 'preen' : 'stretch'
+        if (this.idleAction === 'preen') this.idleSide = Math.random() < 0.5 ? -1 : 1
         this.idleTime = 0
         this.nextIdle = randRange(IDLE_GAP_MIN, IDLE_GAP_MAX)
       }
@@ -787,6 +789,9 @@ export class DuckSubject {
         break
       case 'stretch':
         this.animStretch()
+        break
+      case 'preen':
+        this.animPreen()
         break
     }
   }
@@ -824,6 +829,22 @@ export class DuckSubject {
     if (this.idleTime > DUR) return void (this.idleAction = 'none')
     const envelope = Math.sin((this.idleTime / DUR) * Math.PI)
     this.head.rotation.set(0.75 * envelope, Math.sin(this.idleTime * 1.4) * 0.25 * envelope, 0)
+  }
+
+  /** Crane the head back to one side, nibbling at the back feathers, with a slight
+   *  wing fluff on that side — the classic duck preening session. */
+  private animPreen(): void {
+    const DUR = 3.5
+    if (this.idleTime > DUR) return void (this.idleAction = 'none')
+    const envelope = Math.sin((this.idleTime / DUR) * Math.PI) // ease in and back out
+    const turn = this.idleSide * 1.35 * envelope // head cranked around to the body
+    const dip = -0.3 * envelope // beak tips down toward the feathers
+    const nibble = Math.sin(this.idleTime * 15) * 0.1 * envelope // quick nibbling
+    this.head.rotation.set(dip + nibble, turn, 0)
+    // Lift the wing on the side being preened a little to give access.
+    const fluff = 0.22 * envelope
+    this.leftWing.rotation.z = this.idleSide < 0 ? -fluff : 0
+    this.rightWing.rotation.z = this.idleSide > 0 ? fluff : 0
   }
 
   /** A big stretch: neck craned up while both wings spread wide, then settle. */
