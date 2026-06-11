@@ -28,7 +28,14 @@ unlocks audio), and play.
 ```bash
 npm run build     # type-check + production build into dist/
 npm run preview   # serve the production build locally
+npm test          # run unit tests in watch mode (Vitest)
+npm run test:run  # run the tests once and exit
 ```
+
+The tests cover the game's pure logic — the seeded RNG (`rng.ts`), steering/
+math helpers (`mathUtils.ts`), and world collision (`collision.ts`) — living in
+`*.test.ts` files next to the code they test. Rendering, animation, and audio
+are verified by eye in the browser, not by tests.
 
 ## Controls
 
