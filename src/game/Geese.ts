@@ -6,6 +6,7 @@ import type { Input } from './Input'
 import type { Flock } from './Flock'
 import type { Pond } from './Water'
 import type { Nests } from './Nests'
+import type { Frontier, Territory } from './Frontier'
 import type { Collider } from './collision'
 import type { Rng } from './rng'
 import { TREATY_FLATS } from './Biomes'
@@ -62,6 +63,24 @@ const TREATY_FIRST_CLAUSE = 3.5
 const TREATY_CLAUSE_KNOCKBACK = 0.22
 const TREATY_ANCHORED_KNOCKBACK = 0.06
 
+// --- The frontier ganders (Act III: reclaim the outlying ponds) -------------
+// One lieutenant goose holds each outlying pond. They're a step up from the
+// gaggle — steel-blue "officers", a touch bigger — but reclaiming is, for now, a
+// plain honk-off (the same resolve math as the gaggle), gated only behind Lord
+// Boundary having fallen first. (Difficulty knobs + a settlement gate come later.)
+const LIEUTENANT_COLOR = 0x6d7f96 // steel blue-grey — distinct from gaggle, Baron, Boundary
+const LIEUTENANT_SCALE = 1.16 // a little bigger than a gaggle goose, smaller than a boss
+const LIEUTENANT_PITCH: readonly [number, number] = [0.72, 0.84] // mid voice
+const LIEUTENANT_HONK_RATE = 0.09
+const FRONTIER_UNLOCK_DELAY = 3 // beat after Lord Boundary before the frontier call lands
+
+/** A lieutenant goose paired with the territory (pond) it holds. */
+interface Lieutenant {
+  readonly goose: Goose
+  readonly territory: Territory
+  claimed: boolean
+}
+
 /** Game wires this to the HUD (active? + how full the resolve meter is, 0..1). */
 type OnHonkOff = (active: boolean, resolve: number) => void
 type OnQueenLost = (gooseX: number, gooseZ: number, queenX: number, queenZ: number) => void
@@ -114,6 +133,15 @@ export class Geese {
   private treatyUnlockAnnounced = false
   private treatyUnlockDelay = 0
 
+  // The frontier: one lieutenant goose per outlying pond, and the reclaim fight.
+  private readonly lieutenants: Lieutenant[] = []
+  private frontierActive = false
+  private frontierResolve = 0
+  private frontierWasQuackDown = false
+  private activeLieutenant: Lieutenant | null = null
+  private frontierUnlockAnnounced = false
+  private frontierUnlockDelay = 0
+
   constructor(
     scene: THREE.Scene,
     private readonly sound: Sound,
@@ -129,8 +157,10 @@ export class Geese {
     private readonly onBaronMessage: OnMessage,
     private readonly onQueenLost: OnQueenLost,
     private readonly resolvePenalty: ResolvePenalty,
+    private readonly frontier: Frontier,
     colliders: readonly Collider[],
     rng: Rng,
+    frontierRng: Rng,
   ) {
     for (let i = 0; i < GOOSE_COUNT; i++) {
       const angle = rng() * Math.PI * 2
@@ -160,15 +190,48 @@ export class Geese {
       { bodyColor: 0x9fa8a3, scale: 1.28, crest: false, honkPitch: [0.66, 0.76], honkRate: 0.1 },
     )
     scene.add(this.treatyBoss.group)
+
+    // One lieutenant gander stands sentinel at each outlying pond. They're visible
+    // from the start (like the bosses), but their reclaim fight only opens once Lord
+    // Boundary has yielded. Drawn from a SEPARATE rng stream so adding them doesn't
+    // shift the gaggle/boss spawns for an existing seed.
+    for (const territory of frontier.list) {
+      const circle = territory.pond
+      const angle = frontierRng() * Math.PI * 2
+      const lx = circle.x + Math.cos(angle) * (circle.radius + 2) // post just off the shore
+      const lz = circle.z + Math.sin(angle) * (circle.radius + 2)
+      const goose = new Goose(lx, lz, sound, food, pond, this.nests, colliders, frontierRng, true, {
+        bodyColor: LIEUTENANT_COLOR,
+        scale: LIEUTENANT_SCALE,
+        crest: false,
+        honkPitch: LIEUTENANT_PITCH,
+        honkRate: LIEUTENANT_HONK_RATE,
+      })
+      scene.add(goose.group)
+      this.lieutenants.push({ goose, territory, claimed: false })
+    }
   }
 
   update(delta: number): void {
     this.updateHonkOff(delta)
     this.updateBossFight(delta)
     this.updateTreatyFight(delta)
+    this.updateFrontierFight(delta)
     for (const goose of this.geese) goose.update(delta)
     this.baron.update(delta)
     this.treatyBoss.update(delta)
+    for (const lt of this.lieutenants) lt.goose.update(delta)
+  }
+
+  /** Whether the frontier phase has opened (Lord Boundary has yielded). Drives the
+   *  HUD's frontier objective readout. */
+  get frontierUnlocked(): boolean {
+    return this.treatyDefeated
+  }
+
+  /** Every outlying pond reclaimed — the swan reacts to this turning point. */
+  get frontierWon(): boolean {
+    return this.frontier.allClaimed
   }
 
   /** Whether the Marsh Baron has been broken for good. Lets others (the swan)
@@ -199,6 +262,12 @@ export class Geese {
         boss: true,
         defeated: this.treatyDefeated,
       },
+      ...this.lieutenants.map((lt) => ({
+        x: lt.goose.group.position.x,
+        z: lt.goose.group.position.z,
+        boss: false, // a lieutenant, not a boss — drawn as an orange (not red) mark
+        defeated: lt.claimed,
+      })),
     ]
   }
 
@@ -219,7 +288,7 @@ export class Geese {
   }
 
   private updateHonkOff(delta: number): void {
-    if (this.bossActive || this.treatyActive) return // boss fights take over the standoff
+    if (this.bossActive || this.treatyActive || this.frontierActive) return // boss/frontier fights take over the standoff
     const qx = this.queen.position.x
     const qz = this.queen.position.z
 
@@ -302,6 +371,7 @@ export class Geese {
 
   private updateBossFight(delta: number): void {
     if (this.bossDefeated) return // beaten for good — he's broken and gone
+    if (this.frontierActive) return // a frontier reclaim is underway — don't double up
 
     const qx = this.queen.position.x
     const qz = this.queen.position.z
@@ -403,7 +473,7 @@ export class Geese {
   // --- Lord Boundary, Treaty Flats boss --------------------------------------
 
   private updateTreatyFight(delta: number): void {
-    if (this.treatyDefeated || this.bossActive) return
+    if (this.treatyDefeated || this.bossActive || this.frontierActive) return
 
     const qx = this.queen.position.x
     const qz = this.queen.position.z
@@ -528,6 +598,7 @@ export class Geese {
     this.treatyBoss.stopPosturing(won)
     if (won) {
       this.treatyDefeated = true
+      this.frontierUnlockDelay = FRONTIER_UNLOCK_DELAY // a beat, then the frontier call lands
       this.onBaronMessage('⚖️ LORD BOUNDARY yields — the Treaty Flats hold!')
     } else {
       this.onQueenLost(gp.x, gp.z, qp.x, qp.z)
@@ -536,6 +607,104 @@ export class Geese {
     this.treatyActive = false
     this.treatyResolve = 0
     this.onTreatyFight(false, 0)
+  }
+
+  // --- The frontier ganders (reclaim the outlying ponds) ---------------------
+
+  private updateFrontierFight(delta: number): void {
+    if (!this.treatyDefeated) return // the frontier opens only after Lord Boundary yields
+
+    // Once Boundary has fallen (and a short beat has passed), the swan's "furthest,
+    // sleepiest edge" stirs: the call to reclaim the far ponds lands once.
+    if (!this.frontierUnlockAnnounced) {
+      if (this.frontierUnlockDelay > 0) {
+        this.frontierUnlockDelay -= delta
+        return
+      }
+      this.onBaronMessage('🪶 Ganders have crept onto your far ponds — drive each one off to reclaim the frontier.')
+      this.frontierUnlockAnnounced = true
+    }
+
+    const qx = this.queen.position.x
+    const qz = this.queen.position.z
+
+    if (this.frontierActive && this.activeLieutenant) {
+      const lt = this.activeLieutenant
+      const gp = lt.goose.group.position
+      lt.goose.aimAt(qx, qz)
+      if (Math.hypot(gp.x - qx, gp.z - qz) > DISENGAGE_RANGE) {
+        this.endFrontierFight(false) // she backed off — the gander holds
+        return
+      }
+
+      const qDown = this.input.isDown('KeyQ')
+      if (qDown && !this.frontierWasQuackDown) this.frontierResolve += QUACK_GAIN
+      this.frontierWasQuackDown = qDown
+
+      // Plain honk-off math (same as the gaggle): a decent chorus out-honks him.
+      const chorus = this.flock.chorus
+      const passiveSupport = Math.min(FLOCK_FILL * chorus.size * CHORUS_MULT[chorus.layers], MAX_PASSIVE_SUPPORT)
+      this.frontierResolve += (passiveSupport - GOOSE_DRAIN) * delta
+      this.frontierResolve = Math.max(0, Math.min(1, this.frontierResolve))
+      this.onHonkOff(true, this.frontierResolve)
+
+      if (this.frontierResolve >= 1) this.endFrontierFight(true)
+      else if (this.frontierResolve <= 0) this.endFrontierFight(false)
+      return
+    }
+
+    // Not fighting — and don't poach a turn from any other standoff.
+    if (this.active || this.bossActive || this.treatyActive) return
+
+    // Square up to the nearest un-claimed lieutenant within range.
+    let nearest: Lieutenant | null = null
+    let nearestSq = Infinity
+    for (const lt of this.lieutenants) {
+      if (lt.claimed || !lt.goose.engageable) continue
+      const gp = lt.goose.group.position
+      const range = lt.goose.honkOffTriggerRange(TRIGGER_RANGE)
+      const dSq = (gp.x - qx) ** 2 + (gp.z - qz) ** 2
+      if (dSq >= range * range) continue
+      if (dSq < nearestSq) {
+        nearestSq = dSq
+        nearest = lt
+      }
+    }
+    if (nearest) this.startFrontierFight(nearest)
+  }
+
+  private startFrontierFight(lt: Lieutenant): void {
+    this.frontierActive = true
+    this.activeLieutenant = lt
+    lt.goose.startPosturing()
+    const baseResolve = Math.min(0.55, 0.22 + this.flock.chorus.size * 0.05)
+    this.frontierResolve = Math.max(0.05, baseResolve - this.resolvePenalty())
+    this.frontierWasQuackDown = this.input.isDown('KeyQ')
+    this.onHonkOff(true, this.frontierResolve)
+  }
+
+  private endFrontierFight(won: boolean): void {
+    const lt = this.activeLieutenant
+    if (lt) {
+      const gp = lt.goose.group.position
+      const qp = this.queen.position
+      lt.goose.stopPosturing(won) // won → he breaks and flees off the pond; lost → he struts
+      if (won) {
+        lt.claimed = true
+        this.frontier.claim(lt.territory) // flips the pond to the Queen + clears its water
+        if (this.frontier.allClaimed) {
+          this.onBaronMessage('👑 The frontier is yours — every far pond flies your banner!')
+        } else {
+          this.onBaronMessage(`🪶 Pond reclaimed — the frontier holds (${this.frontier.claimedCount}/${this.frontier.total}).`)
+        }
+      } else {
+        this.onQueenLost(gp.x, gp.z, qp.x, qp.z) // routed: panic flee + flock scatter
+      }
+    }
+    this.frontierActive = false
+    this.activeLieutenant = null
+    this.frontierResolve = 0
+    this.onHonkOff(false, 0)
   }
 }
 

@@ -7,6 +7,11 @@ export interface PondCircle {
   radius: number
 }
 
+// A goose-held frontier pond is murkier than the Queen's clean blue water — a
+// swampy green-brown — until she reclaims it and it clears back to CLEAN_WATER.
+export const CLEAN_WATER = 0x3a8ee6
+const ENEMY_WATER = 0x5d6b46
+
 /**
  * The pond water. Originally a single circular disc; now it can hold SEVERAL —
  * a main pond plus a few smaller ones scattered around the world. It stays one
@@ -32,9 +37,13 @@ export class Pond {
   // One Group holds every disc; World adds it to the scene once.
   readonly mesh = new THREE.Group()
   private readonly circles: PondCircle[] = []
-  // Share one material across every disc — cheaper, and they all look identical.
+  // Frontier discs each get their OWN material (so they can be tinted murky and
+  // cleared on reclaim); we animate their opacity alongside the shared one.
+  private readonly contestedMaterials: THREE.MeshStandardMaterial[] = []
+  // Share one material across every (uncontested) disc — cheaper, and they all
+  // look identical.
   private readonly material = new THREE.MeshStandardMaterial({
-    color: 0x3a8ee6,
+    color: CLEAN_WATER,
     transparent: true, // let the duck show through, tinted
     opacity: 0.72,
     roughness: 0.25, // a bit of sheen under the "sun"
@@ -59,6 +68,21 @@ export class Pond {
     disc.position.set(x, this.surfaceY, z)
     this.mesh.add(disc)
     this.circles.push({ x, z, radius })
+  }
+
+  /** Add a CONTESTED pond (a goose-held frontier one): same as addCircle, but the
+   *  disc gets its own murky material, returned so the Frontier can clear it to
+   *  blue when the Queen reclaims the pond. */
+  addContestedCircle(x: number, z: number, radius: number): THREE.MeshStandardMaterial {
+    const mat = this.material.clone()
+    mat.color.setHex(ENEMY_WATER)
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(radius, 48), mat)
+    disc.rotation.x = -Math.PI / 2
+    disc.position.set(x, this.surfaceY, z)
+    this.mesh.add(disc)
+    this.circles.push({ x, z, radius })
+    this.contestedMaterials.push(mat)
+    return mat
   }
 
   /** Every water circle (the main pond first, then the extras). Lets callers that
@@ -92,6 +116,8 @@ export class Pond {
 
   update(dt: number): void {
     this.time += dt
-    this.material.opacity = 0.72 + Math.sin(this.time * 0.8) * 0.06
+    const opacity = 0.72 + Math.sin(this.time * 0.8) * 0.06
+    this.material.opacity = opacity
+    for (const mat of this.contestedMaterials) mat.opacity = opacity
   }
 }

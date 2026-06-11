@@ -4,7 +4,7 @@ import type { DuckMode } from './DuckController'
 import type { SubjectKind } from './subjectKinds'
 import type { Input } from './Input'
 import type { Sound } from './Sound'
-import type { Pond } from './Water'
+import type { Pond, PondCircle } from './Water'
 import type { Food } from './Food'
 import type { Nest, Nests } from './Nests'
 import type { Collider } from './collision'
@@ -47,6 +47,8 @@ export class Flock {
   private readonly members: DuckSubject[] = []
   private wasQuackDown = false // edge-detect the Q key (one quack per press)
   private capLifted = false // set once the Marsh Baron is broken — then no follower cap
+  // The reclaimed frontier ponds the flock may treat as home water (set by Game).
+  private reclaimedPonds: () => readonly PondCircle[] = () => []
 
   constructor(
     private readonly scene: THREE.Scene,
@@ -95,6 +97,12 @@ export class Flock {
    *  she may gather a flock without limit from here on. */
   liftFollowerCap(): void {
     this.capLifted = true
+  }
+
+  /** Tell the flock which outlying ponds the Queen has reclaimed, so a flock left
+   *  far from home can hold a nearby reclaimed pond instead of trekking back. */
+  setReclaimedPonds(provider: () => readonly PondCircle[]): void {
+    this.reclaimedPonds = provider
   }
 
   /** Current subjects split by kind, for the HUD. Ducklings have no sex (yet);
@@ -322,7 +330,26 @@ export class Flock {
     if (occupied) return { x: occupied.x, z: occupied.z }
     const nest = this.nearestNestTo(anchor.x, anchor.z, null)
     if (nest) return { x: nest.x, z: nest.z }
-    return { x: this.pond.centerX, z: this.pond.centerZ }
+    // No nests to gather around: hold the nearest water the Queendom controls — a
+    // reclaimed frontier pond if one is closer to the flock than the home pond.
+    return this.nearestHomeWater(anchor.x, anchor.z)
+  }
+
+  /** The closest water the flock calls home: the main pond, or a nearer reclaimed
+   *  frontier pond if there is one. */
+  private nearestHomeWater(x: number, z: number): { x: number; z: number } {
+    let bestX = this.pond.centerX
+    let bestZ = this.pond.centerZ
+    let bestSq = (bestX - x) ** 2 + (bestZ - z) ** 2
+    for (const pond of this.reclaimedPonds()) {
+      const dSq = (pond.x - x) ** 2 + (pond.z - z) ** 2
+      if (dSq < bestSq) {
+        bestSq = dSq
+        bestX = pond.x
+        bestZ = pond.z
+      }
+    }
+    return { x: bestX, z: bestZ }
   }
 
   private flockAnchorPoint(): { x: number; z: number } {

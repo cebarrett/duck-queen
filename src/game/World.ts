@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { Pond } from './Water'
+import type { FrontierPond } from './Frontier'
 import type { Rng } from './rng'
 import type { Collider } from './collision'
 import { TREATY_FLATS } from './Biomes'
@@ -21,6 +22,10 @@ export class World {
   // The pond — a short waddle ahead of spawn (-Z). The duck controller and the
   // ducklings read this to know where they can swim.
   readonly pond = new Pond(0, -26, 10)
+
+  // The outlying ponds the geese hold — Act III's contestable territory. Recorded
+  // here (with each disc's tint handle) as they're generated, for the Frontier.
+  readonly frontierPonds: FrontierPond[] = []
 
   constructor(scene: THREE.Scene, rng: Rng, pondRng: Rng) {
     this.addSky(scene)
@@ -62,7 +67,12 @@ export class World {
       const dist = Math.hypot(x, z)
       if (dist < 22 || dist > 75) continue // keep the spawn area open; don't get lost in the fog
       if (this.pond.overlaps(x, z, radius + MARGIN)) continue // no overlaps
-      this.pond.addCircle(x, z, radius)
+      // These outlying ponds are the contestable frontier: each gets its own
+      // (murky) water material so it can be cleared to blue when reclaimed. Drawing
+      // them this way doesn't touch the rng draws above, so the layout per seed is
+      // unchanged.
+      const tint = this.pond.addContestedCircle(x, z, radius)
+      this.frontierPonds.push({ pond: { x, z, radius }, tint })
       made++
     }
   }

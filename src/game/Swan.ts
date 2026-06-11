@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { buildSwan } from './swanModel'
 import { seekArrive, faceHeading, easeFactor, randRange, pointAround, approachAngle } from './mathUtils'
-import { BEFORE_BARON, AFTER_BARON, type Discourse } from './swanDialogue'
+import { BEFORE_BARON, AFTER_BARON, AFTER_FRONTIER, type Discourse } from './swanDialogue'
 import type { Pond } from './Water'
 import type { Rng } from './rng'
 
@@ -57,14 +57,14 @@ export class Swan {
 
   // Dialogue. `talking` freezes the glide and turns him to face the Queen; `active`
   // is the discourse (list of pages) currently being read out, `page` the spot in
-  // it. The two indices remember which discourse to deliver next in each phase, so
-  // repeat visits rotate through his musings rather than replaying one block.
+  // it. `phase` tracks which tier of the war he's musing on; the per-phase indices
+  // remember which discourse to deliver next, so repeat visits rotate through his
+  // musings rather than replaying one block.
   private talking = false
   private active: Discourse | null = null
   private page = 0
-  private beforeIndex = 0
-  private afterIndex = 0
-  private afterBaron = false
+  private phase: 'before' | 'after' | 'frontier' = 'before'
+  private readonly indices = { before: 0, after: 0, frontier: 0 }
 
   constructor(
     private readonly pond: Pond,
@@ -135,13 +135,13 @@ export class Swan {
     return this.talking
   }
 
-  /** Begin a conversation, choosing the script by whether the Marsh Baron has
-   *  fallen. Returns the opening page. */
-  beginDialogue(baronDefeated: boolean): DialoguePage {
-    this.afterBaron = baronDefeated
-    const pool = baronDefeated ? AFTER_BARON : BEFORE_BARON
-    const index = baronDefeated ? this.afterIndex : this.beforeIndex
-    this.active = pool[index % pool.length]
+  /** Begin a conversation, choosing the script by how far the war has come: the
+   *  whole frontier reclaimed, then the Marsh Baron broken, else the opening tier.
+   *  Returns the opening page. */
+  beginDialogue(baronDefeated: boolean, frontierWon: boolean): DialoguePage {
+    this.phase = frontierWon ? 'frontier' : baronDefeated ? 'after' : 'before'
+    const pool = frontierWon ? AFTER_FRONTIER : baronDefeated ? AFTER_BARON : BEFORE_BARON
+    this.active = pool[this.indices[this.phase] % pool.length]
     this.page = 0
     this.talking = true
     return this.pageAt(0)
@@ -152,8 +152,7 @@ export class Swan {
   advanceDialogue(): DialoguePage | null {
     if (!this.active) return null
     if (this.page >= this.active.length - 1) {
-      if (this.afterBaron) this.afterIndex++
-      else this.beforeIndex++
+      this.indices[this.phase]++
       this.endDialogue()
       return null
     }

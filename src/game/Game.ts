@@ -7,6 +7,7 @@ import { ThirdPersonCamera } from './ThirdPersonCamera'
 import { DuckController } from './DuckController'
 import { Flock } from './Flock'
 import { Geese } from './Geese'
+import { Frontier } from './Frontier'
 import { Swan } from './Swan'
 import { SWAN_NAME } from './swanDialogue'
 import { Food } from './Food'
@@ -74,6 +75,7 @@ export class Game {
   private readonly hud = new HUD()
   private readonly nests: Nests
   private readonly pond: Pond
+  private readonly frontier: Frontier
   private wasBuildDown = false // edge-detect the B key (one nest per press)
   private wasSeatDown = false // edge-detect the E key (one hen seated per press)
   private wasTalkDown = false // edge-detect the F key (one line advanced per press)
@@ -105,6 +107,9 @@ export class Game {
     // exposes the scenery's colliders so the duck can bump into them.
     const world = new World(this.scene, deriveRng(seed, 'scenery'), deriveRng(seed, 'ponds'))
     this.pond = world.pond
+    // The frontier: ownership state for the outlying ponds (Act III). Built from the
+    // contestable ponds World generated; Geese spawns a lieutenant to hold each.
+    this.frontier = new Frontier(world.frontierPonds)
 
     // --- Camera -----------------------------------------------------------
     // PerspectiveCamera(fov, aspect, near, far):
@@ -151,6 +156,8 @@ export class Game {
     // The duck subjects. The Flock spawns and updates them; it needs Input (to
     // hear the Queen's quack) and the Queen's Group (to know where she is).
     this.flock = new Flock(this.scene, this.input, this.duck.group, this.sound, world.pond, this.food, this.nests, world.colliders, (text) => this.hud.showMessage(text), deriveRng(seed, 'flock'))
+    // A flock stranded far from home may hold a nearby reclaimed frontier pond.
+    this.flock.setReclaimedPonds(() => this.frontier.claimedPonds)
 
     // The rival geese — they wander, honk, forage your plants, and face off with
     // the Queen in honk-offs (which read Input + flock size, and drive the HUD meter).
@@ -169,8 +176,10 @@ export class Game {
       (text) => this.hud.showMessage(text),
       (gooseX, gooseZ) => this.handleQueenLostHonkOff(gooseX, gooseZ),
       () => this.resolvePenalty(),
+      this.frontier,
       world.colliders,
       deriveRng(seed, 'geese'),
+      deriveRng(seed, 'frontier'),
     )
 
     // A lone, stately swan — Aldermere — glides about the pond. He keeps to himself
@@ -231,6 +240,7 @@ export class Game {
     this.hud.setFood(this.food.total)
     this.hud.setReeds(this.reeds.total)
     this.hud.setNests(this.nests.count)
+    this.hud.setFrontier(this.frontier.claimedCount, this.frontier.total, this.geese.frontierUnlocked)
     this.updateMinimap()
 
     this.renderer.render(this.scene, this.camera)
@@ -252,6 +262,7 @@ export class Game {
         occupied: nest.occupied,
         eggs: nest.eggs,
       })),
+      territories: this.frontier.minimapTerritories,
     }
     this.hud.setMinimap(snapshot)
   }
@@ -323,7 +334,7 @@ export class Game {
       if (this.swan.isTalking) {
         this.showDialoguePage(this.swan.advanceDialogue())
       } else if (inRange) {
-        this.showDialoguePage(this.swan.beginDialogue(this.geese.baronDefeated))
+        this.showDialoguePage(this.swan.beginDialogue(this.geese.baronDefeated, this.geese.frontierWon))
       }
     }
     this.wasTalkDown = down

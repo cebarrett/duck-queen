@@ -69,6 +69,13 @@ work, so you don't have to memorize them.
 - **Defend your nests.** Geese actively hunt brooding hens — if one reaches a
   nest it scares the hen off and steals an egg. Keep geese honked away (a beaten
   goose stays cowed) so your hens can brood in peace.
+- **Reclaim the frontier.** Once you've broken the Marsh Baron and held the Treaty
+  Flats against Lord Boundary, the war moves outward: the scattered outlying ponds
+  show up **murky and goose-held**, each guarded by a steel-blue **lieutenant
+  gander**. Lead a strong flock out and **out-honk** each one to flip its pond back
+  to you — the water clears to blue, the minimap recolours, and the HUD tracks your
+  progress (🪶 Frontier). Reclaim them all and the swan has something to say about
+  what comes next.
 
 ## World seed
 

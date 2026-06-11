@@ -26,6 +26,10 @@ interface MinimapNest extends MinimapPoint {
   eggs: number
 }
 
+interface MinimapTerritory extends MinimapCircle {
+  claimed: boolean
+}
+
 export interface MinimapSnapshot {
   queen: MinimapPoint & { heading: number }
   ponds: readonly MinimapCircle[]
@@ -35,6 +39,7 @@ export interface MinimapSnapshot {
   enemies: readonly MinimapEnemy[]
   neutrals: readonly MinimapPoint[]
   nests: readonly MinimapNest[]
+  territories: readonly MinimapTerritory[]
 }
 
 const MAP_SIZE = 282
@@ -63,6 +68,10 @@ export class HUD {
   private canBuildNest = false
   private canSeatHen = false
   private resolveShaken = false
+  // The frontier (Act III) objective — shown only once the phase has opened.
+  private frontierActive = false
+  private frontierClaimed = 0
+  private frontierTotal = 0
 
   // A centred banner + meter shown only during a honk-off (or boss fight).
   private readonly honkBanner: HTMLElement
@@ -245,6 +254,15 @@ export class HUD {
     this.render()
   }
 
+  /** The frontier objective: how many outlying ponds are reclaimed, and whether the
+   *  phase is open yet (it only shows after Lord Boundary falls). */
+  setFrontier(claimed: number, total: number, active: boolean): void {
+    this.frontierClaimed = claimed
+    this.frontierTotal = total
+    this.frontierActive = active
+    this.render()
+  }
+
   /** Whether the Queen can build a nest right now — drives the contextual prompt
    *  so the B control only advertises itself when it'll actually do something. */
   setCanBuildNest(canBuild: boolean): void {
@@ -282,7 +300,9 @@ export class HUD {
     const chorus = total > 0 ? `   🎵 ${voices}/3` : ''
     const nesting = s.nesting > 0 ? `   🥚 ${s.nesting} nesting` : ''
     const flock = `👑 Subjects: ${total}  (🐤${s.ducklings} ♂${s.males} ♀${s.females})${chorus}${nesting}`
-    const line2 = `${flock}   🌿 Food: ${this.food}   🌾 Reeds: ${this.reeds}   🪺 Nests: ${this.nests}${shaken}`
+    // Once the frontier opens (after Lord Boundary), show how many far ponds are reclaimed.
+    const frontier = this.frontierActive ? `   🪶 Frontier: ${this.frontierClaimed}/${this.frontierTotal}` : ''
+    const line2 = `${flock}   🌿 Food: ${this.food}   🌾 Reeds: ${this.reeds}   🪺 Nests: ${this.nests}${frontier}${shaken}`
 
     // Two lines via <br>. The values are our own strings + an integer, so there's
     // nothing untrusted going into innerHTML here.
@@ -334,6 +354,19 @@ export class HUD {
       ctx.fill()
       ctx.strokeStyle = 'rgba(184, 225, 255, 0.82)'
       ctx.lineWidth = 1
+      ctx.stroke()
+    }
+
+    // Frontier territories: a coloured ring over the pond marks who holds it —
+    // warm orange while a gander holds it, bright cyan once the Queen reclaims it.
+    for (const territory of snapshot.territories) {
+      const p = toMap(territory)
+      const r = Math.max(2, territory.radius * scale)
+      if (p.x + r < 0 || p.x - r > size || p.y + r < 0 || p.y - r > size) continue
+      ctx.beginPath()
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2)
+      ctx.strokeStyle = territory.claimed ? 'rgba(122, 208, 255, 0.95)' : 'rgba(255, 120, 70, 0.9)'
+      ctx.lineWidth = 2.5
       ctx.stroke()
     }
 

@@ -83,3 +83,26 @@ export const AFTER_BARON: readonly Discourse[] = [
     'You will not restore the old Queendom, Majesty. That one failed; let it rest. Build instead the sillier, humbler, better-fed thing it never managed to become — one that does not need a flawless queen to keep from scattering. Do that, and even an old swan who keeps no kingdom will be glad to have shared his pond with you.',
   ],
 ]
+
+/**
+ * After every outlying pond is reclaimed: the swan marks the frontier won — the
+ * "furthest, sleepiest edge" he warned of is quiet — and turns the Queen's eye to
+ * the last, unspoken fear: not a louder honk, but a Queendom that holds itself
+ * together when she is nowhere near it.
+ */
+export const AFTER_FRONTIER: readonly Discourse[] = [
+  // The fullest talk — the edge is held; now the real test.
+  [
+    'So you went and did it. The far ponds — the furthest, sleepiest edges, the ones a kingdom always loses first because no one is ever quite looking at them — all of them blue again. I felt each one clear from here, like a held breath let go.',
+    'I confess I did not expect it of you. The edge-picker is the cleverest of the geese, you know. He never challenges your grand chorus; he simply waits for the pond you have forgotten, the duckling who wandered too far, the evening you were tired. He picks. And you, it seems, refused to forget.',
+    'But mark what reclaiming truly cost you, Majesty — not a honk, but a presence. You had to be everywhere. And no queen can be everywhere forever; that was the whole lesson of the marsh, and of poor Stormbill, and of the quiet listening one whose name they scratched from the gold.',
+    'Which leaves the oldest fear of all, the one at the very back of the marsh. There waits a general who is not frightened of your voice in the slightest. He has heard a hundred queens out-honk a hundred ganders. What he fears — the only thing he fears — is the morning your ducks wake a Queendom while you are off on the far water, and simply carry on without you.',
+    'So do not come to me asking where he is. Ask instead whether your flock would hold these ponds tomorrow if you vanished into the fog this very night. The day the answer is yes, you will not need to find him. He will already have lost.',
+  ],
+  // A shorter musing — on holding versus winning.
+  [
+    'The whole frontier, blue. Enjoy it; you earned the looking.',
+    'Here is the thing the geese understand that ducks forever forget: holding is not a battle you win, it is a habit you keep. They did not lose those ponds because your honk was louder. They lost them because your ducks stayed — foraged them, nested them, made them ordinary and dull and lived-in.',
+    'Dull is the strongest fortification ever built, Majesty. A pond worth fighting over is a prize. A pond too boringly, thoroughly *yours* to imagine otherwise is not even a thought in a gander’s head. Bore them out of the marsh. It is the only conquest that has ever lasted.',
+  ],
+]
