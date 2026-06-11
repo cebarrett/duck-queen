@@ -33,7 +33,7 @@ const CHORUS_MULT = [0.6, 0.6, 0.8, 1.0]
 // --- The Marsh Baron boss fight --------------------------------------------
 const BOSS_TRIGGER_RANGE = 6 // the Queen must come this close to face the Baron
 const BOSS_DISENGAGE_RANGE = 11 // backing this far off forfeits the boss fight
-const BOSS_DRAIN = 0.6 // he pushes back far harder than a regular goose
+const BOSS_DRAIN = 0.42 // he pushes back hard, but 6+ calm drakes should be a winnable stand
 const BOSS_DRAKE_FILL = 0.06 // per CALM drake — drakes are what actually sustain the meter against him
 const BOSS_OTHER_FILL = 0.005 // ducklings/hens barely move it — only the deep drake rasp answers him
 const BOSS_MAX_PASSIVE = 0.55 // cap the support so even a drake host must out-last a couple of his splits
