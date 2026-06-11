@@ -48,6 +48,18 @@ export class Nest {
     return true
   }
 
+  /** Free every mesh in the nest (bowl + any remaining eggs) after it's been
+   *  taken out of the scene. Called when the Queen razes the nest. */
+  dispose(): void {
+    this.group.traverse((obj) => {
+      if (!(obj instanceof THREE.Mesh)) return
+      obj.geometry.dispose()
+      const mat = obj.material
+      if (Array.isArray(mat)) mat.forEach((m) => m.dispose())
+      else mat.dispose()
+    })
+  }
+
   /** Remove the most recent egg (mesh + count). Shared by theft and hatching. */
   private removeEgg(): boolean {
     const egg = this.eggMeshes.pop()
@@ -90,6 +102,16 @@ export class Nests {
     this.scene.add(nest.group)
     this.all.push(nest)
     return nest
+  }
+
+  /** Tear a nest down: drop it from the scene and free its meshes. Any eggs still
+   *  in the bowl are lost. The caller rouses off a brooding hen (if any) first. */
+  remove(nest: Nest): void {
+    const i = this.all.indexOf(nest)
+    if (i === -1) return
+    this.all.splice(i, 1)
+    this.scene.remove(nest.group)
+    nest.dispose()
   }
 
   /** Advance incubation on every nest and return those that hatched an egg this

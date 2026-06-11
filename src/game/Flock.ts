@@ -204,6 +204,14 @@ export class Flock {
     return best
   }
 
+  /** The hen brooding on (or walking to) `nest`, or null — used to rouse her off it. */
+  henOnNest(nest: Nest): DuckSubject | null {
+    for (const m of this.members) {
+      if (m.kind === 'hen' && m.nest === nest) return m
+    }
+    return null
+  }
+
   /** A nest egg hatched: a new duckling pops out at (x, z) and falls in behind the
    *  Queen — hers from birth. Hatching is gameplay, so the newborn draws its voice
    *  and heading from Math.random, NOT the seeded world rng. */
