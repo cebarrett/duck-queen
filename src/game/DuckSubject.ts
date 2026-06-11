@@ -20,7 +20,7 @@ const PAUSE_MIN = 1.0 // shortest idle pause (seconds)
 const PAUSE_MAX = 4.0 // longest idle pause
 
 // --- Following tuning ------------------------------------------------------
-const FOLLOW_SPEED = 5.5 // a touch slower than the Queen (6) so they trail her
+const FOLLOW_SPEED = 6.6 // a touch faster than the Queen (6) so stragglers reel back in
 const FOLLOW_RESPONSIVENESS = 7 // snappier than wandering so they keep up
 const FOLLOW_RING = 2.2 // they settle this far from the Queen (not on top of her)
 const FOLLOW_ARRIVE_BAND = 2.0 // slow down within this band above the ring
