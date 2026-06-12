@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { buildDuckModel, setBillOpen } from './duckModel'
 
 const QUACK_BILL_TIME = 0.32
-const QUACK_BILL_SYLLABLE = 0.16
+const QUACK_BILL_SYLLABLE = 0.48
 
 /**
  * The Queen: a white box-duck wearing the golden crown. She's just the shared
