@@ -15,7 +15,7 @@ export interface SubjectKindDef {
   /** Pitch range; each individual draws one (seeded) so the flock sounds varied. */
   pitch: [number, number]
   /** Make this kind's call at the given pitch. */
-  voice: (sound: Sound, pitch: number) => void
+  voice: (sound: Sound, pitch: number) => number
 }
 
 const DUCKLING_YELLOW = 0xffe680 // small + yellow so the babies read as "hers"

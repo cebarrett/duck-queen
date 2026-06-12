@@ -229,6 +229,7 @@ export class DuckController {
     this.updateWings(delta)
 
     this.updateCrown(delta)
+    this.duck.update(delta)
     this.panicTimer = Math.max(0, this.panicTimer - delta)
   }
 

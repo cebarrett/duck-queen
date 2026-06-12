@@ -54,6 +54,7 @@ export class Flock {
     private readonly nests: Nests,
     private readonly colliders: readonly Collider[],
     private readonly onMessage: OnMessage,
+    private readonly onQueenQuack: (duration: number) => void,
     private readonly progress: Progress,
     rng: Rng,
   ) {
@@ -206,6 +207,7 @@ export class Flock {
     duckling.recruit() // it's the Queen's already — start it following her
     this.members.push(duckling)
     this.scene.add(duckling.group)
+    duckling.vocalize()
   }
 
   /** The ducklings old enough to grow up right now (Game checks they can be fed). */
@@ -229,8 +231,7 @@ export class Flock {
     this.scene.add(adult.group)
 
     // A first call in its new grown-up voice.
-    if (kind === 'drake') this.sound.drakeCall()
-    else this.sound.henQuack()
+    adult.vocalize()
   }
 
   /** Scatter current subjects near a conflict point. They still count as hers,
@@ -303,7 +304,8 @@ export class Flock {
    *  range. So a quack is both "come here" to strangers and "to me!" to her own. */
   private handleQuack(): void {
     if (!this.input.justPressed('KeyQ')) return
-    this.sound.quack() // the Queen quacks — even if no ducks are in earshot
+    const duration = this.sound.quack() // the Queen quacks — even if no ducks are in earshot
+    this.onQueenQuack(duration)
 
     const qx = this.queen.position.x
     const qz = this.queen.position.z

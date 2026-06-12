@@ -155,7 +155,20 @@ export class Game {
 
     // The duck subjects. The Flock spawns and updates them; it needs Input (to
     // hear the Queen's quack) and the Queen's Group (to know where she is).
-    this.flock = new Flock(this.scene, this.input, this.duck.group, this.sound, world.pond, this.food, this.nests, world.colliders, (text) => this.hud.showMessage(text), this.progress, deriveRng(seed, 'flock'))
+    this.flock = new Flock(
+      this.scene,
+      this.input,
+      this.duck.group,
+      this.sound,
+      world.pond,
+      this.food,
+      this.nests,
+      world.colliders,
+      (text) => this.hud.showMessage(text),
+      (duration) => this.duck.quack(duration),
+      this.progress,
+      deriveRng(seed, 'flock'),
+    )
     // A flock stranded far from home may hold a nearby reclaimed frontier pond.
     this.flock.setReclaimedPonds(() => this.frontier.claimedPonds)
 
@@ -300,7 +313,7 @@ export class Game {
 
     if (this.input.justPressed('KeyE') && nest && hen) {
       hen.assignToNest(nest)
-      this.sound.henQuack() // a contented settling cluck
+      hen.vocalize() // a contented settling cluck
       this.hud.showMessage('🥚 A hen settles in')
     }
   }
@@ -320,7 +333,7 @@ export class Game {
 
     if (this.input.justPressed('KeyR') && hen) {
       hen.leaveNest()
-      this.sound.henQuack() // an indignant cluck as she's shooed off
+      hen.vocalize() // an indignant cluck as she's shooed off
       this.hud.showMessage('🐤 The hen is roused off')
     }
   }
@@ -412,7 +425,6 @@ export class Game {
     for (const nest of this.nests.collectHatches(delta)) {
       if (!this.food.spend(HATCH_FOOD_COST)) break // ran out mid-frame (several nests hatched at once) — the rest wait their turn
       this.flock.hatchAt(nest.x, nest.z)
-      this.sound.peep() // a newborn cheep
       this.hud.showMessage('🐣 An egg hatched!')
     }
   }

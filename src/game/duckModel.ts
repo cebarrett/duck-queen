@@ -16,6 +16,8 @@ export interface DuckModel {
   leftWing: THREE.Group
   rightWing: THREE.Group
   head: THREE.Group
+  upperBill: THREE.Group
+  lowerBill: THREE.Group
   crown?: THREE.Group
 }
 
@@ -76,7 +78,12 @@ export function buildDuckModel(opts: DuckModelOptions = {}): DuckModel {
   const head = new THREE.Group()
   head.position.set(0, 1.0, -0.4)
   head.add(box(0.7, 0.7, 0.7, headColor, [0, 0.25, -0.1])) // head cube
-  head.add(box(0.45, 0.22, 0.45, bill, [0, 0.15, -0.55])) // beak, out the front
+
+  // Bill halves hinge at the face so ducks can visibly open up when they call.
+  const upperBill = makeBillHalf(0.2, bill)
+  const lowerBill = makeBillHalf(0.1, bill)
+  head.add(upperBill, lowerBill)
+
   head.add(box(0.12, 0.12, 0.12, BLACK, [-0.22, 0.4, -0.42])) // eyes
   head.add(box(0.12, 0.12, 0.12, BLACK, [0.22, 0.4, -0.42]))
   group.add(head)
@@ -95,7 +102,7 @@ export function buildDuckModel(opts: DuckModelOptions = {}): DuckModel {
   const crown = withCrown ? addCrown(head) : undefined
 
   group.scale.setScalar(scale)
-  return { group, leftWing, rightWing, head, crown }
+  return { group, leftWing, rightWing, head, upperBill, lowerBill, crown }
 }
 
 // --- Mallard palettes ------------------------------------------------------
@@ -131,6 +138,19 @@ function makeWing(side: number, color: number): THREE.Group {
   pivot.position.set(side * 0.45, 0.85, 0.05) // the shoulder hinge point
   pivot.add(box(0.15, 0.5, 0.9, color, [side * 0.1, -0.25, 0]))
   return pivot
+}
+
+function makeBillHalf(y: number, color: number): THREE.Group {
+  const pivot = new THREE.Group()
+  pivot.position.set(0, y, -0.34)
+  pivot.add(box(0.45, 0.1, 0.45, color, [0, 0, -0.225]))
+  return pivot
+}
+
+export function setBillOpen(upperBill: THREE.Group, lowerBill: THREE.Group, amount: number): void {
+  const open = Math.max(0, Math.min(1, amount))
+  upperBill.rotation.x = open * 0.16
+  lowerBill.rotation.x = -open * 0.42
 }
 
 /** The golden crown — a band, three points, and a red jewel. Queen only. Added to

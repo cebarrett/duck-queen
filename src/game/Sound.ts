@@ -32,6 +32,10 @@ function makeSample(url: string): Sample {
 // The quack is monophonic (one at a time) so mashing Q can't stack copies; this
 // is the minimum gap between retriggers, to keep frantic mashing from machine-gunning.
 const MIN_QUACK_GAP = 0.08
+const SYNTH_QUACK_DURATION = 0.25
+const SYNTH_PEEP_DURATION = 0.14
+const SYNTH_DRAKE_DURATION = 0.22
+const SYNTH_HEN_DURATION = 0.34
 
 export class Sound {
   private ctx: AudioContext | null = null
@@ -65,27 +69,31 @@ export class Sound {
   /** The Queen's quack — recorded if available, else synthesized. Monophonic:
    *  mashing Q (e.g. during a honk-off) cuts the previous quack instead of piling
    *  copies on top of each other, and a short gap throttles frantic retriggers. */
-  quack(): void {
+  quack(): number {
     const ctx = this.getContext()
-    if (!ctx) return
+    if (!ctx) return 0
 
     const now = ctx.currentTime
-    if (now - this.lastQuackTime < MIN_QUACK_GAP) return // ignore ultra-fast repeats
+    if (now - this.lastQuackTime < MIN_QUACK_GAP) return 0 // ignore ultra-fast repeats
     this.lastQuackTime = now
 
     this.stopQuackVoice() // cut off any still-playing quack first
 
     let voice: AudioScheduledSourceNode
+    let duration: number
     if (this.quackSample.buffer) {
       voice = this.playBuffer(ctx, this.quackSample.buffer, 1, 0.9)
+      duration = this.bufferDuration(this.quackSample.buffer, 1)
     } else {
       if (this.quackSample.raw) void this.decode(this.quackSample)
       voice = this.synthQuack(ctx)
+      duration = SYNTH_QUACK_DURATION
     }
     this.quackVoice = voice
     voice.onended = () => {
       if (this.quackVoice === voice) this.quackVoice = null
     }
+    return duration
   }
 
   private stopQuackVoice(): void {
@@ -100,10 +108,13 @@ export class Sound {
 
   /** A duckling's little peep. `pitch` (~0.85–1.25) gives each duckling its own
    *  voice — it scales the synth frequency, or the recording's playback speed. */
-  peep(pitch = 1): void {
+  peep(pitch = 1): number {
     const ctx = this.getContext()
-    if (!ctx) return
-    this.playSampleOrSynth(ctx, this.peepSample, (c) => this.synthPeep(c, pitch), pitch, 0.5)
+    if (!ctx) return 0
+    return this.playSampleOrSynth(ctx, this.peepSample, (c) => {
+      this.synthPeep(c, pitch)
+      return SYNTH_PEEP_DURATION
+    }, pitch, 0.5)
   }
 
   /** A goose's honk — recorded if available, else synthesized. Lower and harsher
@@ -111,24 +122,33 @@ export class Sound {
   honk(pitch = 1): void {
     const ctx = this.getContext()
     if (!ctx) return
-    this.playSampleOrSynth(ctx, this.honkSample, (c) => this.synthHonk(c, pitch), pitch, 0.8)
+    this.playSampleOrSynth(ctx, this.honkSample, (c) => {
+      this.synthHonk(c, pitch)
+      return 0.34
+    }, pitch, 0.8)
   }
 
   /** A drake's (male mallard) call — soft, low and reedy, nothing like the female's
    *  quack. `pitch` (~0.8–1.05) gives each drake its own voice. */
-  drakeCall(pitch = 1): void {
+  drakeCall(pitch = 1): number {
     const ctx = this.getContext()
-    if (!ctx) return
-    this.playSampleOrSynth(ctx, this.drakeSample, (c) => this.synthDrake(c, pitch), pitch, 0.5)
+    if (!ctx) return 0
+    return this.playSampleOrSynth(ctx, this.drakeSample, (c) => {
+      this.synthDrake(c, pitch)
+      return SYNTH_DRAKE_DURATION
+    }, pitch, 0.5)
   }
 
   /** A hen's (female mallard) quack — a rounded "quack-quack", quieter than the
    *  Queen's command quack so it reads as ambient chatter, not a rally. `pitch`
    *  (~0.95–1.2) gives each hen its own voice. */
-  henQuack(pitch = 1): void {
+  henQuack(pitch = 1): number {
     const ctx = this.getContext()
-    if (!ctx) return
-    this.playSampleOrSynth(ctx, this.henSample, (c) => this.synthHen(c, pitch), pitch, 0.7)
+    if (!ctx) return 0
+    return this.playSampleOrSynth(ctx, this.henSample, (c) => {
+      this.synthHen(c, pitch)
+      return SYNTH_HEN_DURATION
+    }, pitch, 0.7)
   }
 
   /**
@@ -205,17 +225,17 @@ export class Sound {
   private playSampleOrSynth(
     ctx: AudioContext,
     sample: Sample,
-    synth: (ctx: AudioContext) => void,
+    synth: (ctx: AudioContext) => number,
     pitch: number,
     volume: number,
-  ): void {
+  ): number {
     if (sample.buffer) {
       this.playBuffer(ctx, sample.buffer, pitch, volume)
-      return
+      return this.bufferDuration(sample.buffer, pitch)
     }
     // Have the bytes but not decoded yet — kick that off and synth for now.
     if (sample.raw) void this.decode(sample)
-    synth(ctx)
+    return synth(ctx)
   }
 
   private async fetch(sample: Sample): Promise<void> {
@@ -257,6 +277,10 @@ export class Sound {
     gain.connect(ctx.destination)
     src.start()
     return src
+  }
+
+  private bufferDuration(buffer: AudioBuffer, pitch: number): number {
+    return buffer.duration / Math.max(0.01, pitch)
   }
 
   // --- Synthesized fallbacks -------------------------------------------------

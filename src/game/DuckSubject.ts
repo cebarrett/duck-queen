@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { buildDuckModel } from './duckModel'
+import { buildDuckModel, setBillOpen } from './duckModel'
 import { type SubjectKind, SUBJECT_KINDS } from './subjectKinds'
 import { randRange, seekArrive, pointAround, faceHeading, easeFactor } from './mathUtils'
 import { type Collider, resolveWalls } from './collision'
@@ -85,6 +85,8 @@ const HUDDLE_OFFSET = 1.2 // ducklings settle close to the adult they trust
 // --- Vocalising ------------------------------------------------------------
 const VOICE_RATE = 0.1 // per second: chance to make its call ("now and then")
 const SCATTER_VOICE_RATE = 0.65 // startled subjects complain much more often
+const VOICE_BILL_TIME = { duckling: 0.2, drake: 0.3, hen: 0.42 } as const
+const VOICE_BILL_SYLLABLE = 0.16
 
 // --- Nesting (a hen broods on a nest) --------------------------------------
 const SIT_RADIUS = 0.25 // how close to the nest centre counts as "settled on it"
@@ -144,6 +146,8 @@ export class DuckSubject {
   private readonly leftWing: THREE.Group
   private readonly rightWing: THREE.Group
   private readonly head: THREE.Group
+  private readonly upperBill: THREE.Group
+  private readonly lowerBill: THREE.Group
   private readonly worm: THREE.Group
   private readonly wormScale: number
   // Idle fidget state: which daft thing it's doing, how long it's been at it, and
@@ -170,8 +174,10 @@ export class DuckSubject {
   // Set from its kind (see constructor): overall size, its voice, and a per-
   // individual pitch so the flock sounds like a crowd, not one cloned voice.
   private readonly scale: number
-  private readonly voice: (sound: Sound, pitch: number) => void
+  private readonly voice: (sound: Sound, pitch: number) => number
   private readonly voicePitch: number
+  private billTimer = 0
+  private billDuration: number = VOICE_BILL_TIME.duckling
   // Collision footprint, scaled to this subject's size (bigger birds, wider).
   private readonly collideRadius: number
   private readonly collideHeight: number
@@ -192,6 +198,8 @@ export class DuckSubject {
     this.leftWing = model.leftWing
     this.rightWing = model.rightWing
     this.head = model.head
+    this.upperBill = model.upperBill
+    this.lowerBill = model.lowerBill
     this.worm = makeWorm()
     this.worm.visible = false
     this.group.add(this.worm)
@@ -201,6 +209,7 @@ export class DuckSubject {
 
     this.scale = def.model.scale ?? 1
     this.voice = def.voice
+    this.billDuration = VOICE_BILL_TIME[kind]
     this.collideRadius = COLLIDE_RADIUS * (this.scale / BASE_SCALE)
     this.collideHeight = COLLIDE_HEIGHT * (this.scale / BASE_SCALE)
     this.wormScale = 1 / this.scale
@@ -340,6 +349,12 @@ export class DuckSubject {
     this.state = 'following'
   }
 
+  vocalize(pitchMultiplier = 1): void {
+    const duration = this.voice(this.sound, this.voicePitch * pitchMultiplier)
+    this.billDuration = Math.max(VOICE_BILL_TIME[this.kind], duration)
+    this.billTimer = this.billDuration
+  }
+
   update(delta: number, ctx: FlockContext): void {
     this.age += delta
 
@@ -347,7 +362,7 @@ export class DuckSubject {
     // more often while they scatter. A brooding hen sits quietly (she only clucks
     // when she lays — see brood()).
     const callRate = this.state === 'scattered' ? SCATTER_VOICE_RATE : VOICE_RATE
-    if (this.state !== 'nesting' && this.state !== 'worming' && Math.random() < callRate * delta) this.voice(this.sound, this.voicePitch)
+    if (this.state !== 'nesting' && this.state !== 'worming' && Math.random() < callRate * delta) this.vocalize()
 
     switch (this.state) {
       case 'following':
@@ -444,6 +459,7 @@ export class DuckSubject {
       this.updateIdle(delta)
     }
     this.group.rotation.y = this.heading
+    this.updateBill(delta)
   }
 
   /** Seek the Queen, settling into a ring around her, while pushing apart from
@@ -651,7 +667,7 @@ export class DuckSubject {
     this.layTimer -= delta
     if (this.layTimer <= 0) {
       nest.layEgg()
-      this.voice(this.sound, this.voicePitch) // a little cluck as the egg appears
+      this.vocalize() // a little cluck as the egg appears
       this.layTimer = randRange(LAY_MIN, LAY_MAX)
     }
   }
@@ -714,7 +730,7 @@ export class DuckSubject {
     if (!this.wormRewarded && this.wormTimer >= WORM_POP_TIME) {
       this.wormRewarded = true
       this.food.gain()
-      this.voice(this.sound, this.voicePitch * 1.08)
+      this.vocalize(1.08)
     }
 
     if (this.wormTimer >= WORM_DURATION) {
@@ -761,6 +777,14 @@ export class DuckSubject {
     const t = easeFactor(rate, delta)
     this.velX += (vx - this.velX) * t
     this.velZ += (vz - this.velZ) * t
+  }
+
+  private updateBill(delta: number): void {
+    if (this.billTimer > 0) this.billTimer = Math.max(0, this.billTimer - delta)
+    const progress = this.billTimer / this.billDuration
+    const syllables = Math.max(1, Math.ceil(this.billDuration / VOICE_BILL_SYLLABLE))
+    const pulse = Math.abs(Math.sin(progress * syllables * Math.PI))
+    setBillOpen(this.upperBill, this.lowerBill, progress > 0 ? pulse : 0)
   }
 
   private pickNewTarget(): void {
