@@ -37,9 +37,9 @@ const BARON_Z = -72
 // --- Honk-off tuning -------------------------------------------------------
 const TRIGGER_RANGE = 5 // a honk-off begins when the Queen gets this close to a goose
 const DISENGAGE_RANGE = 9 // backing this far away ends it (counts as a loss)
-const FLOCK_FILL = 0.11 // resolve/sec per following duck — ~3 followers already out-honk the goose passively
 const GOOSE_DRAIN = 0.31 // resolve/sec the goose pushes back — outpaces a lone Queen no matter how she mashes
-const MAX_PASSIVE_SUPPORT = 0.55 // cap the crowd's help (well above the drain) so a big flock wins with light mashing
+const FLOCK_FILL = 0.09 // resolve/sec per following duck before chorus scaling
+const MAX_PASSIVE_SUPPORT = GOOSE_DRAIN - 0.015 // flock help can steady the meter, but Q must win it
 // The Chorus: a flock's support is scaled by how many of the three duck voices
 // (duckling / drake / hen) it has. A full 3-voice chorus is full strength; a
 // one-note flock is much weaker — "unity must be maintained". Indexed by voices.
