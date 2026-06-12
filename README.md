@@ -66,9 +66,10 @@ will actually work, so you don't have to memorize them.
 - **Forage.** Your ducklings gather food plants; only the Queen herself harvests
   the **reeds** along the shoreline.
 - **Honk off the geese.** Get close to a rival goose and it squares up — **mash Q**
-  to out-honk it (a bigger flock at your back helps). Win and it flees, cowed for
-  a while; lose and the whole helping chorus scatters while the goose struts back
-  to stealing your food.
+  to out-honk it (a bigger flock at your back helps). A first gaggle waits near
+  the home pond, with more ordinary geese scattered through the wider marsh. Win
+  and one flees, cowed for a while; lose ose and the whole helping chorus scatters
+  while the goose struts back to stealing your food.
 - **Build nests and brood.** Spend 10 reeds to **build a nest** (**B**), then
   **seat a hen** on it (**E**). She'll settle in and lay eggs over time. An egg
   hatches into a duckling only once you've foraged **5 food** to feed it — and
