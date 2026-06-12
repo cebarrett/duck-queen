@@ -17,6 +17,19 @@ const GOOSE_COUNT = 3
 const AREA_CENTER_Z = -50 // out past the pond (which sits at z = -26)
 const AREA_RADIUS = 12
 
+// A wider gaggle keeps the marsh feeling contested after the opening minutes.
+// These are ordinary geese (not frontier lieutenants): they steal food, raid
+// brooding hens, and can be driven off with the same honk-off as the first three.
+const ROAMING_GOOSE_COUNT = 9
+const ROAMING_SPREAD = 105
+const ROAMING_MIN_DIST = 28 // keep the starting clearing breathable
+const ROAMING_MAX_DIST = 112 // within the ground/fogged playable world
+const ROAMING_POND_MARGIN = 3
+const ROAMING_COLLIDER_MARGIN = 1.5
+const ROAMING_GOOSE_MARGIN = 6
+const ROAMING_BARON_CLEAR = 18
+const ROAMING_TREATY_CLEAR = TREATY_FLATS.radius + 8
+
 // The Marsh Baron holds his own patch of marsh, deeper out than the gaggle.
 const BARON_X = 0
 const BARON_Z = -72
@@ -180,6 +193,14 @@ export class Geese {
       })
       scene.add(goose.group)
       this.lieutenants.push({ goose, territory, claimed: false })
+    }
+
+    for (let i = 0; i < ROAMING_GOOSE_COUNT; i++) {
+      const spot = this.pickRoamingGooseSpot(pond, colliders, rng)
+      if (!spot) break
+      const goose = new Goose(spot.x, spot.z, sound, food, pond, this.nests, colliders, rng)
+      this.geese.push(goose)
+      scene.add(goose.group)
     }
 
     const clearCurrent = () => {
@@ -460,6 +481,41 @@ export class Geese {
   private startStandoff(standoff: Standoff, goose: Goose): void {
     this.currentStandoff = standoff
     standoff.start(goose)
+  }
+
+  private pickRoamingGooseSpot(
+    pond: Pond,
+    colliders: readonly Collider[],
+    rng: Rng,
+  ): { x: number; z: number } | null {
+    for (let guard = 0; guard < 600; guard++) {
+      const x = (rng() * 2 - 1) * ROAMING_SPREAD
+      const z = (rng() * 2 - 1) * ROAMING_SPREAD
+      const distFromSpawn = Math.hypot(x, z)
+      if (distFromSpawn < ROAMING_MIN_DIST || distFromSpawn > ROAMING_MAX_DIST) continue
+      if (pond.overlaps(x, z, ROAMING_POND_MARGIN)) continue
+      if (Math.hypot(x - BARON_X, z - BARON_Z) < ROAMING_BARON_CLEAR) continue
+      if (Math.hypot(x - TREATY_FLATS.x, z - TREATY_FLATS.z) < ROAMING_TREATY_CLEAR) continue
+      if (this.tooCloseToCollider(x, z, colliders)) continue
+      if (this.tooCloseToGoose(x, z)) continue
+      return { x, z }
+    }
+    return null
+  }
+
+  private tooCloseToCollider(x: number, z: number, colliders: readonly Collider[]): boolean {
+    for (const c of colliders) {
+      if (Math.hypot(x - c.x, z - c.z) < c.radius + ROAMING_COLLIDER_MARGIN) return true
+    }
+    return false
+  }
+
+  private tooCloseToGoose(x: number, z: number): boolean {
+    for (const goose of this.geese) {
+      const gp = goose.group.position
+      if (Math.hypot(x - gp.x, z - gp.z) < ROAMING_GOOSE_MARGIN) return true
+    }
+    return false
   }
 
   private isFlockFormidable(): boolean {
