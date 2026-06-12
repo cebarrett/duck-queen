@@ -17,6 +17,7 @@ import { Splash } from './Splash'
 import { Nests } from './Nests'
 import { HUD, type MinimapSnapshot } from './HUD'
 import { deriveRng } from './rng'
+import { makeProgress } from './Progress'
 
 // The default world seed. A given seed always generates the same layout; pass
 // ?seed=123 in the URL to try another one.
@@ -77,6 +78,7 @@ export class Game {
   private readonly nests: Nests
   private readonly pond: Pond
   private readonly frontier: Frontier
+  private readonly progress = makeProgress()
   private wasBuildDown = false // edge-detect the B key (one nest per press)
   private wasSeatDown = false // edge-detect the E key (one hen seated per press)
   private wasKickDown = false // edge-detect the R key (one hen roused per press)
@@ -158,7 +160,7 @@ export class Game {
 
     // The duck subjects. The Flock spawns and updates them; it needs Input (to
     // hear the Queen's quack) and the Queen's Group (to know where she is).
-    this.flock = new Flock(this.scene, this.input, this.duck.group, this.sound, world.pond, this.food, this.nests, world.colliders, (text) => this.hud.showMessage(text), deriveRng(seed, 'flock'))
+    this.flock = new Flock(this.scene, this.input, this.duck.group, this.sound, world.pond, this.food, this.nests, world.colliders, (text) => this.hud.showMessage(text), this.progress, deriveRng(seed, 'flock'))
     // A flock stranded far from home may hold a nearby reclaimed frontier pond.
     this.flock.setReclaimedPonds(() => this.frontier.claimedPonds)
 
@@ -178,6 +180,7 @@ export class Game {
       (gooseX, gooseZ) => this.handleQueenLostHonkOff(gooseX, gooseZ),
       () => this.resolvePenalty(),
       this.frontier,
+      this.progress,
       world.colliders,
       deriveRng(seed, 'geese'),
       deriveRng(seed, 'frontier'),
@@ -243,7 +246,7 @@ export class Game {
     this.hud.setFood(this.food.total)
     this.hud.setReeds(this.reeds.total)
     this.hud.setNests(this.nests.count)
-    this.hud.setFrontier(this.frontier.claimedCount, this.frontier.total, this.geese.frontierUnlocked)
+    this.hud.setFrontier(this.frontier.claimedCount, this.frontier.total, this.progress.treatyDefeated)
     this.updateMinimap()
 
     this.renderer.render(this.scene, this.camera)
@@ -383,7 +386,7 @@ export class Game {
       if (this.swan.isTalking) {
         this.showDialoguePage(this.swan.advanceDialogue())
       } else if (inRange) {
-        this.showDialoguePage(this.swan.beginDialogue(this.geese.baronDefeated, this.geese.frontierWon))
+        this.showDialoguePage(this.swan.beginDialogue(this.progress.baronDefeated, this.frontier.allClaimed))
       }
     }
     this.wasTalkDown = down

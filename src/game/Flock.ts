@@ -9,6 +9,7 @@ import type { Food } from './Food'
 import type { Nest, Nests } from './Nests'
 import type { Collider } from './collision'
 import type { Rng } from './rng'
+import { FOLLOWER_CAP, type Progress } from './Progress'
 
 // The flock roster: which kinds make up the subjects. A guaranteed mix (so you
 // always see some grown mallards), shuffled into random spawn slots by the seed.
@@ -20,11 +21,6 @@ const COMPOSITION: SubjectKind[] = [
 const QUACK_RANGE = 12 // a quack recruits idle ducks within this distance
 const SCATTER_RANGE = 10 // subjects this close to conflict briefly scatter
 const GUARD_RADIUS = 4.5 // adults holding this close to a nest slow a raid
-// How many subjects the Queen may lead at once — for now, until she bests the
-// Marsh Baron and proves her leadership, which lifts the cap (see liftFollowerCap).
-// It sits right at the boss gate (BOSS_MIN_FOLLOWERS), so a full flock is exactly
-// enough to challenge him: recruiting and hatching stop here until he's broken.
-const FOLLOWER_CAP = 10
 
 /** Game wires this to the HUD so the flock can explain why a duck won't join. */
 type OnMessage = (text: string) => void
@@ -46,7 +42,6 @@ export interface AllyMarker {
 export class Flock {
   private readonly members: DuckSubject[] = []
   private wasQuackDown = false // edge-detect the Q key (one quack per press)
-  private capLifted = false // set once the Marsh Baron is broken — then no follower cap
   // The reclaimed frontier ponds the flock may treat as home water (set by Game).
   private reclaimedPonds: () => readonly PondCircle[] = () => []
 
@@ -60,6 +55,7 @@ export class Flock {
     private readonly nests: Nests,
     private readonly colliders: readonly Collider[],
     private readonly onMessage: OnMessage,
+    private readonly progress: Progress,
     rng: Rng,
   ) {
     // Shuffle the roster into random spawn slots, deterministically from the seed
@@ -88,15 +84,9 @@ export class Flock {
   }
 
   /** Has the flock hit its leadership cap? (Recruiting + hatching pause here until
-   *  the cap is lifted.) A brooding hen is off-duty and doesn't count toward it. */
+   *  the Baron is broken.) A brooding hen is off-duty and doesn't count toward it. */
   get isFull(): boolean {
-    return !this.capLifted && this.subjectCount >= FOLLOWER_CAP
-  }
-
-  /** The Queen has bested the Marsh Baron: her proven leadership lifts the cap, so
-   *  she may gather a flock without limit from here on. */
-  liftFollowerCap(): void {
-    this.capLifted = true
+    return !this.progress.baronDefeated && this.subjectCount >= FOLLOWER_CAP
   }
 
   /** Tell the flock which outlying ponds the Queen has reclaimed, so a flock left

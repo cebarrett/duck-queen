@@ -11,6 +11,7 @@ import type { Frontier, Territory } from './Frontier'
 import type { Collider } from './collision'
 import type { Rng } from './rng'
 import { TREATY_FLATS } from './Biomes'
+import { FOLLOWER_CAP, type Progress } from './Progress'
 
 const GOOSE_COUNT = 3
 const AREA_CENTER_Z = -50 // out past the pond (which sits at z = -26)
@@ -39,7 +40,7 @@ const BOSS_DRAKE_FILL = 0.06 // per CALM drake — drakes are what actually sust
 const BOSS_OTHER_FILL = 0.005 // ducklings/hens barely move it — only the deep drake rasp answers him
 const BOSS_MAX_PASSIVE = 0.55 // cap the support so even a drake host must out-last a couple of his splits
 const BOSS_START_RESOLVE = 0.15 // only a small head start — he's a boss
-const BOSS_MIN_FOLLOWERS = 10 // "formidable": at least this many subjects...
+const BOSS_MIN_FOLLOWERS = FOLLOWER_CAP // cap and gate are deliberately the same — see Progress.ts
 const BOSS_MIN_DRAKES = 5 // ...including this many drakes. Fewer than 5 and he just sneers;
 // at 5 it's a nail-biter, 6+ a cleaner win. So the only way to LOSE is to engage with a real
 // host and then give up / get driven off.
@@ -111,9 +112,7 @@ export class Geese {
   private readonly frontierStandoff: Standoff
   private currentStandoff: Standoff | null = null
 
-  private bossDefeated = false
   private bossGateCooldown = 0
-  private treatyDefeated = false
   private treatyGateCooldown = 0
   private treatyUnlockAnnounced = false
   private treatyUnlockDelay = 0
@@ -136,6 +135,7 @@ export class Geese {
     private readonly onQueenLost: OnQueenLost,
     private readonly resolvePenalty: ResolvePenalty,
     private readonly frontier: Frontier,
+    private readonly progress: Progress,
     colliders: readonly Collider[],
     rng: Rng,
     frontierRng: Rng,
@@ -216,9 +216,8 @@ export class Geese {
       onPeriodic: (knockback) => this.doSplit(knockback),
       onStart: () => this.onBaronMessage('👑 THE MARSH BARON squares up!'),
       onWin: () => {
-        this.bossDefeated = true
+        this.progress.baronDefeated = true
         this.treatyUnlockDelay = 2.6
-        this.flock.liftFollowerCap()
         this.onBaronMessage('👑 THE MARSH BARON is broken — the marsh is yours!')
       },
       onLose: (goose, qp) => {
@@ -247,7 +246,7 @@ export class Geese {
       onPeriodic: (knockback) => this.applyTreatyClause(knockback),
       onStart: () => this.onBaronMessage('⚖️ LORD BOUNDARY invokes the old treaty!'),
       onWin: () => {
-        this.treatyDefeated = true
+        this.progress.treatyDefeated = true
         this.frontierUnlockDelay = FRONTIER_UNLOCK_DELAY
         this.onBaronMessage('⚖️ LORD BOUNDARY yields — the Treaty Flats hold!')
       },
@@ -294,20 +293,6 @@ export class Geese {
     for (const lt of this.lieutenants) lt.goose.update(delta)
   }
 
-  /** Whether the frontier phase has opened (Lord Boundary has yielded). */
-  get frontierUnlocked(): boolean {
-    return this.treatyDefeated
-  }
-
-  /** Every outlying pond reclaimed. */
-  get frontierWon(): boolean {
-    return this.frontier.allClaimed
-  }
-
-  get baronDefeated(): boolean {
-    return this.bossDefeated
-  }
-
   get minimapEnemies(): EnemyMarker[] {
     return [
       ...this.geese.map((goose) => ({
@@ -320,13 +305,13 @@ export class Geese {
         x: this.baron.group.position.x,
         z: this.baron.group.position.z,
         boss: true,
-        defeated: this.bossDefeated,
+        defeated: this.progress.baronDefeated,
       },
       {
         x: this.treatyBoss.group.position.x,
         z: this.treatyBoss.group.position.z,
         boss: true,
-        defeated: this.treatyDefeated,
+        defeated: this.progress.treatyDefeated,
       },
       ...this.lieutenants.map((lt) => ({
         x: lt.goose.group.position.x,
@@ -377,7 +362,7 @@ export class Geese {
   }
 
   private updateBossFight(delta: number): void {
-    if (this.bossDefeated) return
+    if (this.progress.baronDefeated) return
     if (this.currentStandoff === this.bossStandoff) {
       this.bossStandoff.update(delta)
       return
@@ -398,7 +383,7 @@ export class Geese {
   }
 
   private updateTreatyFight(delta: number): void {
-    if (this.treatyDefeated) return
+    if (this.progress.treatyDefeated) return
     if (this.currentStandoff === this.treatyStandoff) {
       this.treatyStandoff.update(delta)
       return
@@ -409,7 +394,7 @@ export class Geese {
     const qz = this.queen.position.z
     const gp = this.treatyBoss.group.position
 
-    if (!this.bossDefeated) {
+    if (!this.progress.baronDefeated) {
       this.updateLockedTreatyHint(delta, qx, qz, gp)
       return
     }
@@ -434,7 +419,7 @@ export class Geese {
   }
 
   private updateFrontierFight(delta: number): void {
-    if (!this.treatyDefeated) return
+    if (!this.progress.treatyDefeated) return
 
     if (!this.frontierUnlockAnnounced) {
       if (this.frontierUnlockDelay > 0) {
