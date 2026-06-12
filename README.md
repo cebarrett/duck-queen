@@ -105,6 +105,9 @@ Sounds are synthesized by default. To use real recordings, drop any of these int
 `quack.mp3` (the Queen) · `peep.mp3` (ducklings) · `honk.mp3` (geese) ·
 `drake.mp3` & `hen.mp3` (adult mallards).
 
+Animal calls are distance-faded; goose honks are also rate-limited and mixed by
+priority, so a real `honk.mp3` won't stack into a full-volume wall of geese.
+
 ## Project structure
 
 ```

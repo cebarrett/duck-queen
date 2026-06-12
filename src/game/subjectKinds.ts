@@ -15,7 +15,7 @@ export interface SubjectKindDef {
   /** Pitch range; each individual draws one (seeded) so the flock sounds varied. */
   pitch: [number, number]
   /** Make this kind's call at the given pitch. */
-  voice: (sound: Sound, pitch: number) => number
+  voice: (sound: Sound, pitch: number, distance?: number) => number
 }
 
 const DUCKLING_YELLOW = 0xffe680 // small + yellow so the babies read as "hers"
@@ -25,18 +25,18 @@ export const SUBJECT_KINDS: Record<SubjectKind, SubjectKindDef> = {
   duckling: {
     model: { featherColor: DUCKLING_YELLOW, scale: 0.4 },
     pitch: [0.85, 1.25],
-    voice: (s, p) => s.peep(p),
+    voice: (s, p, distance) => s.peep(p, { distance }),
   },
   // Adult male mallard: green head, bigger than a duckling, a soft reedy call.
   drake: {
     model: { ...MALLARD_DRAKE, scale: 0.75 },
     pitch: [0.8, 1.05],
-    voice: (s, p) => s.drakeCall(p),
+    voice: (s, p, distance) => s.drakeCall(p, { distance }),
   },
   // Adult female mallard: mottled brown, bigger, a rounded quack.
   hen: {
     model: { ...MALLARD_HEN, scale: 0.72 },
     pitch: [0.95, 1.2],
-    voice: (s, p) => s.henQuack(p),
+    voice: (s, p, distance) => s.henQuack(p, { distance }),
   },
 }
