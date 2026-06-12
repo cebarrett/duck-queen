@@ -243,6 +243,14 @@ export class Flock {
     }
   }
 
+  /** A lost honk-off breaks the whole active chorus: every calm supporter who was
+   *  lending a voice bolts away, not just the ducks standing beside the goose. */
+  scatterChorusFrom(x: number, z: number): void {
+    for (const d of this.members) {
+      if (d.supportsChorus) d.scatterFrom(x, z)
+    }
+  }
+
   /** Ratio of current subjects within `radius` of the Queen. With no subjects,
    *  treat the flock as fully regrouped so callers don't divide by zero. */
   regroupedRatio(radius: number): number {

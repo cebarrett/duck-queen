@@ -443,7 +443,7 @@ export class Game {
 
   private handleQueenLostHonkOff(gooseX: number, gooseZ: number): void {
     this.duckController.startPanicFlee(gooseX, gooseZ)
-    this.flock.scatterFrom(gooseX, gooseZ)
+    this.flock.scatterChorusFrom(gooseX, gooseZ)
     this.resolveShakenTimer = RESOLVE_SHAKEN_TIME
     this.hud.showMessage('OUT-HONKED!')
     this.hud.setResolveShaken(true)
