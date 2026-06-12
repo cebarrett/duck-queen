@@ -205,6 +205,7 @@ export class Geese {
 
     const clearCurrent = () => {
       this.currentStandoff = null
+      this.flock.setHonkOffTarget(false)
     }
     const gagglePassive = () => {
       const { size, layers } = this.flock.chorus
@@ -480,6 +481,7 @@ export class Geese {
 
   private startStandoff(standoff: Standoff, goose: Goose): void {
     this.currentStandoff = standoff
+    this.flock.setHonkOffTarget(true, goose.group.position.x, goose.group.position.z)
     standoff.start(goose)
   }
 

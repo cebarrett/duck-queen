@@ -18,6 +18,8 @@ export interface GooseModel {
   leftWing: THREE.Group
   rightWing: THREE.Group
   neck: THREE.Group
+  upperBill: THREE.Group
+  lowerBill: THREE.Group
 }
 
 export interface GooseOptions {
@@ -60,14 +62,20 @@ export function buildGoose(opts: GooseOptions = {}): GooseModel {
   neck.position.set(0, 1.35, -0.55)
   neck.add(box(0.36, 1.0, 0.36, body, [0, 0.5, 0])) // neck stalk, rising from the pivot
   neck.add(box(0.5, 0.5, 0.62, body, [0, 1.05, -0.2])) // head
-  neck.add(box(0.3, 0.22, 0.52, ORANGE, [0, 1.0, -0.65])) // beak
+
+  // Bill halves hinge at the face, so a honking goose can gape instead of just
+  // playing a sound from a fixed orange block.
+  const upperBill = makeBillHalf(0.05)
+  const lowerBill = makeBillHalf(-0.06)
+  neck.add(upperBill, lowerBill)
+
   neck.add(box(0.12, 0.12, 0.12, BLACK, [-0.2, 1.18, -0.32])) // eyes
   neck.add(box(0.12, 0.12, 0.12, BLACK, [0.2, 1.18, -0.32]))
   if (opts.crest) addCrest(neck)
   group.add(neck)
 
   group.scale.setScalar(opts.scale ?? 1)
-  return { group, leftWing, rightWing, neck }
+  return { group, leftWing, rightWing, neck, upperBill, lowerBill }
 }
 
 /** One wing as a hinged pivot at the shoulder. side = -1 (left) / +1 (right).
@@ -77,6 +85,19 @@ function makeWing(side: number, color: number): THREE.Group {
   pivot.position.set(side * 0.58, 1.25, 0.1)
   pivot.add(box(0.18, 0.7, 1.1, color, [side * 0.05, -0.35, 0]))
   return pivot
+}
+
+function makeBillHalf(y: number): THREE.Group {
+  const pivot = new THREE.Group()
+  pivot.position.set(0, 1.0 + y, -0.48)
+  pivot.add(box(0.3, 0.1, 0.52, ORANGE, [0, 0, -0.26]))
+  return pivot
+}
+
+export function setGooseBillOpen(upperBill: THREE.Group, lowerBill: THREE.Group, amount: number): void {
+  const open = Math.max(0, Math.min(1, amount))
+  upperBill.rotation.x = open * 0.14
+  lowerBill.rotation.x = -open * 0.42
 }
 
 /** A row of swept-back spikes off the top of the head — the Marsh Baron's crest.

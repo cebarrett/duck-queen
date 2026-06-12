@@ -165,7 +165,10 @@ export class Game {
       this.nests,
       world.colliders,
       (text) => this.hud.showMessage(text),
-      (duration) => this.duck.quack(duration),
+      (duration) => {
+        this.duck.quack(duration)
+        this.duckController.quackFlourish(duration)
+      },
       this.progress,
       deriveRng(seed, 'flock'),
     )
@@ -183,7 +186,10 @@ export class Game {
       this.input,
       this.duck.group,
       this.flock,
-      (active, resolve, label?, color?) => this.hud.setHonkOff(active, resolve, label, color),
+      (active, resolve, label?, color?) => {
+        this.hud.setHonkOff(active, resolve, label, color)
+        this.duckController.setHonkOffActive(active)
+      },
       (text) => this.hud.showMessage(text),
       (gooseX, gooseZ) => this.handleQueenLostHonkOff(gooseX, gooseZ),
       () => this.resolvePenalty(),

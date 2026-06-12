@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { buildDuckModel, setBillOpen } from './duckModel'
 import { type SubjectKind, SUBJECT_KINDS } from './subjectKinds'
-import { randRange, seekArrive, pointAround, faceHeading, easeFactor } from './mathUtils'
+import { approachAngle, randRange, seekArrive, pointAround, faceHeading, easeFactor } from './mathUtils'
 import { type Collider, resolveWalls } from './collision'
 import type { Pond } from './Water'
 import type { DuckMode } from './DuckController'
@@ -88,6 +88,16 @@ const SCATTER_VOICE_RATE = 0.65 // startled subjects complain much more often
 const VOICE_BILL_TIME = { duckling: 0.2, drake: 0.3, hen: 0.42 } as const
 const VOICE_BILL_SYLLABLE = 0.16
 
+// --- Honk-off chorus posing -----------------------------------------------
+const CHORUS_TURN_SPEED = 10
+const CHORUS_FLAP_SPEED = 18
+const CHORUS_WING_REST = 0.16
+const CHORUS_WING_FLAP = 0.46
+const CHORUS_HEAD_LIFT = 0.26
+const CHORUS_BOB = 0.05
+const CHORUS_ROLL = 0.1
+const CHORUS_PUFF = 0.045
+
 // --- Nesting (a hen broods on a nest) --------------------------------------
 const SIT_RADIUS = 0.25 // how close to the nest centre counts as "settled on it"
 const LAY_MIN = 8 // shortest gap between eggs while sitting (seconds)
@@ -117,6 +127,7 @@ export interface FlockContext {
   homeZ: number
   nests: readonly Nest[]
   flock: DuckSubject[]
+  honkOffTarget: { x: number; z: number } | null
 }
 
 /**
@@ -178,6 +189,9 @@ export class DuckSubject {
   private readonly voicePitch: number
   private billTimer = 0
   private billDuration: number = VOICE_BILL_TIME.duckling
+  private chorusTimer = 0
+  private chorusDuration = 0.5
+  private chorusPhase = Math.random() * Math.PI * 2
   // Collision footprint, scaled to this subject's size (bigger birds, wider).
   private readonly collideRadius: number
   private readonly collideHeight: number
@@ -355,6 +369,14 @@ export class DuckSubject {
     this.billTimer = this.billDuration
   }
 
+  cheerHonkOff(vocal = false): void {
+    if (!this.supportsChorus) return
+    this.chorusDuration = randRange(0.5, 0.85)
+    this.chorusTimer = this.chorusDuration
+    this.chorusPhase += randRange(0.2, 0.9)
+    if (vocal) this.vocalize(randRange(0.92, 1.12))
+  }
+
   update(delta: number, ctx: FlockContext): void {
     this.age += delta
 
@@ -458,6 +480,14 @@ export class DuckSubject {
       this.group.rotation.z = 0
       this.updateIdle(delta)
     }
+
+    if (ctx.honkOffTarget && this.supportsChorus) {
+      this.applyChorusPose(delta, ctx.honkOffTarget.x, ctx.honkOffTarget.z)
+    } else {
+      this.chorusTimer = Math.max(0, this.chorusTimer - delta)
+      this.group.scale.setScalar(this.scale)
+    }
+
     this.group.rotation.y = this.heading
     this.updateBill(delta)
   }
@@ -785,6 +815,36 @@ export class DuckSubject {
     const syllables = Math.max(1, Math.ceil(this.billDuration / VOICE_BILL_SYLLABLE))
     const pulse = Math.abs(Math.sin(progress * syllables * Math.PI))
     setBillOpen(this.upperBill, this.lowerBill, progress > 0 ? pulse : 0)
+  }
+
+  private applyChorusPose(delta: number, aimX: number, aimZ: number): void {
+    this.chorusTimer = Math.max(0, this.chorusTimer - delta)
+    this.chorusPhase += delta * CHORUS_FLAP_SPEED
+
+    const pos = this.group.position
+    const dx = aimX - pos.x
+    const dz = aimZ - pos.z
+    if (Math.hypot(dx, dz) > 0.01) {
+      const target = Math.atan2(-dx, -dz) // duck model faces -Z at heading 0
+      this.heading = approachAngle(this.heading, target, CHORUS_TURN_SPEED * delta)
+    }
+
+    const burst = this.chorusTimer > 0 ? this.chorusTimer / this.chorusDuration : 0
+    const intensity = 0.35 + burst * 0.65
+    const beat = Math.max(0, Math.sin(this.chorusPhase))
+    pos.y += Math.abs(Math.sin(this.chorusPhase)) * CHORUS_BOB * intensity
+    this.group.rotation.z += Math.sin(this.chorusPhase * 0.55) * CHORUS_ROLL * intensity
+    this.group.scale.setScalar(this.scale * (1 + CHORUS_PUFF * intensity * (0.4 + beat)))
+
+    this.head.rotation.set(
+      CHORUS_HEAD_LIFT + beat * 0.08,
+      Math.sin(this.chorusPhase * 0.45) * 0.16 * intensity,
+      0,
+    )
+
+    const wingSpread = CHORUS_WING_REST + CHORUS_WING_FLAP * beat * intensity
+    this.leftWing.rotation.z = -wingSpread
+    this.rightWing.rotation.z = wingSpread
   }
 
   private pickNewTarget(): void {
