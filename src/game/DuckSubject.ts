@@ -185,7 +185,7 @@ export class DuckSubject {
   // Set from its kind (see constructor): overall size, its voice, and a per-
   // individual pitch so the flock sounds like a crowd, not one cloned voice.
   private readonly scale: number
-  private readonly voice: (sound: Sound, pitch: number) => number
+  private readonly voice: (sound: Sound, pitch: number, distance?: number) => number
   private readonly voicePitch: number
   private billTimer = 0
   private billDuration: number = VOICE_BILL_TIME.duckling
@@ -203,6 +203,7 @@ export class DuckSubject {
     private readonly pond: Pond,
     private readonly food: Food,
     private readonly sound: Sound,
+    private readonly listener: THREE.Object3D,
     private readonly colliders: readonly Collider[],
     rng: Rng,
   ) {
@@ -364,7 +365,11 @@ export class DuckSubject {
   }
 
   vocalize(pitchMultiplier = 1): void {
-    const duration = this.voice(this.sound, this.voicePitch * pitchMultiplier)
+    const pos = this.group.position
+    const lp = this.listener.position
+    const distance = Math.hypot(pos.x - lp.x, pos.z - lp.z)
+    const duration = this.voice(this.sound, this.voicePitch * pitchMultiplier, distance)
+    if (duration <= 0) return
     this.billDuration = Math.max(VOICE_BILL_TIME[this.kind], duration)
     this.billTimer = this.billDuration
   }

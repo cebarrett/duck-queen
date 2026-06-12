@@ -453,7 +453,9 @@ export class Game {
 
       hen.spookFromNest(goose.x, goose.z)
       if (nest && nest.takeEgg()) {
-        this.sound.honk() // the goose honks, triumphant
+        const qp = this.duck.group.position
+        const distance = Math.hypot(goose.x - qp.x, goose.z - qp.z)
+        this.sound.honk(1, { distance }) // the goose honks, triumphant
         this.hud.showMessage(guards > 0 ? '🪿 The guard ducks delayed a raid, but the goose broke through!' : '🪿 A goose raided the nest!')
       }
     }

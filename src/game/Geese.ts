@@ -85,7 +85,7 @@ const TREATY_ANCHORED_KNOCKBACK = 0.06
 const LIEUTENANT_COLOR = 0x6d7f96 // steel blue-grey — distinct from gaggle, Baron, Boundary
 const LIEUTENANT_SCALE = 1.16 // a little bigger than a gaggle goose, smaller than a boss
 const LIEUTENANT_PITCH: readonly [number, number] = [0.72, 0.84] // mid voice
-const LIEUTENANT_HONK_RATE = 0.09
+const LIEUTENANT_HONK_RATE = 0.02
 const FRONTIER_UNLOCK_DELAY = 3 // beat after Lord Boundary before the frontier call lands
 
 /** A lieutenant goose paired with the territory (pond) it holds. */
@@ -156,12 +156,12 @@ export class Geese {
     for (let i = 0; i < GOOSE_COUNT; i++) {
       const angle = rng() * Math.PI * 2
       const radius = rng() * AREA_RADIUS
-      const goose = new Goose(Math.cos(angle) * radius, AREA_CENTER_Z + Math.sin(angle) * radius, sound, food, pond, this.nests, colliders, rng)
+      const goose = new Goose(Math.cos(angle) * radius, AREA_CENTER_Z + Math.sin(angle) * radius, sound, this.queen, food, pond, this.nests, colliders, rng)
       this.geese.push(goose)
       scene.add(goose.group)
     }
 
-    this.baron = new Goose(BARON_X, BARON_Z, sound, food, pond, this.nests, colliders, rng, true)
+    this.baron = new Goose(BARON_X, BARON_Z, sound, this.queen, food, pond, this.nests, colliders, rng, true)
     scene.add(this.baron.group)
     addMarshDressing(scene, BARON_X, BARON_Z, rng)
 
@@ -169,6 +169,7 @@ export class Geese {
       TREATY_FLATS.x - 3,
       TREATY_FLATS.z - 5,
       sound,
+      this.queen,
       food,
       pond,
       this.nests,
@@ -184,7 +185,7 @@ export class Geese {
       const angle = frontierRng() * Math.PI * 2
       const lx = circle.x + Math.cos(angle) * (circle.radius + 2)
       const lz = circle.z + Math.sin(angle) * (circle.radius + 2)
-      const goose = new Goose(lx, lz, sound, food, pond, this.nests, colliders, frontierRng, true, {
+      const goose = new Goose(lx, lz, sound, this.queen, food, pond, this.nests, colliders, frontierRng, true, {
         bodyColor: LIEUTENANT_COLOR,
         scale: LIEUTENANT_SCALE,
         crest: false,
@@ -198,7 +199,7 @@ export class Geese {
     for (let i = 0; i < ROAMING_GOOSE_COUNT; i++) {
       const spot = this.pickRoamingGooseSpot(pond, colliders, rng)
       if (!spot) break
-      const goose = new Goose(spot.x, spot.z, sound, food, pond, this.nests, colliders, rng)
+      const goose = new Goose(spot.x, spot.z, sound, this.queen, food, pond, this.nests, colliders, rng)
       this.geese.push(goose)
       scene.add(goose.group)
     }
@@ -537,7 +538,7 @@ export class Geese {
     const scattered = this.flock.splitNonDrakes(bp.x, bp.z)
     if (scattered === 0) return
     knockback(BOSS_SPLIT_KNOCKBACK)
-    this.sound.honk(0.5)
+    this.sound.honk(0.5, { priority: 'urgent', distance: this.distanceToQueen(bp.x, bp.z) })
     this.onBaronMessage('💥 The Baron scatters your soft voices — hold with the drakes!')
   }
 
@@ -574,14 +575,19 @@ export class Geese {
     const occupied = this.treatyOccupiedCount()
     if (occupied >= TREATY_MIN_OCCUPIED) {
       knockback(TREATY_ANCHORED_KNOCKBACK)
-      this.sound.honk(0.72)
+      this.sound.honk(0.72, { priority: 'urgent', distance: this.distanceToQueen(TREATY_FLATS.x, TREATY_FLATS.z) })
       this.onBaronMessage('🪺 Your brooding hens hold the line.')
       return
     }
     knockback(TREATY_CLAUSE_KNOCKBACK)
     this.flock.scatterFrom(TREATY_FLATS.x, TREATY_FLATS.z)
-    this.sound.honk(0.7)
+    this.sound.honk(0.7, { priority: 'urgent', distance: this.distanceToQueen(TREATY_FLATS.x, TREATY_FLATS.z) })
     this.onBaronMessage('⚖️ Boundary moves the line — settle the Flats, do not merely claim them!')
+  }
+
+  private distanceToQueen(x: number, z: number): number {
+    const qp = this.queen.position
+    return Math.hypot(x - qp.x, z - qp.z)
   }
 }
 

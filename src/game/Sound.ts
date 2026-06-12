@@ -36,6 +36,34 @@ const SYNTH_QUACK_DURATION = 0.25
 const SYNTH_PEEP_DURATION = 0.14
 const SYNTH_DRAKE_DURATION = 0.22
 const SYNTH_HEN_DURATION = 0.34
+const HONK_MIN_GAP = {
+  ambient: 2.8,
+  normal: 0.8,
+  urgent: 0.4,
+} as const
+const HONK_MAX_VOICES = {
+  ambient: 1,
+  normal: 1,
+  urgent: 2,
+} as const
+const HONK_VOLUME = {
+  ambient: 0.28,
+  normal: 0.48,
+  urgent: 0.62,
+} as const
+const HONK_FULL_VOLUME_DISTANCE = 7
+const HONK_MAX_DISTANCE = 70
+
+type HonkPriority = keyof typeof HONK_MIN_GAP
+
+interface HonkOptions {
+  priority?: HonkPriority
+  distance?: number
+}
+
+interface SpatialSoundOptions {
+  distance?: number
+}
 
 export class Sound {
   private ctx: AudioContext | null = null
@@ -49,6 +77,8 @@ export class Sound {
   // The currently-playing quack (so a new quack can cut it off) + when it started.
   private quackVoice: AudioScheduledSourceNode | null = null
   private lastQuackTime = -1
+  private activeHonks = 0
+  private lastHonkTime = -1
 
   constructor() {
     void this.fetch(this.quackSample) // optional — silently no-ops if absent
@@ -108,47 +138,78 @@ export class Sound {
 
   /** A duckling's little peep. `pitch` (~0.85–1.25) gives each duckling its own
    *  voice — it scales the synth frequency, or the recording's playback speed. */
-  peep(pitch = 1): number {
+  peep(pitch = 1, options: SpatialSoundOptions = {}): number {
     const ctx = this.getContext()
     if (!ctx) return 0
+    const volumeScale = this.spatialVolume(options.distance)
+    if (volumeScale <= 0) return 0
     return this.playSampleOrSynth(ctx, this.peepSample, (c) => {
-      this.synthPeep(c, pitch)
+      this.synthPeep(c, pitch, 0.14 * volumeScale)
       return SYNTH_PEEP_DURATION
-    }, pitch, 0.5)
+    }, pitch, 0.5 * volumeScale)
   }
 
-  /** A goose's honk — recorded if available, else synthesized. Lower and harsher
-   *  than a quack. `pitch` (~0.9–1.15) gives each goose its own voice. */
-  honk(pitch = 1): void {
+  /** A goose's honk — recorded if available, else synthesized. Real goose samples
+   *  are often much longer/louder than the synth, so honks share a tiny voice
+   *  budget: idle ambient calls yield first, while boss/set-piece honks can still
+   *  cut through. Returns whether a voice actually played. */
+  honk(pitch = 1, options: HonkOptions = {}): boolean {
     const ctx = this.getContext()
-    if (!ctx) return
-    this.playSampleOrSynth(ctx, this.honkSample, (c) => {
-      this.synthHonk(c, pitch)
-      return 0.34
-    }, pitch, 0.8)
+    if (!ctx) return false
+    const priority = options.priority ?? 'normal'
+    const volumeScale = this.spatialVolume(options.distance)
+    if (volumeScale <= 0) return false
+
+    const now = ctx.currentTime
+    if (this.activeHonks >= HONK_MAX_VOICES[priority]) return false
+    if (now - this.lastHonkTime < HONK_MIN_GAP[priority]) return false
+    this.lastHonkTime = now
+
+    const volume = HONK_VOLUME[priority] * volumeScale
+    let voice: AudioScheduledSourceNode
+    if (this.honkSample.buffer) {
+      voice = this.playBuffer(ctx, this.honkSample.buffer, pitch, volume)
+    } else {
+      if (this.honkSample.raw) void this.decode(this.honkSample)
+      voice = this.synthHonk(ctx, pitch, volume)
+    }
+    this.trackHonkVoice(voice)
+    return true
+  }
+
+  private spatialVolume(distance: number | undefined): number {
+    if (distance === undefined) return 1
+    if (distance <= HONK_FULL_VOLUME_DISTANCE) return 1
+    if (distance >= HONK_MAX_DISTANCE) return 0
+    const t = (distance - HONK_FULL_VOLUME_DISTANCE) / (HONK_MAX_DISTANCE - HONK_FULL_VOLUME_DISTANCE)
+    return (1 - t) ** 2
   }
 
   /** A drake's (male mallard) call — soft, low and reedy, nothing like the female's
    *  quack. `pitch` (~0.8–1.05) gives each drake its own voice. */
-  drakeCall(pitch = 1): number {
+  drakeCall(pitch = 1, options: SpatialSoundOptions = {}): number {
     const ctx = this.getContext()
     if (!ctx) return 0
+    const volumeScale = this.spatialVolume(options.distance)
+    if (volumeScale <= 0) return 0
     return this.playSampleOrSynth(ctx, this.drakeSample, (c) => {
-      this.synthDrake(c, pitch)
+      this.synthDrake(c, pitch, 0.12 * volumeScale)
       return SYNTH_DRAKE_DURATION
-    }, pitch, 0.5)
+    }, pitch, 0.5 * volumeScale)
   }
 
   /** A hen's (female mallard) quack — a rounded "quack-quack", quieter than the
    *  Queen's command quack so it reads as ambient chatter, not a rally. `pitch`
    *  (~0.95–1.2) gives each hen its own voice. */
-  henQuack(pitch = 1): number {
+  henQuack(pitch = 1, options: SpatialSoundOptions = {}): number {
     const ctx = this.getContext()
     if (!ctx) return 0
+    const volumeScale = this.spatialVolume(options.distance)
+    if (volumeScale <= 0) return 0
     return this.playSampleOrSynth(ctx, this.henSample, (c) => {
-      this.synthHen(c, pitch)
+      this.synthHen(c, pitch, 0.22 * volumeScale)
       return SYNTH_HEN_DURATION
-    }, pitch, 0.7)
+    }, pitch, 0.7 * volumeScale)
   }
 
   /**
@@ -318,7 +379,7 @@ export class Sound {
 
   /** A tiny high chirp — soft triangle wave, a quick up-then-down pitch blip.
    *  High and short reads as "duckling peep". `pitch` sets the voice. */
-  private synthPeep(ctx: AudioContext, pitch: number): void {
+  private synthPeep(ctx: AudioContext, pitch: number, volume = 0.14): void {
     const now = ctx.currentTime
     const dur = 0.12
     const base = 1100 * pitch
@@ -333,7 +394,7 @@ export class Sound {
     const gain = ctx.createGain()
     const g = gain.gain
     g.setValueAtTime(0.0001, now)
-    g.exponentialRampToValueAtTime(0.14, now + 0.01) // soft — they're little
+    g.exponentialRampToValueAtTime(volume, now + 0.01) // soft — they're little
     g.exponentialRampToValueAtTime(0.0001, now + dur)
 
     osc.connect(gain)
@@ -344,7 +405,7 @@ export class Sound {
 
   /** A honk — lower, harsher and longer than the quack: a sawtooth that blips up
    *  ("ho-") then falls ("-onk"), through a low bandpass. `pitch` sets the voice. */
-  private synthHonk(ctx: AudioContext, pitch: number): void {
+  private synthHonk(ctx: AudioContext, pitch: number, volume = 0.4): OscillatorNode {
     const now = ctx.currentTime
     const dur = 0.32
     const base = 300 * pitch
@@ -364,7 +425,7 @@ export class Sound {
     const gain = ctx.createGain()
     const g = gain.gain
     g.setValueAtTime(0.0001, now)
-    g.exponentialRampToValueAtTime(0.4, now + 0.02)
+    g.exponentialRampToValueAtTime(volume, now + 0.02)
     g.exponentialRampToValueAtTime(0.0001, now + dur)
 
     osc.connect(band)
@@ -372,12 +433,20 @@ export class Sound {
     gain.connect(ctx.destination)
     osc.start(now)
     osc.stop(now + dur + 0.02)
+    return osc
+  }
+
+  private trackHonkVoice(voice: AudioScheduledSourceNode): void {
+    this.activeHonks++
+    voice.onended = () => {
+      this.activeHonks = Math.max(0, this.activeHonks - 1)
+    }
   }
 
   /** A drake's reedy nasal call — a low sawtooth dropping a little, squeezed
    *  through a narrow bandpass for a buzzy "rhaeb", and kept quiet (drakes are
    *  much softer than the loud hen). `pitch` sets the voice. */
-  private synthDrake(ctx: AudioContext, pitch: number): void {
+  private synthDrake(ctx: AudioContext, pitch: number, volume = 0.12): void {
     const now = ctx.currentTime
     const dur = 0.2
     const base = 175 * pitch
@@ -397,7 +466,7 @@ export class Sound {
     const gain = ctx.createGain()
     const g = gain.gain
     g.setValueAtTime(0.0001, now)
-    g.exponentialRampToValueAtTime(0.12, now + 0.02) // quiet
+    g.exponentialRampToValueAtTime(volume, now + 0.02) // quiet
     g.exponentialRampToValueAtTime(0.0001, now + dur)
 
     osc.connect(band)
@@ -410,7 +479,7 @@ export class Sound {
   /** A hen's two-syllable "quack-quack" — a sawtooth through a bandpass with the
    *  pitch falling twice and two gain bumps, lower-volume than the Queen's command
    *  quack so it reads as ambient chatter. `pitch` sets the voice. */
-  private synthHen(ctx: AudioContext, pitch: number): void {
+  private synthHen(ctx: AudioContext, pitch: number, volume = 0.22): void {
     const now = ctx.currentTime
     const dur = 0.32
     const base = 520 * pitch
@@ -432,9 +501,9 @@ export class Sound {
     const gain = ctx.createGain()
     const g = gain.gain
     g.setValueAtTime(0.0001, now)
-    g.exponentialRampToValueAtTime(0.22, now + 0.02) // first "quack"
-    g.exponentialRampToValueAtTime(0.05, now + 0.11) // dip between syllables
-    g.exponentialRampToValueAtTime(0.2, now + 0.16) // second "quack"
+    g.exponentialRampToValueAtTime(volume, now + 0.02) // first "quack"
+    g.exponentialRampToValueAtTime(volume * 0.23, now + 0.11) // dip between syllables
+    g.exponentialRampToValueAtTime(volume * 0.9, now + 0.16) // second "quack"
     g.exponentialRampToValueAtTime(0.0001, now + dur)
 
     osc.connect(band)

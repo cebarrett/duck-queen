@@ -39,7 +39,7 @@ const SWIM_FLOAT_Y = -0.6 // body settles to this y while afloat (legs submerged
 const SWIM_BOB = 0.05 // gentle vertical bob on the water (no walk stride)
 const SWIM_SWAY = 0.06 // slight side-to-side sway
 
-const HONK_RATE = 0.07 // per second: chance to let out a honk now and then
+const HONK_RATE = 0.012 // per second: rare idle chatter; real samples get loud fast
 
 // --- World collision -------------------------------------------------------
 const COLLIDE_RADIUS = 0.6 // its footprint vs. trees/rocks (bigger than a duckling)
@@ -59,7 +59,7 @@ const BOLD_RAID_RADIUS = 34 // a bold goose ranges even farther to harass nests
 // --- Posturing (during a honk-off) -----------------------------------------
 const PUFF_SCALE = 1.22 // how big it swells while squaring up
 const POSTURE_TURN = 10 // how fast it spins to face the Queen
-const POSTURE_HONK_RATE = 1.4 // it honks a LOT during a face-off
+const POSTURE_HONK_RATE = 0.65 // face-off honks, without overlapping real samples
 const PUFF_EASE = 8 // how fast it puffs up / deflates
 const POSTURE_FLAP_SPEED = 11 // rhythmic face-off wingbeats
 const POSTURE_BOB = 0.09 // little affronted bounce while squaring up
@@ -90,7 +90,7 @@ const ROUT_NEST_RANGE = RAID_RADIUS // if a nest is within this when it's beaten
 // --- The Marsh Baron (boss goose) ------------------------------------------
 const BARON_COLOR = 0x3c3f45 // charcoal — far darker than the pale gaggle
 const BARON_SCALE = 1.4 // a head taller and broader than a regular goose
-const BARON_HONK_RATE = 0.16 // looses his deep menace more often than the gaggle
+const BARON_HONK_RATE = 0.04 // deep menace, not a constant foghorn
 
 type GooseState = 'pausing' | 'wandering' | 'foraging' | 'fleeing' | 'raiding'
 
@@ -164,6 +164,7 @@ export class Goose {
     x: number,
     z: number,
     private readonly sound: Sound,
+    private readonly listener: THREE.Object3D,
     private readonly food: Food,
     private readonly pond: Pond,
     private readonly nests: Nests,
@@ -315,7 +316,7 @@ export class Goose {
 
     // An occasional honk (the Baron's deep menace, more often).
     const honkRate = this.boss ? this.bossHonkRate : HONK_RATE
-    if (Math.random() < honkRate * delta) this.honk(this.honkPitch)
+    if (Math.random() < honkRate * delta) this.honk(this.honkPitch, 'ambient')
 
     // While calmly milling about, pick a target: a brooding hen takes priority —
     // if one's nest is in range the goose stalks straight over (this is what makes
@@ -524,7 +525,7 @@ export class Goose {
     pos.x += this.velX * delta
     pos.z += this.velZ * delta
 
-    if (Math.random() < POSTURE_HONK_RATE * delta) this.honk(this.honkPitch)
+    if (Math.random() < POSTURE_HONK_RATE * delta) this.honk(this.honkPitch, 'urgent')
     this.updateBill(delta)
 
     // Puff up + face her. Hold at the waterline if it's squaring up while afloat,
@@ -652,8 +653,11 @@ export class Goose {
     this.state = 'wandering'
   }
 
-  private honk(pitch = this.honkPitch): void {
-    this.sound.honk(pitch)
+  private honk(pitch = this.honkPitch, priority: 'ambient' | 'normal' | 'urgent' = 'normal'): void {
+    const pos = this.group.position
+    const lp = this.listener.position
+    const distance = Math.hypot(pos.x - lp.x, pos.z - lp.z)
+    if (!this.sound.honk(pitch, { priority, distance })) return
     this.billDuration = GOOSE_BILL_TIME * Math.min(1.35, 1 / Math.max(0.75, pitch))
     this.billTimer = this.billDuration
   }

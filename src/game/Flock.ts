@@ -72,7 +72,7 @@ export class Flock {
     for (const kind of kinds) {
       const angle = rng() * Math.PI * 2
       const radius = 6 + rng() * 8
-      const subject = new DuckSubject(Math.cos(angle) * radius, Math.sin(angle) * radius, kind, pond, food, this.sound, colliders, rng)
+      const subject = new DuckSubject(Math.cos(angle) * radius, Math.sin(angle) * radius, kind, pond, food, this.sound, this.queen, colliders, rng)
       this.members.push(subject)
       scene.add(subject.group)
     }
@@ -210,7 +210,7 @@ export class Flock {
    *  Queen — hers from birth. Hatching is gameplay, so the newborn draws its voice
    *  and heading from Math.random, NOT the seeded world rng. */
   hatchAt(x: number, z: number): void {
-    const duckling = new DuckSubject(x, z, 'duckling', this.pond, this.food, this.sound, this.colliders, Math.random)
+    const duckling = new DuckSubject(x, z, 'duckling', this.pond, this.food, this.sound, this.queen, this.colliders, Math.random)
     duckling.recruit() // it's the Queen's already — start it following her
     this.members.push(duckling)
     this.scene.add(duckling.group)
@@ -227,7 +227,7 @@ export class Flock {
   matureToAdult(duckling: DuckSubject): void {
     const kind: SubjectKind = Math.random() < 0.5 ? 'drake' : 'hen'
     const pos = duckling.group.position
-    const adult = new DuckSubject(pos.x, pos.z, kind, this.pond, this.food, this.sound, this.colliders, Math.random)
+    const adult = new DuckSubject(pos.x, pos.z, kind, this.pond, this.food, this.sound, this.queen, this.colliders, Math.random)
     adult.recruit()
 
     const idx = this.members.indexOf(duckling)
