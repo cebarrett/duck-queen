@@ -28,11 +28,13 @@ const SEP_RADIUS = 1.0 // push apart from flockmates closer than this
 const SEP_STRENGTH = 4 // how hard the separation shove is
 
 // --- Chaos tuning (the comedy of governing ducks) --------------------------
-const DISTRACT_RATE = 0.12 // per second: chance a follower wanders off briefly
-const DISTRACT_MIN = 1.5 // shortest distraction (seconds)
-const DISTRACT_MAX = 3.5 // longest distraction
-const DISTRACT_NEAR = 2 // nearest a distraction spot can be
-const DISTRACT_FAR = 4 // farthest a distraction spot can be
+const DISTRACT_RATE = 0.018 // per second: rare chance a settled follower noses about
+const DISTRACT_MIN = 0.8 // shortest distraction (seconds)
+const DISTRACT_MAX = 1.8 // longest distraction
+const DISTRACT_NEAR = 0.8 // nearest a distraction spot can be
+const DISTRACT_FAR = 2.0 // farthest a distraction spot can be
+const DISTRACT_MAX_QUEEN_DISTANCE = FOLLOW_RING + 1.2 // only while comfortably grouped
+const DISTRACT_LEASH = FOLLOW_RING + FOLLOW_ARRIVE_BAND // never pick a spot far from the Queen
 const LOST_DISTANCE = 18 // a subject stranded past this from the Queen gives up
 const FLIGHT_HOLD_DISTANCE = 6 // if the Queen flies off, stop chasing and hold home sooner
 const SCATTER_NEAR = 3 // shortest panic dash away from trouble
@@ -355,7 +357,7 @@ export class DuckSubject {
         // Notice a nearby plant and peel off to go gather it...
         if (Math.random() < FORAGE_RATE * delta && this.tryForage()) break
         // ...or, less usefully, get distracted and wander off for a bit.
-        if (Math.random() < DISTRACT_RATE * delta) this.startDistraction()
+        if (Math.random() < DISTRACT_RATE * delta && this.startDistraction(ctx)) break
         else this.followQueen(delta, ctx)
         break
       case 'foraging':
@@ -580,15 +582,31 @@ export class DuckSubject {
     return best
   }
 
-  /** Pick a nearby spot to be nosy about, and a short timer; then amble there. */
-  private startDistraction(): void {
+  /** Pick a nearby spot to be nosy about, and a short timer; then amble there.
+   *  Followers only do this when already bunched with the Queen, and the target is
+   *  kept inside her follow leash so a cute detour doesn't become a lost duck. */
+  private startDistraction(ctx: FlockContext): boolean {
     const pos = this.group.position
+    if (Math.hypot(ctx.queenX - pos.x, ctx.queenZ - pos.z) > DISTRACT_MAX_QUEEN_DISTANCE) return false
+
     const angle = Math.random() * Math.PI * 2
     const r = randRange(DISTRACT_NEAR, DISTRACT_FAR)
-    this.targetX = pos.x + Math.cos(angle) * r
-    this.targetZ = pos.z + Math.sin(angle) * r
+    let x = pos.x + Math.cos(angle) * r
+    let z = pos.z + Math.sin(angle) * r
+
+    const qdx = x - ctx.queenX
+    const qdz = z - ctx.queenZ
+    const qDist = Math.hypot(qdx, qdz)
+    if (qDist > DISTRACT_LEASH) {
+      x = ctx.queenX + (qdx / qDist) * DISTRACT_LEASH
+      z = ctx.queenZ + (qdz / qDist) * DISTRACT_LEASH
+    }
+
+    this.targetX = x
+    this.targetZ = z
     this.distractTimer = randRange(DISTRACT_MIN, DISTRACT_MAX)
     this.state = 'distracted'
+    return true
   }
 
   /** Amble to the distraction spot; once it arrives or the timer runs out,
