@@ -33,7 +33,6 @@ export interface StandoffConfig {
  */
 export class Standoff {
   private resolve = 0
-  private wasQuackDown = false
   private periodicTimer = 0
   private current: Goose | null = null
 
@@ -52,7 +51,6 @@ export class Standoff {
     goose.startPosturing()
     this.resolve = this.cfg.startResolve()
     this.periodicTimer = this.cfg.firstPeriod ?? this.cfg.periodicInterval ?? 0
-    this.wasQuackDown = this.input.isDown('KeyQ')
     this.cfg.onUpdate(true, this.resolve)
     this.cfg.onStart?.()
   }
@@ -80,9 +78,7 @@ export class Standoff {
       }
     }
 
-    const qDown = this.input.isDown('KeyQ')
-    if (qDown && !this.wasQuackDown) this.resolve += QUACK_GAIN
-    this.wasQuackDown = qDown
+    if (this.input.justPressed('KeyQ')) this.resolve += QUACK_GAIN
 
     this.resolve += (this.cfg.passiveSupport() - this.cfg.drain) * delta
     this.resolve = Math.max(0, Math.min(1, this.resolve))

@@ -41,7 +41,6 @@ export interface AllyMarker {
  */
 export class Flock {
   private readonly members: DuckSubject[] = []
-  private wasQuackDown = false // edge-detect the Q key (one quack per press)
   // The reclaimed frontier ponds the flock may treat as home water (set by Game).
   private reclaimedPonds: () => readonly PondCircle[] = () => []
 
@@ -295,28 +294,25 @@ export class Flock {
    *  distraction so they fall back in behind her), AND recruit any new ducks in
    *  range. So a quack is both "come here" to strangers and "to me!" to her own. */
   private handleQuack(): void {
-    const down = this.input.isDown('KeyQ')
-    if (down && !this.wasQuackDown) {
-      this.sound.quack() // the Queen quacks — even if no ducks are in earshot
+    if (!this.input.justPressed('KeyQ')) return
+    this.sound.quack() // the Queen quacks — even if no ducks are in earshot
 
-      const qx = this.queen.position.x
-      const qz = this.queen.position.z
-      let turnedAway = false // a duck in range she couldn't take (flock full)
-      for (const d of this.members) {
-        if (d.isSubject) {
-          d.rally() // already hers — snap her back to following
-        } else {
-          const dist = Math.hypot(d.group.position.x - qx, d.group.position.z - qz)
-          if (dist > QUACK_RANGE) continue
-          if (this.isFull) turnedAway = true // no room — but keep checking the rest
-          else d.recruit()
-        }
-      }
-      if (turnedAway) {
-        this.onMessage(`🦆 Your flock is full (${FOLLOWER_CAP}) — break the Marsh Baron to lead more`)
+    const qx = this.queen.position.x
+    const qz = this.queen.position.z
+    let turnedAway = false // a duck in range she couldn't take (flock full)
+    for (const d of this.members) {
+      if (d.isSubject) {
+        d.rally() // already hers — snap her back to following
+      } else {
+        const dist = Math.hypot(d.group.position.x - qx, d.group.position.z - qz)
+        if (dist > QUACK_RANGE) continue
+        if (this.isFull) turnedAway = true // no room — but keep checking the rest
+        else d.recruit()
       }
     }
-    this.wasQuackDown = down
+    if (turnedAway) {
+      this.onMessage(`🦆 Your flock is full (${FOLLOWER_CAP}) — break the Marsh Baron to lead more`)
+    }
   }
 
   private homeAnchor(): { x: number; z: number } {

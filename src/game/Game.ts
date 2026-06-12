@@ -79,11 +79,6 @@ export class Game {
   private readonly pond: Pond
   private readonly frontier: Frontier
   private readonly progress = makeProgress()
-  private wasBuildDown = false // edge-detect the B key (one nest per press)
-  private wasSeatDown = false // edge-detect the E key (one hen seated per press)
-  private wasKickDown = false // edge-detect the R key (one hen roused per press)
-  private wasRazeDown = false // edge-detect the X key (one nest razed per press)
-  private wasTalkDown = false // edge-detect the F key (one line advanced per press)
   private resolveShakenTimer = 0
 
   constructor() {
@@ -250,6 +245,7 @@ export class Game {
     this.updateMinimap()
 
     this.renderer.render(this.scene, this.camera)
+    this.input.endFrame()
   }
 
   private updateMinimap(): void {
@@ -283,14 +279,12 @@ export class Game {
     const canBuild = this.duckController.getMode() === 'waddle' && this.reeds.total >= NEST_COST
     this.hud.setCanBuildNest(canBuild)
 
-    const down = this.input.isDown('KeyB')
-    if (down && !this.wasBuildDown && canBuild && this.reeds.spend(NEST_COST)) {
+    if (this.input.justPressed('KeyB') && canBuild && this.reeds.spend(NEST_COST)) {
       const pos = this.duck.group.position
       this.nests.build(pos.x, pos.z)
       this.sound.nestBuilt()
       this.hud.showMessage('🪺 Nest built!')
     }
-    this.wasBuildDown = down
   }
 
   /**
@@ -304,13 +298,11 @@ export class Game {
     const hen = nest ? this.flock.nearestFollowingHen(nest.x, nest.z) : null
     this.hud.setCanSeatHen(nest !== null && hen !== null)
 
-    const down = this.input.isDown('KeyE')
-    if (down && !this.wasSeatDown && nest && hen) {
+    if (this.input.justPressed('KeyE') && nest && hen) {
       hen.assignToNest(nest)
       this.sound.henQuack() // a contented settling cluck
       this.hud.showMessage('🥚 A hen settles in')
     }
-    this.wasSeatDown = down
   }
 
   /**
@@ -326,13 +318,11 @@ export class Game {
     const hen = nest ? this.flock.henOnNest(nest) : null
     this.hud.setCanKickHen(hen !== null)
 
-    const down = this.input.isDown('KeyR')
-    if (down && !this.wasKickDown && hen) {
+    if (this.input.justPressed('KeyR') && hen) {
       hen.leaveNest()
       this.sound.henQuack() // an indignant cluck as she's shooed off
       this.hud.showMessage('🐤 The hen is roused off')
     }
-    this.wasKickDown = down
   }
 
   /**
@@ -347,8 +337,7 @@ export class Game {
     const nest = onLand ? this.nests.nearestNest(pos.x, pos.z, SEAT_RANGE) : null
     this.hud.setCanRazeNest(nest !== null)
 
-    const down = this.input.isDown('KeyX')
-    if (down && !this.wasRazeDown && nest) {
+    if (this.input.justPressed('KeyX') && nest) {
       const hen = this.flock.henOnNest(nest)
       if (hen) hen.leaveNest()
       this.nests.remove(nest)
@@ -356,7 +345,6 @@ export class Game {
       this.sound.nestBuilt() // a thud as the bowl comes apart
       this.hud.showMessage(`♻️ Nest razed · +${NEST_REFUND} reeds recovered`)
     }
-    this.wasRazeDown = down
   }
 
   /**
@@ -380,16 +368,14 @@ export class Game {
     const inRange = dist <= SWAN_TALK_RANGE
     this.hud.setCanTalk(inRange && !this.swan.isTalking)
 
-    // One press = one action (edge-detected): open the talk, or advance / close it.
-    const down = this.input.isDown('KeyF')
-    if (down && !this.wasTalkDown) {
+    // One press = one action: open the talk, or advance / close it.
+    if (this.input.justPressed('KeyF')) {
       if (this.swan.isTalking) {
         this.showDialoguePage(this.swan.advanceDialogue())
       } else if (inRange) {
         this.showDialoguePage(this.swan.beginDialogue(this.progress.baronDefeated, this.frontier.allClaimed))
       }
     }
-    this.wasTalkDown = down
   }
 
   /** Draw a dialogue page in the HUD, or hide the box when the talk is over (null). */

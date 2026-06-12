@@ -12,6 +12,8 @@ export class Input {
   // We store `event.code` (e.g. "KeyW", "Space") not `event.key`. `code` is the
   // physical key, so it's the same on QWERTY/AZERTY and ignores Shift/caps.
   private readonly keys = new Set<string>()
+  // Keys pressed since the last endFrame() call — for one-shot actions.
+  private readonly pressed = new Set<string>()
 
   // Mouse movement accumulated since the last time the camera read it.
   private mouseDX = 0
@@ -20,8 +22,10 @@ export class Input {
   private locked = false
 
   constructor(private readonly element: HTMLElement) {
-    window.addEventListener('keydown', (e) => this.keys.add(e.code))
+    window.addEventListener('keydown', (e) => { this.keys.add(e.code); this.pressed.add(e.code) })
     window.addEventListener('keyup', (e) => this.keys.delete(e.code))
+    // Held keys never get a keyup when the window loses focus, so clear them on blur.
+    window.addEventListener('blur', () => this.keys.clear())
 
     // Pointer lock hides the cursor and gives us raw mouse movement (great for
     // looking around). The browser REQUIRES a user gesture to start it, which
@@ -48,6 +52,16 @@ export class Input {
   /** Is this physical key currently held? e.g. isDown('KeyW'). */
   isDown(code: string): boolean {
     return this.keys.has(code)
+  }
+
+  /** True if the key was newly pressed since the last endFrame() — use for one-shot actions. */
+  justPressed(code: string): boolean {
+    return this.pressed.has(code)
+  }
+
+  /** Drain the just-pressed set. Call exactly once per frame, after all input consumers. */
+  endFrame(): void {
+    this.pressed.clear()
   }
 
   get isPointerLocked(): boolean {
