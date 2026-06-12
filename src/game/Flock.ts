@@ -196,10 +196,7 @@ export class Flock {
 
   /** The hen brooding on (or walking to) `nest`, or null — used to rouse her off it. */
   henOnNest(nest: Nest): DuckSubject | null {
-    for (const m of this.members) {
-      if (m.kind === 'hen' && m.nest === nest) return m
-    }
-    return null
+    return nest.brooder
   }
 
   /** A nest egg hatched: a new duckling pops out at (x, z) and falls in behind the

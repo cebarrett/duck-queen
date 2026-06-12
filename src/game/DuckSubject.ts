@@ -308,7 +308,7 @@ export class DuckSubject {
   assignToNest(nest: Nest): void {
     this.targetFood = null
     this.targetNest = nest
-    nest.occupied = true
+    nest.occupy(this)
     this.sitting = false
     this.layTimer = randRange(LAY_MIN, LAY_MAX)
     this.state = 'nesting'
@@ -322,7 +322,7 @@ export class DuckSubject {
   /** A goose got too close: bolt off the nest (freeing it) and skitter away from
    *  the goose, leaving the eggs behind undefended. */
   spookFromNest(gooseX: number, gooseZ: number): void {
-    if (this.targetNest) this.targetNest.occupied = false
+    if (this.targetNest) this.targetNest.vacate()
     this.targetNest = null
     this.sitting = false
     this.scatterTo(gooseX, gooseZ)
@@ -332,7 +332,7 @@ export class DuckSubject {
    *  behind the flock. Unlike a goose's scare she doesn't bolt — and the eggs are
    *  left in the bowl, so seating a hen here again resumes incubation. */
   leaveNest(): void {
-    if (this.targetNest) this.targetNest.occupied = false
+    if (this.targetNest) this.targetNest.vacate()
     this.targetNest = null
     this.sitting = false
     this.state = 'following'

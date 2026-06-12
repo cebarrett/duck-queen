@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { buildNest, addEgg, MAX_EGGS } from './nestModel'
+import type { DuckSubject } from './DuckSubject'
 
 const HATCH_TIME = 18 // seconds of brooding to incubate one egg into a duckling
 
@@ -10,9 +11,21 @@ const HATCH_TIME = 18 // seconds of brooding to incubate one egg into a duckling
 export class Nest {
   readonly group: THREE.Group
   eggs = 0
-  occupied = false
+  private _brooder: DuckSubject | null = null
   private readonly eggMeshes: THREE.Mesh[] = []
   private broodTime = 0 // seconds the current egg has been sat on (only while occupied)
+
+  /** The hen currently brooding here (or walking to settle), or null. */
+  get brooder(): DuckSubject | null { return this._brooder }
+
+  /** True when a hen has claimed this nest. */
+  get occupied(): boolean { return this._brooder !== null }
+
+  /** Called by the hen when she claims this nest. */
+  occupy(hen: DuckSubject): void { this._brooder = hen }
+
+  /** Called by the hen whenever she leaves — for any reason. */
+  vacate(): void { this._brooder = null }
 
   constructor(
     readonly x: number,
