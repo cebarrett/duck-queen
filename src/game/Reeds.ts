@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { box } from './modelUtils'
 import type { Pond } from './Water'
 import { ResourcePatch } from './ResourcePatch'
 import { type Rng, rngRange } from './rng'
@@ -40,8 +41,7 @@ export class Reeds extends ResourcePatch {
 function makeReedClump(): THREE.Group {
   const g = new THREE.Group()
   const stalk = (h: number, color: number, x: number, z: number, tilt: number) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(0.06, h, 0.06), new THREE.MeshStandardMaterial({ color }))
-    m.position.set(x, h / 2, z)
+    const m = box(0.06, h, 0.06, color, [x, h / 2, z])
     m.rotation.z = tilt // lean it a touch so the clump isn't stiff
     g.add(m)
     return m
@@ -51,11 +51,6 @@ function makeReedClump(): THREE.Group {
   stalk(1.0, STALK, -0.1, -0.06, 0.14)
 
   // A brown cattail head near the top of the tallest stalk.
-  const cattail = new THREE.Mesh(
-    new THREE.BoxGeometry(0.1, 0.26, 0.1),
-    new THREE.MeshStandardMaterial({ color: CATTAIL }),
-  )
-  cattail.position.set(0.02, 1.0, 0)
-  g.add(cattail)
+  g.add(box(0.1, 0.26, 0.1, CATTAIL, [0.02, 1.0, 0]))
   return g
 }

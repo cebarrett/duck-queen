@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { box } from './modelUtils'
 import type { Pond } from './Water'
 import { ResourcePatch, type Collectible } from './ResourcePatch'
 import type { Rng } from './rng'
@@ -56,29 +57,23 @@ export class Food extends ResourcePatch {
   }
 }
 
-// --- Plant models (each builds its own geometry/material) --------------------
-
-function box(w: number, h: number, d: number, color: number, x: number, y: number, z: number): THREE.Mesh {
-  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color }))
-  m.position.set(x, y, z)
-  return m
-}
+// --- Plant models ------------------------------------------------------------
 
 /** A little leafy sprout with a red berry, sitting on the ground (origin at base). */
 function makeLandPlant(): THREE.Group {
   const g = new THREE.Group()
-  g.add(box(0.07, 0.28, 0.07, STEM, 0, 0.14, 0)) // stem
-  g.add(box(0.34, 0.22, 0.34, LEAF, 0, 0.3, 0)) // leafy top
-  g.add(box(0.16, 0.14, 0.16, LEAF, 0.16, 0.24, 0.04)) // a stray leaf clump
-  g.add(box(0.09, 0.09, 0.09, BERRY, 0, 0.46, 0)) // berry, the bright bit
+  g.add(box(0.07, 0.28, 0.07, STEM, [0, 0.14, 0])) // stem
+  g.add(box(0.34, 0.22, 0.34, LEAF, [0, 0.3, 0])) // leafy top
+  g.add(box(0.16, 0.14, 0.16, LEAF, [0.16, 0.24, 0.04])) // a stray leaf clump
+  g.add(box(0.09, 0.09, 0.09, BERRY, [0, 0.46, 0])) // berry, the bright bit
   return g
 }
 
 /** A lily pad with a small flower, floating flat on the water (origin at surface). */
 function makeWaterPlant(): THREE.Group {
   const g = new THREE.Group()
-  g.add(box(0.55, 0.05, 0.55, PAD, 0, 0.03, 0)) // the flat pad
-  g.add(box(0.2, 0.04, 0.2, PAD, 0.18, 0.05, 0.12)) // a second smaller pad
-  g.add(box(0.12, 0.14, 0.12, FLOWER, -0.05, 0.1, -0.05)) // flower
+  g.add(box(0.55, 0.05, 0.55, PAD, [0, 0.03, 0])) // the flat pad
+  g.add(box(0.2, 0.04, 0.2, PAD, [0.18, 0.05, 0.12])) // a second smaller pad
+  g.add(box(0.12, 0.14, 0.12, FLOWER, [-0.05, 0.1, -0.05])) // flower
   return g
 }

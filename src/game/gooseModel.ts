@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { box } from './modelUtils'
 
 // A goose is bigger than the Queen and grey, with a long neck and proper legs —
 // clearly a different, more imposing bird at a glance. A pale grey, kept distinctly
@@ -8,19 +9,6 @@ const ORANGE = 0xff9f1c
 const BLACK = 0x222222
 const CREST = 0x1c1e22 // near-black spikes for the Marsh Baron's crest
 
-function box(
-  w: number,
-  h: number,
-  d: number,
-  color: number,
-  position: [number, number, number],
-): THREE.Mesh {
-  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color }))
-  m.position.set(...position)
-  m.castShadow = true
-  m.receiveShadow = true
-  return m
-}
 
 /** What a built goose hands back: the whole thing plus the parts we animate —
  *  the two wing pivots (for flapping) and the neck pivot (for looking/pecking

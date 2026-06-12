@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { box } from './modelUtils'
 
 // Shared palette for all ducks. Feather colour is per-duck (the Queen is white,
 // her subjects are duckling-yellow), so it's passed in rather than fixed here.
@@ -118,26 +119,6 @@ export const MALLARD_HEN: DuckModelOptions = {
   billColor: 0xcf9a4c, // dull orange bill
 }
 
-/**
- * Make a coloured box at a position. Returns the Mesh so the caller can tweak it
- * (e.g. rotate the tail). Keeps the duck a readable list of "box here, box there".
- */
-function box(
-  width: number,
-  height: number,
-  depth: number,
-  color: number,
-  position: [number, number, number],
-): THREE.Mesh {
-  const mesh = new THREE.Mesh(
-    new THREE.BoxGeometry(width, height, depth),
-    new THREE.MeshStandardMaterial({ color }),
-  )
-  mesh.position.set(...position)
-  mesh.castShadow = true
-  mesh.receiveShadow = true
-  return mesh
-}
 
 /**
  * Build one wing as a hinged pivot. `side` is -1 (left, -X) or +1 (right, +X). The

@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { disposeObject } from './modelUtils'
 
 /** One collectible thing (a food plant, a reed, …) sitting in the world. */
 export interface Collectible {
@@ -121,13 +122,3 @@ export class ResourcePatch {
   }
 }
 
-/** Free a removed item's GPU resources (geometry + material) so they don't leak. */
-function disposeObject(obj: THREE.Object3D): void {
-  obj.traverse((child) => {
-    const mesh = child as THREE.Mesh
-    if (mesh.geometry) mesh.geometry.dispose()
-    const mat = mesh.material
-    if (Array.isArray(mat)) mat.forEach((m) => m.dispose())
-    else if (mat) mat.dispose()
-  })
-}

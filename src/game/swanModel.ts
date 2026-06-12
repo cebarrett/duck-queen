@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { box } from './modelUtils'
 
 // A mute swan: pure white, a long graceful neck held high, an orange beak with the
 // signature black knob/mask at its base. Bigger and more elegant than the goose —
@@ -8,19 +9,6 @@ const WHITE = 0xeef1f5
 const ORANGE = 0xf08a24 // beak
 const BLACK = 0x1a1a1a // facial mask / knob / eyes
 
-function box(
-  w: number,
-  h: number,
-  d: number,
-  color: number,
-  position: [number, number, number],
-): THREE.Mesh {
-  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color }))
-  m.position.set(...position)
-  m.castShadow = true
-  m.receiveShadow = true
-  return m
-}
 
 /** What a built swan hands back: the whole thing plus the one part we animate —
  *  the neck pivot (for the slow, graceful sway). Rotating it swings the head. */
