@@ -35,8 +35,8 @@ const DISTRACT_NEAR = 2 // nearest a distraction spot can be
 const DISTRACT_FAR = 4 // farthest a distraction spot can be
 const LOST_DISTANCE = 18 // a subject stranded past this from the Queen gives up
 const FLIGHT_HOLD_DISTANCE = 6 // if the Queen flies off, stop chasing and hold home sooner
-const SCATTER_NEAR = 3 // closest a startled subject's target can be to trouble
-const SCATTER_FAR = 6 // farthest a startled subject's target can be to trouble
+const SCATTER_NEAR = 3 // shortest panic dash away from trouble
+const SCATTER_FAR = 6 // farthest panic dash away from trouble
 const SCATTER_MIN = 2.5 // shortest time before a scattered duck regroups
 const SCATTER_MAX = 4.0 // longest time before a scattered duck regroups
 const SCATTER_SPREAD = 1.1 // radians of random fan-out around "away from trouble"
@@ -297,8 +297,8 @@ export class DuckSubject {
     const r = randRange(SCATTER_NEAR, SCATTER_FAR)
 
     this.targetFood = null
-    this.targetX = x + Math.cos(angle) * r
-    this.targetZ = z + Math.sin(angle) * r
+    this.targetX = pos.x + Math.cos(angle) * r
+    this.targetZ = pos.z + Math.sin(angle) * r
     this.distractTimer = randRange(SCATTER_MIN, SCATTER_MAX)
     this.state = 'scattered'
   }
