@@ -96,11 +96,7 @@ export class HUD {
     this.element = el
 
     const minimapWrap = document.createElement('div')
-    minimapWrap.style.cssText =
-      'position:fixed;top:12px;right:14px;width:282px;height:282px;' +
-      'border:2px solid rgba(255,255,255,.72);border-radius:8px;overflow:hidden;' +
-      'background:rgba(92,132,58,.86);box-shadow:0 2px 8px rgba(0,0,0,.35);' +
-      'pointer-events:none;user-select:none;'
+    minimapWrap.id = 'minimap'
     const minimap = document.createElement('canvas')
     minimap.style.cssText = 'display:block;width:100%;height:100%;'
     minimapWrap.appendChild(minimap)

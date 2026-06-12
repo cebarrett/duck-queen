@@ -21,6 +21,8 @@ const COMPOSITION: SubjectKind[] = [
 const QUACK_RANGE = 12 // a quack recruits idle ducks within this distance
 const SCATTER_RANGE = 10 // subjects this close to conflict briefly scatter
 const GUARD_RADIUS = 4.5 // adults holding this close to a nest slow a raid
+const HONKOFF_CHORUS_RANGE = 13 // visible/audio responders near the Queen
+const HONKOFF_MAX_VOICES = 6 // keep the chorus cute instead of a wall of samples
 
 /** Game wires this to the HUD so the flock can explain why a duck won't join. */
 type OnMessage = (text: string) => void
@@ -43,6 +45,7 @@ export class Flock {
   private readonly members: DuckSubject[] = []
   // The reclaimed frontier ponds the flock may treat as home water (set by Game).
   private reclaimedPonds: () => readonly PondCircle[] = () => []
+  private honkOffTarget: { x: number; z: number } | null = null
 
   constructor(
     private readonly scene: THREE.Scene,
@@ -93,6 +96,10 @@ export class Flock {
    *  far from home can hold a nearby reclaimed pond instead of trekking back. */
   setReclaimedPonds(provider: () => readonly PondCircle[]): void {
     this.reclaimedPonds = provider
+  }
+
+  setHonkOffTarget(active: boolean, x = 0, z = 0): void {
+    this.honkOffTarget = active ? { x, z } : null
   }
 
   /** Current subjects split by kind, for the HUD. Ducklings have no sex (yet);
@@ -293,6 +300,7 @@ export class Flock {
       homeZ: home.z,
       nests: this.nests.all,
       flock: this.members,
+      honkOffTarget: this.honkOffTarget,
     }
     for (const subject of this.members) {
       subject.update(delta, ctx)
@@ -322,6 +330,21 @@ export class Flock {
     }
     if (turnedAway) {
       this.onMessage(`🦆 Your flock is full (${FOLLOWER_CAP}) — break the Marsh Baron to lead more`)
+    }
+    if (this.honkOffTarget) this.cueHonkOffChorus()
+  }
+
+  private cueHonkOffChorus(): void {
+    const qx = this.queen.position.x
+    const qz = this.queen.position.z
+    let voices = 0
+    for (const d of this.members) {
+      if (!d.supportsChorus) continue
+      const pos = d.group.position
+      if (Math.hypot(pos.x - qx, pos.z - qz) > HONKOFF_CHORUS_RANGE) continue
+      const vocal = voices < HONKOFF_MAX_VOICES && Math.random() < 0.72
+      d.cheerHonkOff(vocal)
+      if (vocal) voices++
     }
   }
 

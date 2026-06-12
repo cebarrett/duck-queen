@@ -44,6 +44,15 @@ const FLAP_REST = 0.9 // wings sit spread out this far while flying (radians)
 const FLAP_EASE = 10 // how fast flapping ramps up/down as Space is held/released
 const WING_SETTLE = 8 // how fast wings fold back to vertical on the ground
 
+// --- Honk-off / command flourish ------------------------------------------
+const QUACK_FLOURISH_MIN = 0.34 // even a short quack gets a readable wing flick
+const CHALLENGE_FLAP_SPEED = 20
+const CHALLENGE_WING_REST = 0.28
+const CHALLENGE_WING_FLAP = 0.42
+const CHALLENGE_BOB = 0.055
+const CHALLENGE_ROLL = 0.08
+const CHALLENGE_PITCH = 0.1
+
 // --- Panic flee -------------------------------------------------------------
 const PANIC_DURATION = 2.6 // seconds the Queen keeps fleeing after being startled
 const PANIC_SPEED = 8.5 // base flee speed
@@ -91,6 +100,9 @@ export class DuckController {
   private overWater = false // is she currently over the pond?
   private flapPhase = 0 // drives the wing flap sine wave while flying
   private flapIntensity = 0 // 0 = gliding (still wings), 1 = flapping hard
+  private quackFlourishTimer = 0
+  private quackFlourishDuration = QUACK_FLOURISH_MIN
+  private honkOffActive = false
 
   private mode: DuckMode = 'waddle'
   private prevMode: DuckMode = 'waddle' // last frame's mode, for spotting transitions
@@ -122,6 +134,15 @@ export class DuckController {
     this.panicTimer = PANIC_DURATION
     this.panicFromX = fromX
     this.panicFromZ = fromZ
+  }
+
+  quackFlourish(duration: number): void {
+    this.quackFlourishDuration = Math.max(QUACK_FLOURISH_MIN, duration)
+    this.quackFlourishTimer = this.quackFlourishDuration
+  }
+
+  setHonkOffActive(active: boolean): void {
+    this.honkOffActive = active
   }
 
   isPanicking(): boolean {
@@ -230,6 +251,7 @@ export class DuckController {
 
     this.updateCrown(delta)
     this.duck.update(delta)
+    this.quackFlourishTimer = Math.max(0, this.quackFlourishTimer - delta)
     this.panicTimer = Math.max(0, this.panicTimer - delta)
   }
 
@@ -240,6 +262,19 @@ export class DuckController {
       const flutter = PANIC_FLUTTER_REST + Math.abs(Math.sin(this.flapPhase)) * PANIC_FLUTTER_AMPLITUDE
       this.duck.leftWing.rotation.z = -flutter
       this.duck.rightWing.rotation.z = flutter
+      return
+    }
+
+    const challenge = !this.isPanicking() && (this.honkOffActive || this.quackFlourishTimer > 0)
+    if (challenge && this.mode !== 'fly') {
+      const held = this.honkOffActive ? 1 : 0
+      const burst = this.quackFlourishTimer > 0 ? this.quackFlourishTimer / this.quackFlourishDuration : 0
+      const intensity = Math.max(held * 0.55, burst)
+      this.flapIntensity = 0
+      this.flapPhase += delta * CHALLENGE_FLAP_SPEED
+      const flap = CHALLENGE_WING_REST + Math.abs(Math.sin(this.flapPhase)) * CHALLENGE_WING_FLAP * intensity
+      this.duck.leftWing.rotation.z = -flap
+      this.duck.rightWing.rotation.z = flap
       return
     }
 
@@ -404,6 +439,13 @@ export class DuckController {
       pitch = -FLY_LEAN * fwdFactor + this.velocity.y * 0.04
     }
 
+    if (this.honkOffActive && !this.isPanicking() && this.mode !== 'fly') {
+      const bounce = Math.abs(Math.sin(this.flapPhase * 0.8))
+      bob += bounce * CHALLENGE_BOB
+      roll += Math.sin(this.flapPhase * 0.45) * CHALLENGE_ROLL
+      pitch += CHALLENGE_PITCH
+    }
+
     this.duck.group.position.y = this.altitude + bob
     this.duck.group.rotation.x = pitch // nose up/down
     this.duck.group.rotation.y = this.heading // turn
@@ -413,8 +455,12 @@ export class DuckController {
   private updateCrown(delta: number): void {
     if (!this.duck.crown) return
 
-    const targetX = this.isPanicking() ? 0.28 : 0
-    const targetZ = this.isPanicking() ? Math.sin(this.waddlePhase * 0.5) * 0.22 : 0
+    const targetX = this.isPanicking() ? 0.28 : this.honkOffActive ? -0.1 : 0
+    const targetZ = this.isPanicking()
+      ? Math.sin(this.waddlePhase * 0.5) * 0.22
+      : this.honkOffActive
+        ? Math.sin(this.flapPhase * 0.35) * 0.12
+        : 0
     const t = 1 - Math.exp(-PANIC_CROWN_EASE * delta)
     this.duck.crown.rotation.x += (targetX - this.duck.crown.rotation.x) * t
     this.duck.crown.rotation.z += (targetZ - this.duck.crown.rotation.z) * t

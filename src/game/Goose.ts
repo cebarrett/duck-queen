@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { buildGoose } from './gooseModel'
+import { buildGoose, setGooseBillOpen } from './gooseModel'
 import { approachAngle, randRange, seekArrive, pointAround, faceHeading, easeFactor } from './mathUtils'
 import { type Collider, resolveWalls } from './collision'
 import type { Pond } from './Water'
@@ -61,6 +61,15 @@ const PUFF_SCALE = 1.22 // how big it swells while squaring up
 const POSTURE_TURN = 10 // how fast it spins to face the Queen
 const POSTURE_HONK_RATE = 1.4 // it honks a LOT during a face-off
 const PUFF_EASE = 8 // how fast it puffs up / deflates
+const POSTURE_FLAP_SPEED = 11 // rhythmic face-off wingbeats
+const POSTURE_BOB = 0.09 // little affronted bounce while squaring up
+const POSTURE_SWAY = 0.13 // side-to-side "you dare?" wobble
+const POSTURE_WING_REST = 0.35 // wings held partly out during a challenge
+const POSTURE_WING_FLAP = 0.38 // extra wing pump on each beat
+const POSTURE_HEAD_LIFT = -0.28 // proud, long-necked challenge lift
+const POSTURE_HEAD_BOB = 0.16 // neck jab layered onto the lifted posture
+const GOOSE_BILL_TIME = 0.46 // how long the bill gapes after a honk
+const GOOSE_BILL_SYLLABLE = 0.2
 const HONKOFF_COOLDOWN = 5 // after losing a honk-off (it won), brief no-re-fight gap
 const BOLD_TIME = 12 // after winning a honk-off, it struts and steals harder
 const BOLD_TRIGGER_SCALE = 1.25 // Geese can use this to slightly widen trigger range
@@ -104,6 +113,8 @@ export class Goose {
   private readonly leftWing: THREE.Group
   private readonly rightWing: THREE.Group
   private readonly neck: THREE.Group
+  private readonly upperBill: THREE.Group
+  private readonly lowerBill: THREE.Group
 
   private homeX: number
   private homeZ: number
@@ -136,6 +147,8 @@ export class Goose {
   // swells him from his real size rather than snapping him back to 1.
   private readonly baseScale: number
   private readonly bossHonkRate: number
+  private billTimer = 0
+  private billDuration = GOOSE_BILL_TIME
 
   // Honk-off state: while posturing it ignores its normal behaviour, squares up
   // to face the Queen (aimX/aimZ), and "puffs up" (a swelling scale).
@@ -173,6 +186,8 @@ export class Goose {
     this.leftWing = model.leftWing
     this.rightWing = model.rightWing
     this.neck = model.neck
+    this.upperBill = model.upperBill
+    this.lowerBill = model.lowerBill
     this.group.position.set(x, 0, z)
     this.homeX = x
     this.homeZ = z
@@ -235,7 +250,7 @@ export class Goose {
       // RE-HOMES where it lands (its patch moves outward), so it won't drift back to
       // the nest; it stays cowed (no foraging / raiding) but can be re-challenged
       // after only a short beat, so she can chase it down and herd it even farther.
-      this.sound.honk(this.honkPitch * 0.8)
+      this.honk(this.honkPitch * 0.8)
       const pos = this.group.position
       let dx = pos.x - this.aimX // away from the Queen's last position
       let dz = pos.z - this.aimZ
@@ -268,7 +283,7 @@ export class Goose {
       this.bold = 0
     } else {
       // It held its ground: a smug honk, then straight back to its business.
-      this.sound.honk(this.honkPitch * 1.1)
+      this.honk(this.honkPitch * 1.1)
       this.state = 'pausing'
       this.timer = randRange(PAUSE_MIN, PAUSE_MAX)
       this.cooldown = HONKOFF_COOLDOWN
@@ -300,7 +315,7 @@ export class Goose {
 
     // An occasional honk (the Baron's deep menace, more often).
     const honkRate = this.boss ? this.bossHonkRate : HONK_RATE
-    if (Math.random() < honkRate * delta) this.sound.honk(this.honkPitch)
+    if (Math.random() < honkRate * delta) this.honk(this.honkPitch)
 
     // While calmly milling about, pick a target: a brooding hen takes priority —
     // if one's nest is in range the goose stalks straight over (this is what makes
@@ -353,6 +368,7 @@ export class Goose {
     this.heading = faceHeading(this.heading, this.velX, this.velZ, TURN_SPEED, delta)
     this.group.rotation.y = this.heading
     this.applyPose(delta, speed)
+    this.updateBill(delta)
   }
 
   /** Float on the pond, stride deliberately on land, or — when standing — fidget. */
@@ -508,15 +524,29 @@ export class Goose {
     pos.x += this.velX * delta
     pos.z += this.velZ * delta
 
-    // Puff up + face her, no waddle. Hold at the waterline if it's squaring up
-    // while afloat, so it doesn't pop up onto the surface mid-honk-off.
+    if (Math.random() < POSTURE_HONK_RATE * delta) this.honk(this.honkPitch)
+    this.updateBill(delta)
+
+    // Puff up + face her. Hold at the waterline if it's squaring up while afloat,
+    // then layer in a silly wing-pumping challenge dance.
     this.puff += (PUFF_SCALE - this.puff) * easeFactor(PUFF_EASE, delta)
     this.group.scale.setScalar(this.baseScale * this.puff)
-    pos.y = this.pond.isWater(pos.x, pos.z) ? SWIM_FLOAT_Y : 0
+    this.walkPhase += delta * POSTURE_FLAP_SPEED
+    const beat = Math.max(0, Math.sin(this.walkPhase))
+    const honkBoost = this.billTimer > 0 ? this.billTimer / this.billDuration : 0
+    const bob = Math.abs(Math.sin(this.walkPhase)) * POSTURE_BOB + honkBoost * 0.04
+    pos.y = this.pond.isWater(pos.x, pos.z) ? SWIM_FLOAT_Y + bob * 0.45 : bob
     this.group.rotation.y = this.heading
-    this.group.rotation.z = 0
+    this.group.rotation.z = Math.sin(this.walkPhase * 0.55) * POSTURE_SWAY
+    this.neck.rotation.set(
+      POSTURE_HEAD_LIFT + POSTURE_HEAD_BOB * beat - honkBoost * 0.12,
+      Math.sin(this.walkPhase * 0.75) * 0.18,
+      0,
+    )
 
-    if (Math.random() < POSTURE_HONK_RATE * delta) this.sound.honk(this.honkPitch)
+    const wingSpread = POSTURE_WING_REST + POSTURE_WING_FLAP * beat + honkBoost * 0.16
+    this.leftWing.rotation.z = -wingSpread
+    this.rightWing.rotation.z = wingSpread
   }
 
   /** Run away from the Queen; once it reaches its escape point, calm down. */
@@ -560,7 +590,7 @@ export class Goose {
     const s = seekArrive(this.group.position, plant.x, plant.z, SPEED, ARRIVE_RADIUS, EAT_RADIUS)
     if (s.arrived) {
       this.food.steal(plant) // NOT collect() — this denies the Queen the food
-      this.sound.honk(this.honkPitch) // a smug honk
+      this.honk(this.honkPitch) // a smug honk
       this.targetFood = null
       this.state = 'pausing'
       this.timer = randRange(PAUSE_MIN, PAUSE_MAX)
@@ -580,7 +610,7 @@ export class Goose {
     if (!nest) return false
     this.targetNest = nest
     this.state = 'raiding'
-    this.sound.honk(this.honkPitch) // a menacing honk as it sets off
+    this.honk(this.honkPitch) // a menacing honk as it sets off
     return true
   }
 
@@ -620,5 +650,20 @@ export class Goose {
     this.targetX = p.x
     this.targetZ = p.z
     this.state = 'wandering'
+  }
+
+  private honk(pitch = this.honkPitch): void {
+    this.sound.honk(pitch)
+    this.billDuration = GOOSE_BILL_TIME * Math.min(1.35, 1 / Math.max(0.75, pitch))
+    this.billTimer = this.billDuration
+  }
+
+  private updateBill(delta: number): void {
+    if (this.billTimer > 0) this.billTimer = Math.max(0, this.billTimer - delta)
+    const progress = this.billTimer / this.billDuration
+    const elapsed = 1 - progress
+    const syllables = Math.max(1, Math.ceil(this.billDuration / GOOSE_BILL_SYLLABLE))
+    const open = progress > 0 ? Math.abs(Math.sin(elapsed * syllables * Math.PI)) : 0
+    setGooseBillOpen(this.upperBill, this.lowerBill, open)
   }
 }

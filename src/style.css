@@ -34,3 +34,36 @@ canvas {
      overlay would swallow the click and pointer lock would never engage. */
   pointer-events: none;
 }
+
+#minimap {
+  position: fixed;
+  top: 12px;
+  right: 14px;
+  width: 282px;
+  height: 282px;
+  border: 2px solid rgba(255, 255, 255, 0.72);
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(92, 132, 58, 0.86);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  user-select: none;
+}
+
+@media (max-width: 700px) {
+  #hud {
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    max-width: calc(100vw - 20px);
+    font-size: 14px;
+    line-height: 1.25;
+  }
+
+  #minimap {
+    top: 92px;
+    right: 10px;
+    width: min(260px, calc(100vw - 20px));
+    height: min(260px, calc(100vw - 20px));
+  }
+}
