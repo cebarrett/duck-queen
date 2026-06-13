@@ -86,10 +86,12 @@ will actually work, so you don't have to memorize them.
 - **Reclaim the frontier.** Once you've broken the Marsh Baron and held the Treaty
   Flats against Lord Boundary, the war moves outward: the scattered outlying ponds
   show up **murky and goose-held**, each guarded by a steel-blue **lieutenant
-  gander**. Lead a strong flock out and **out-honk** each one to flip its pond back
-  to you — the water clears to blue, the minimap recolours, and the HUD tracks your
-  progress (🪶 Frontier). Reclaim them all and the swan has something to say about
-  what comes next.
+  gander**. Those lieutenants already patrol their ponds before Lord Boundary falls;
+  trespass too close and they'll chase the Queen off, but the ponds can't be
+  reclaimed until the Treaty Flats hold. After that, lead a strong flock out and
+  **out-honk** each one to flip its pond back to you — the water clears to blue, the
+  minimap recolours, and the HUD tracks your progress (🪶 Frontier). Reclaim them all
+  and the swan has something to say about what comes next.
 
 ## World seed
 

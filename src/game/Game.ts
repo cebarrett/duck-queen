@@ -191,7 +191,7 @@ export class Game {
         this.duckController.setHonkOffActive(active)
       },
       (text) => this.hud.showMessage(text),
-      (gooseX, gooseZ) => this.handleQueenLostHonkOff(gooseX, gooseZ),
+      (gooseX, gooseZ, _queenX, _queenZ, message) => this.handleQueenLostHonkOff(gooseX, gooseZ, message),
       () => this.resolvePenalty(),
       this.frontier,
       this.progress,
@@ -461,11 +461,11 @@ export class Game {
     }
   }
 
-  private handleQueenLostHonkOff(gooseX: number, gooseZ: number): void {
+  private handleQueenLostHonkOff(gooseX: number, gooseZ: number, message = 'OUT-HONKED!'): void {
     this.duckController.startPanicFlee(gooseX, gooseZ)
     this.flock.scatterChorusFrom(gooseX, gooseZ)
     this.resolveShakenTimer = RESOLVE_SHAKEN_TIME
-    this.hud.showMessage('OUT-HONKED!')
+    this.hud.showMessage(message)
     this.hud.setResolveShaken(true)
   }
 

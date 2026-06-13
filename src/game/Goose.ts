@@ -92,7 +92,19 @@ const BARON_COLOR = 0x3c3f45 // charcoal — far darker than the pale gaggle
 const BARON_SCALE = 1.4 // a head taller and broader than a regular goose
 const BARON_HONK_RATE = 0.04 // deep menace, not a constant foghorn
 
-type GooseState = 'pausing' | 'wandering' | 'foraging' | 'fleeing' | 'raiding'
+// --- Frontier lieutenants --------------------------------------------------
+const TERRITORY_CHASE_SPEED = 4.4
+const TERRITORY_ALERT_MARGIN = 7
+const TERRITORY_GIVE_UP_MARGIN = 14
+
+type GooseMovement = 'ordinary' | 'rooted' | 'territorial'
+type GooseState = 'pausing' | 'wandering' | 'foraging' | 'fleeing' | 'raiding' | 'chasing'
+
+interface GooseTerritory {
+  readonly x: number
+  readonly z: number
+  readonly radius: number
+}
 
 interface BossGooseOptions {
   bodyColor?: number
@@ -100,6 +112,8 @@ interface BossGooseOptions {
   crest?: boolean
   honkPitch?: readonly [number, number]
   honkRate?: number
+  movement?: GooseMovement
+  territory?: GooseTerritory
 }
 
 /**
@@ -147,6 +161,10 @@ export class Goose {
   // swells him from his real size rather than snapping him back to 1.
   private readonly baseScale: number
   private readonly bossHonkRate: number
+  private readonly movement: GooseMovement
+  private readonly territory?: GooseTerritory
+  private territoryGuardActive = false
+  private territoryPatrolActive = true
   private billTimer = 0
   private billDuration = GOOSE_BILL_TIME
 
@@ -170,8 +188,8 @@ export class Goose {
     private readonly nests: Nests,
     private readonly colliders: readonly Collider[],
     rng: Rng,
-    // The Marsh Baron is a boss goose: bigger, darker, crested, deep-voiced, and
-    // rooted to his spot (he doesn't wander, forage, or raid).
+    // A boss goose uses the bigger/special model. Its movement is configured
+    // separately so frontier lieutenants can look official without standing still.
     private readonly boss = false,
     bossOptions: BossGooseOptions = {},
   ) {
@@ -197,6 +215,8 @@ export class Goose {
     this.collideHeight = boss ? COLLIDE_HEIGHT * bossScale : COLLIDE_HEIGHT
     this.baseScale = boss ? bossScale : 1
     this.bossHonkRate = bossOptions.honkRate ?? BARON_HONK_RATE
+    this.movement = bossOptions.movement ?? (boss ? 'rooted' : 'ordinary')
+    this.territory = bossOptions.territory
 
     // Spawn-time values from the seeded rng so the initial world is stable. The
     // Baron's voice sits much lower — a deep, ominous honk.
@@ -223,6 +243,26 @@ export class Goose {
     return this.bold > 0
   }
 
+  /** Is it actively driving the Queen away from its assigned territory? */
+  get isTerritoryChasing(): boolean {
+    return this.state === 'chasing'
+  }
+
+  /** Frontier lieutenants only guard before their act opens, or while unclaimed. */
+  setTerritoryGuardActive(active: boolean): void {
+    this.territoryGuardActive = active && this.movement === 'territorial' && this.territory !== undefined
+    if (!this.territoryGuardActive && this.state === 'chasing') {
+      this.state = 'pausing'
+      this.timer = randRange(PAUSE_MIN, PAUSE_MAX)
+    }
+  }
+
+  /** A routed lieutenant should not drift back to its reclaimed pond. */
+  stopTerritoryPatrol(): void {
+    this.territoryPatrolActive = false
+    this.territoryGuardActive = false
+  }
+
   /** Helper for honk-off owners that want bold geese to start from farther away. */
   honkOffTriggerRange(baseRange: number): number {
     return this.isBold ? baseRange * BOLD_TRIGGER_SCALE : baseRange
@@ -234,6 +274,7 @@ export class Goose {
     this.posturing = true
     this.targetFood = null
     this.targetNest = null
+    if (this.state === 'chasing') this.state = 'pausing'
     this.idleAction = 'none'
     this.neck.rotation.set(0, 0, 0)
     this.leftWing.rotation.z = 0
@@ -318,11 +359,13 @@ export class Goose {
     const honkRate = this.boss ? this.bossHonkRate : HONK_RATE
     if (Math.random() < honkRate * delta) this.honk(this.honkPitch, 'ambient')
 
+    this.updateTerritoryAwareness()
+
     // While calmly milling about, pick a target: a brooding hen takes priority —
     // if one's nest is in range the goose stalks straight over (this is what makes
     // geese actively menace your nests) — otherwise it eyes your plants. The Baron
     // does none of this: he holds his ground and waits.
-    if (!this.boss && (this.state === 'wandering' || this.state === 'pausing')) {
+    if (this.movement === 'ordinary' && (this.state === 'wandering' || this.state === 'pausing')) {
       if (!this.tryRaid()) {
         const forageRate = this.isBold ? BOLD_FORAGE_RATE : FORAGE_RATE
         if (Math.random() < forageRate * delta) this.tryForage()
@@ -332,6 +375,9 @@ export class Goose {
     switch (this.state) {
       case 'raiding':
         this.raid(delta)
+        break
+      case 'chasing':
+        this.chaseTerritoryIntruder(delta)
         break
       case 'foraging':
         this.forage(delta)
@@ -345,7 +391,7 @@ export class Goose {
       case 'pausing':
         this.ease(0, 0, delta)
         this.timer -= delta
-        if (!this.boss && this.timer <= 0) this.pickNewTarget() // the Baron never wanders off
+        if (this.movement !== 'rooted' && this.timer <= 0) this.pickNewTarget()
         break
     }
 
@@ -630,6 +676,50 @@ export class Goose {
     this.ease(s.vx, s.vz, delta)
   }
 
+  private updateTerritoryAwareness(): void {
+    if (!this.territoryGuardActive || !this.territory) return
+    if (this.state !== 'pausing' && this.state !== 'wandering' && this.state !== 'chasing') return
+
+    const q = this.listener.position
+    const distFromCenter = Math.hypot(q.x - this.territory.x, q.z - this.territory.z)
+    if (this.state === 'chasing') {
+      if (distFromCenter > this.territory.radius + TERRITORY_GIVE_UP_MARGIN) {
+        this.state = 'wandering'
+        this.targetX = this.homeX
+        this.targetZ = this.homeZ
+      }
+      return
+    }
+
+    if (distFromCenter <= this.territory.radius + TERRITORY_ALERT_MARGIN) {
+      this.targetFood = null
+      this.targetNest = null
+      this.idleAction = 'none'
+      this.state = 'chasing'
+      this.honk(this.honkPitch, 'urgent')
+    }
+  }
+
+  private chaseTerritoryIntruder(delta: number): void {
+    if (!this.territoryGuardActive || !this.territory) {
+      this.state = 'pausing'
+      this.timer = randRange(PAUSE_MIN, PAUSE_MAX)
+      this.ease(0, 0, delta)
+      return
+    }
+    const q = this.listener.position
+    const distFromCenter = Math.hypot(q.x - this.territory.x, q.z - this.territory.z)
+    if (distFromCenter > this.territory.radius + TERRITORY_GIVE_UP_MARGIN) {
+      this.state = 'wandering'
+      this.targetX = this.homeX
+      this.targetZ = this.homeZ
+      return
+    }
+
+    const s = seekArrive(this.group.position, q.x, q.z, TERRITORY_CHASE_SPEED, 0, ARRIVE_STOP)
+    this.ease(s.vx, s.vz, delta)
+  }
+
   private seekTarget(delta: number): void {
     const s = seekArrive(this.group.position, this.targetX, this.targetZ, SPEED, ARRIVE_RADIUS, ARRIVE_STOP)
     if (s.arrived) {
@@ -647,7 +737,9 @@ export class Goose {
   }
 
   private pickNewTarget(): void {
-    const p = pointAround(this.homeX, this.homeZ, WANDER_RADIUS)
+    const p = this.movement === 'territorial' && this.territory && this.territoryPatrolActive
+      ? pointAround(this.territory.x, this.territory.z, this.territory.radius + 3)
+      : pointAround(this.homeX, this.homeZ, WANDER_RADIUS)
     this.targetX = p.x
     this.targetZ = p.z
     this.state = 'wandering'

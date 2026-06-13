@@ -87,15 +87,20 @@ const LIEUTENANT_SCALE = 1.16 // a little bigger than a gaggle goose, smaller th
 const LIEUTENANT_PITCH: readonly [number, number] = [0.72, 0.84] // mid voice
 const LIEUTENANT_HONK_RATE = 0.02
 const FRONTIER_UNLOCK_DELAY = 3 // beat after Lord Boundary before the frontier call lands
+const LIEUTENANT_CATCH_RANGE = 2.2
+const LIEUTENANT_CATCH_COOLDOWN = 6
+const QUEEN_SAFE_FLIGHT_Y = 2.4
+const FRONTIER_GUARD_MESSAGE = '🪶 The lieutenant drives you from the frontier — Lord Boundary still holds the line.'
 
 /** A lieutenant goose paired with the territory (pond) it holds. */
 interface Lieutenant {
   readonly goose: Goose
   readonly territory: Territory
   claimed: boolean
+  guardCooldown: number
 }
 
-type OnQueenLost = (gooseX: number, gooseZ: number, queenX: number, queenZ: number) => void
+type OnQueenLost = (gooseX: number, gooseZ: number, queenX: number, queenZ: number, message?: string) => void
 type ResolvePenalty = () => number
 type OnMessage = (text: string) => void
 
@@ -191,9 +196,11 @@ export class Geese {
         crest: false,
         honkPitch: LIEUTENANT_PITCH,
         honkRate: LIEUTENANT_HONK_RATE,
+        movement: 'territorial',
+        territory: circle,
       })
       scene.add(goose.group)
-      this.lieutenants.push({ goose, territory, claimed: false })
+      this.lieutenants.push({ goose, territory, claimed: false, guardCooldown: 0 })
     }
 
     for (let i = 0; i < ROAMING_GOOSE_COUNT; i++) {
@@ -289,6 +296,7 @@ export class Geese {
       onWin: () => {
         const lt = this.activeLieutenant!
         lt.claimed = true
+        lt.goose.stopTerritoryPatrol()
         this.frontier.claim(lt.territory)
         if (this.frontier.allClaimed) {
           this.onBaronMessage('👑 The frontier is yours — every far pond flies your banner!')
@@ -314,6 +322,7 @@ export class Geese {
     this.baron.update(delta)
     this.treatyBoss.update(delta)
     for (const lt of this.lieutenants) lt.goose.update(delta)
+    this.updateFrontierGuardCatches()
   }
 
   get minimapEnemies(): EnemyMarker[] {
@@ -442,7 +451,11 @@ export class Geese {
   }
 
   private updateFrontierFight(delta: number): void {
-    if (!this.progress.treatyDefeated) return
+    if (!this.progress.treatyDefeated) {
+      this.updateFrontierGuards(delta)
+      return
+    }
+    this.disableFrontierGuards()
 
     if (!this.frontierUnlockAnnounced) {
       if (this.frontierUnlockDelay > 0) {
@@ -477,6 +490,32 @@ export class Geese {
     if (nearest) {
       this.activeLieutenant = nearest
       this.startStandoff(this.frontierStandoff, nearest.goose)
+    }
+  }
+
+  private updateFrontierGuards(delta: number): void {
+    for (const lt of this.lieutenants) {
+      lt.guardCooldown = Math.max(0, lt.guardCooldown - delta)
+      lt.goose.setTerritoryGuardActive(!lt.claimed)
+    }
+  }
+
+  private disableFrontierGuards(): void {
+    for (const lt of this.lieutenants) lt.goose.setTerritoryGuardActive(false)
+  }
+
+  private updateFrontierGuardCatches(): void {
+    if (this.progress.treatyDefeated || this.currentStandoff) return
+    const q = this.queen.position
+    if (q.y > QUEEN_SAFE_FLIGHT_Y) return
+
+    for (const lt of this.lieutenants) {
+      if (lt.claimed || lt.guardCooldown > 0 || !lt.goose.isTerritoryChasing) continue
+      const gp = lt.goose.group.position
+      if (Math.hypot(gp.x - q.x, gp.z - q.z) > LIEUTENANT_CATCH_RANGE) continue
+      lt.guardCooldown = LIEUTENANT_CATCH_COOLDOWN
+      this.onQueenLost(gp.x, gp.z, q.x, q.z, FRONTIER_GUARD_MESSAGE)
+      break
     }
   }
 
