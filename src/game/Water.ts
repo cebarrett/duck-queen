@@ -50,6 +50,19 @@ export class Pond {
     metalness: 0,
   })
 
+  // A pale "shallows" ring laid at each shoreline softens the hard circle where
+  // water meets ground and reads as wet. Shared across the clean ponds; contested
+  // ponds get their own murkier clones (tracked so they breathe in step).
+  private readonly foamMaterial = new THREE.MeshStandardMaterial({
+    color: 0xeaf4ff,
+    transparent: true,
+    opacity: 0.5,
+    roughness: 0.6,
+    metalness: 0,
+    depthWrite: false, // translucent decal — don't block what's behind it
+  })
+  private readonly contestedFoams: THREE.MeshStandardMaterial[] = []
+
   constructor(
     readonly centerX: number,
     readonly centerZ: number,
@@ -67,7 +80,17 @@ export class Pond {
     disc.rotation.x = -Math.PI / 2
     disc.position.set(x, this.surfaceY, z)
     this.mesh.add(disc)
+    this.addFoamRing(x, z, radius, this.foamMaterial)
     this.circles.push({ x, z, radius })
+  }
+
+  /** A flat ring decal hugging a pond's shoreline (a little inside the water to a
+   *  little onto the bank), just above the water so it doesn't z-fight. */
+  private addFoamRing(x: number, z: number, radius: number, material: THREE.Material): void {
+    const ring = new THREE.Mesh(new THREE.RingGeometry(radius - 0.4, radius + 0.5, 48), material)
+    ring.rotation.x = -Math.PI / 2
+    ring.position.set(x, this.surfaceY + 0.005, z)
+    this.mesh.add(ring)
   }
 
   /** Add a CONTESTED pond (a goose-held frontier one): same as addCircle, but the
@@ -80,6 +103,11 @@ export class Pond {
     disc.rotation.x = -Math.PI / 2
     disc.position.set(x, this.surfaceY, z)
     this.mesh.add(disc)
+    // A murkier foam so the contested shoreline reads as scummy, not fresh.
+    const foam = this.foamMaterial.clone()
+    foam.color.setHex(0x9aa37a)
+    this.contestedFoams.push(foam)
+    this.addFoamRing(x, z, radius, foam)
     this.circles.push({ x, z, radius })
     this.contestedMaterials.push(mat)
     return mat
@@ -119,5 +147,9 @@ export class Pond {
     const opacity = 0.72 + Math.sin(this.time * 0.8) * 0.06
     this.material.opacity = opacity
     for (const mat of this.contestedMaterials) mat.opacity = opacity
+    // The foam breathes too, a touch out of phase, so the shoreline feels alive.
+    const foamOpacity = 0.5 + Math.sin(this.time * 0.8 + 1.0) * 0.08
+    this.foamMaterial.opacity = foamOpacity
+    for (const mat of this.contestedFoams) mat.opacity = foamOpacity
   }
 }

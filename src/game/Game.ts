@@ -14,6 +14,10 @@ import { Food } from './Food'
 import { Reeds } from './Reeds'
 import { Sound } from './Sound'
 import { Splash } from './Splash'
+import { Wind } from './Wind'
+import { Clouds } from './Clouds'
+import { Flora } from './Flora'
+import { Critters } from './Critters'
 import { Nests } from './Nests'
 import { HUD, type MinimapSnapshot } from './HUD'
 import { deriveRng } from './rng'
@@ -74,6 +78,9 @@ export class Game {
   private readonly reeds: Reeds
   private readonly sound = new Sound()
   private readonly splashFx: Splash
+  private readonly wind = new Wind()
+  private readonly clouds: Clouds
+  private readonly critters: Critters
   private readonly hud = new HUD()
   private readonly nests: Nests
   private readonly pond: Pond
@@ -105,8 +112,22 @@ export class Game {
     this.scene = new THREE.Scene()
     // World adds the ground, sky, fog, lights, and scenery to the scene, and
     // exposes the scenery's colliders so the duck can bump into them.
-    const world = new World(this.scene, deriveRng(seed, 'scenery'), deriveRng(seed, 'ponds'))
+    const world = new World(
+      this.scene,
+      deriveRng(seed, 'scenery'),
+      deriveRng(seed, 'ponds'),
+      deriveRng(seed, 'terrain'),
+      this.wind,
+    )
     this.pond = world.pond
+    // Ambient scenery that doesn't affect gameplay: drifting clouds, scattered
+    // grass/flowers, and a few flitting critters. Each draws its placement from
+    // its OWN seeded stream, so they can't shift the tree/pond/flock layouts.
+    this.clouds = new Clouds(deriveRng(seed, 'clouds'))
+    this.scene.add(this.clouds.group)
+    new Flora(this.scene, world.pond, this.wind, deriveRng(seed, 'flora'))
+    this.critters = new Critters(deriveRng(seed, 'critters'))
+    this.scene.add(this.critters.group)
     // The frontier: ownership state for the outlying ponds (Act III). Built from the
     // contestable ponds World generated; Geese spawns a lieutenant to hold each.
     this.frontier = new Frontier(world.frontierPonds)
@@ -133,7 +154,7 @@ export class Game {
     // Scatter edible plants for the flock to forage (land + pond).
     this.food = new Food(this.scene, world.pond, deriveRng(seed, 'food'))
     // Reeds grow on the shoreline — only the Queen gathers these.
-    this.reeds = new Reeds(this.scene, world.pond, deriveRng(seed, 'reeds'))
+    this.reeds = new Reeds(this.scene, world.pond, deriveRng(seed, 'reeds'), this.wind)
     // Nests the Queen builds by spending reeds (they don't do anything yet).
     this.nests = new Nests(this.scene)
 
@@ -246,6 +267,9 @@ export class Game {
     this.food.update(delta) // foraged/stolen plants slowly grow back
     this.pond.update(delta)
     this.splashFx.update(delta)
+    this.wind.update(delta) // sway the trees, reeds, grass and flora
+    this.clouds.update(delta) // drift the clouds across the sky
+    this.critters.update(delta) // flutter the butterflies and dragonflies
     this.hud.update(delta)
     this.cameraRig.update(delta)
     this.handleNestBuild()

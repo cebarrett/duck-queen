@@ -4,6 +4,7 @@ import type { FrontierPond } from './Frontier'
 import type { Rng } from './rng'
 import type { Collider } from './collision'
 import { TREATY_FLATS } from './Biomes'
+import { Wind } from './Wind'
 
 // A calm sky blue and a grassy green. Defined once so the sky, the fog, and the
 // hemisphere light can all share the same palette (keeps everything cohesive).
@@ -27,10 +28,10 @@ export class World {
   // here (with each disc's tint handle) as they're generated, for the Frontier.
   readonly frontierPonds: FrontierPond[] = []
 
-  constructor(scene: THREE.Scene, rng: Rng, pondRng: Rng) {
+  constructor(scene: THREE.Scene, rng: Rng, pondRng: Rng, terrainRng: Rng, private readonly wind: Wind) {
     this.addSky(scene)
     this.addLights(scene)
-    this.addGround(scene)
+    this.addGround(scene, terrainRng)
     // Scatter the extra ponds BEFORE the scenery so trees/rocks avoid them too.
     this.addTreatyFlatsWater()
     this.addExtraPonds(pondRng)
@@ -78,7 +79,8 @@ export class World {
   }
 
   private addSky(scene: THREE.Scene): void {
-    // The background is the flat colour behind everything.
+    // A flat fallback colour behind everything (seen only if the dome below ever
+    // fails to draw).
     scene.background = new THREE.Color(SKY_COLOR)
 
     // Fog fades distant objects toward a colour. Using the SKY colour makes the
@@ -86,6 +88,25 @@ export class World {
     // it hides the far edge of our finite ground plane. Fog(color, near, far):
     // fully clear before `near`, fully fogged past `far`.
     scene.fog = new THREE.Fog(SKY_COLOR, 30, 140)
+
+    // A big inward-facing dome painted with a vertical gradient — a deeper blue
+    // overhead easing to the pale fog colour at the horizon — so the sky reads
+    // with depth instead of one flat wash. fog:false keeps the dome itself from
+    // being fogged out (it sits well past the fog's far distance), and matching
+    // its horizon band to the fog colour preserves the "ground melts into the
+    // sky" trick. depthWrite:false + renderOrder -1 draw it behind everything.
+    const sky = new THREE.Mesh(
+      new THREE.SphereGeometry(500, 32, 16),
+      new THREE.MeshBasicMaterial({
+        map: makeSkyGradient(),
+        side: THREE.BackSide,
+        fog: false,
+        depthWrite: false,
+      }),
+    )
+    sky.renderOrder = -1
+    sky.frustumCulled = false // centred on origin, the camera is always inside it
+    scene.add(sky)
   }
 
   private addLights(scene: THREE.Scene): void {
@@ -112,16 +133,24 @@ export class World {
     scene.add(sun)
   }
 
-  private addGround(scene: THREE.Scene): void {
+  private addGround(scene: THREE.Scene, terrainRng: Rng): void {
     // A plane is created lying in the X/Y plane (facing the camera). We rotate
     // it -90° around X so it lies flat in X/Z with "up" (+Y) as its normal —
-    // i.e. a floor. Math.PI/2 radians = 90°.
-    const geometry = new THREE.PlaneGeometry(300, 300)
+    // i.e. a floor. Math.PI/2 radians = 90°. We subdivide it (60×60) so we have
+    // vertices to tint.
+    const geometry = new THREE.PlaneGeometry(300, 300, 60, 60)
+    // Mottle the floor with smooth patches of slightly varied greens via vertex
+    // colours, so it reads as gentle terrain instead of one flat wash. The plane
+    // stays perfectly FLAT (no height displacement), so collision/floorHeightAt
+    // are untouched. Tints come from the seeded 'terrain' stream, so the mottling
+    // is identical for a given seed.
+    applyGroundTint(geometry, terrainRng)
     // MeshStandardMaterial is a physically-based material: it RESPONDS to light
     // (unlike the cube's old MeshNormalMaterial). With no lights it'd be black —
     // that's the classic "why is everything black?" beginner footgun, which is
-    // exactly why we added lights above first.
-    const material = new THREE.MeshStandardMaterial({ color: GROUND_COLOR })
+    // exactly why we added lights above first. vertexColors mixes in our per-
+    // vertex tints.
+    const material = new THREE.MeshStandardMaterial({ vertexColors: true })
     const ground = new THREE.Mesh(geometry, material)
     ground.rotation.x = -Math.PI / 2
     ground.receiveShadow = true
@@ -187,6 +216,7 @@ export class World {
       blade.rotation.y = rng() * Math.PI
       blade.castShadow = true
       scene.add(blade)
+      this.wind.register(blade, 0.08, Wind.phaseFor(gx, gz)) // windgrass sways in the breeze
     }
 
     for (let i = 0; i < 5; i++) {
@@ -254,6 +284,7 @@ export class World {
         const canopy = boxMesh(leafMat, leaf, leaf, leaf, x, leafCenterY, z)
         canopy.castShadow = true
         scene.add(canopy)
+        this.wind.register(canopy, 0.03, Wind.phaseFor(x, z)) // leaves stir gently in the breeze
 
         // Two colliders: a thin trunk (so you can walk right up to it) and the
         // wider canopy up at leaf height (so you bonk it only while flying through).
@@ -276,6 +307,64 @@ export class World {
       }
     }
   }
+}
+
+/** Paint a vertical gradient onto a tiny canvas and hand it back as a texture for
+ *  the sky dome: deep blue overhead (canvas top → dome top) easing through the
+ *  fog colour at the horizon (canvas middle → dome equator) to a pale band below. */
+function makeSkyGradient(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas')
+  canvas.width = 2
+  canvas.height = 256
+  const ctx = canvas.getContext('2d')!
+  const grad = ctx.createLinearGradient(0, 0, 0, 256)
+  grad.addColorStop(0.0, '#3f86dd') // straight overhead — deeper blue
+  grad.addColorStop(0.5, '#8ec9ff') // the horizon band — matches the fog colour
+  grad.addColorStop(0.62, '#c4e2ff') // just below the horizon — pale (mostly hidden by the ground)
+  grad.addColorStop(1.0, '#e8f3ff')
+  ctx.fillStyle = grad
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  return tex
+}
+
+/** Tint a (flat) ground plane's vertices with smooth patches of varied greens.
+ *  Builds a coarse grid of random tints from the seeded rng and bilinearly
+ *  blends them per vertex, so the colour drifts in soft patches rather than
+ *  per-vertex static. */
+function applyGroundTint(geometry: THREE.PlaneGeometry, rng: Rng): void {
+  const GREENS = [0x7fae4c, 0x8ec25a, 0x9bbf65].map((c) => new THREE.Color(c))
+  const G = 12 // coarse tint grid (G+1 nodes per side)
+  const grid: THREE.Color[] = []
+  for (let i = 0; i < (G + 1) * (G + 1); i++) {
+    const base = GREENS[Math.floor(rng() * GREENS.length)].clone()
+    base.multiplyScalar(0.92 + rng() * 0.12) // small brightness jitter so even same-green nodes differ
+    grid.push(base)
+  }
+
+  const pos = geometry.attributes.position
+  const colors = new Float32Array(pos.count * 3)
+  const top = new THREE.Color()
+  const bot = new THREE.Color()
+  for (let v = 0; v < pos.count; v++) {
+    // The plane spans [-150,150] in x and y (before it's rotated flat). Map to [0,1].
+    const gx = ((pos.getX(v) + 150) / 300) * G
+    const gy = ((pos.getY(v) + 150) / 300) * G
+    const x0 = Math.min(Math.floor(gx), G - 1)
+    const y0 = Math.min(Math.floor(gy), G - 1)
+    const fx = gx - x0
+    const fy = gy - y0
+    const row = (y0 + 0) * (G + 1) + x0
+    const row2 = (y0 + 1) * (G + 1) + x0
+    top.copy(grid[row]).lerp(grid[row + 1], fx)
+    bot.copy(grid[row2]).lerp(grid[row2 + 1], fx)
+    top.lerp(bot, fy)
+    colors[v * 3] = top.r
+    colors[v * 3 + 1] = top.g
+    colors[v * 3 + 2] = top.b
+  }
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
 }
 
 /** Make a box mesh of a given size at a position, reusing the passed material. */
