@@ -3,6 +3,7 @@ import { box } from './modelUtils'
 import type { Pond } from './Water'
 import { ResourcePatch } from './ResourcePatch'
 import { type Rng, rngRange } from './rng'
+import { Wind } from './Wind'
 
 const STALK = 0x6fae3c // reed green
 const STALK2 = 0x8fbf4a // a lighter green, for variety
@@ -17,7 +18,7 @@ const REEDS_PER_RADIUS = 1.6 // shoreline density (the main pond: 16 reeds, radi
  * scaled to its size, so the smaller extra ponds get proportionally fewer reeds.
  */
 export class Reeds extends ResourcePatch {
-  constructor(scene: THREE.Scene, pond: Pond, rng: Rng) {
+  constructor(scene: THREE.Scene, pond: Pond, rng: Rng, wind: Wind) {
     super(scene)
     // Walk every water patch (the main pond first, then the extras). Doing the
     // main pond first with the same per-reed draws keeps its layout unchanged.
@@ -32,6 +33,9 @@ export class Reeds extends ResourcePatch {
         const clump = makeReedClump()
         clump.rotation.y = rng() * Math.PI * 2
         this.add(clump, x, 0, z) // reeds stand up from the shoreline (base at y=0)
+        // The clump's origin is at its base, so a z-lean reads as the whole reed
+        // bowing in the wind. (Wind drops it automatically if the Queen harvests it.)
+        wind.register(clump, 0.06, Wind.phaseFor(x, z))
       }
     }
   }

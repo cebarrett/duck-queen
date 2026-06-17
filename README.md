@@ -7,6 +7,9 @@ non-violent **honk-offs** before they raid your nests.
 
 Built with **[Three.js](https://threejs.org/) + TypeScript + [Vite](https://vitejs.dev/)**.
 Everything is made of blocky boxes — that's the intended cozy, voxel-y art style.
+The world is alive around you: a gradient sky with drifting clouds, mottled
+ground scattered with grass tufts and flowers, trees and reeds that sway in a
+gentle breeze, foam-fringed ponds, and butterflies and dragonflies flitting about.
 
 ## Running it locally
 
@@ -118,8 +121,12 @@ src/
   style.css
   game/
     Game.ts            # the conductor: renderer, scene, camera, render loop, wiring
-    World.ts           # ground, sky, fog, lights, scenery (+ colliders)
-    Water.ts           # the pond
+    World.ts           # ground (mottled), gradient sky, fog, lights, scenery (+ colliders)
+    Water.ts           # the pond (+ shoreline foam)
+    Wind.ts            # gentle breeze that sways trees, reeds, grass and flora
+    Clouds.ts          # blocky clouds drifting across the sky
+    Flora.ts           # scattered grass tufts and flowers on the land
+    Critters.ts        # ambient butterflies and dragonflies
     collision.ts       # shared wall/floor collision (Queen, subjects, geese)
     rng.ts             # seeded RNG for deterministic world generation
     Duck.ts            # the player: the duck Queen
