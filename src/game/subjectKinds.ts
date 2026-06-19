@@ -75,3 +75,24 @@ export function subjectName(kind: SubjectKind, rand: Rng): string {
   const pool = SUBJECT_NAMES[kind]
   return pool[Math.floor(rand() * pool.length)]
 }
+
+/**
+ * A duckling's little quirk — the one thing that makes it more than an interchangeable
+ * yellow blob. A duckling draws one at birth and keeps it for life, even after it grows
+ * up into a drake or hen. Ducks that are born straight into adulthood have none. Each
+ * trait gently nudges one behaviour (see DuckSubject) and shows in the royal roster.
+ */
+export type DucklingTrait = 'fastForager' | 'fastRunner' | 'loudHonker'
+
+/** How each trait is badged in the roster window. Reused by the picker below. */
+export const DUCKLING_TRAITS: readonly { id: DucklingTrait; icon: string; label: string }[] = [
+  { id: 'fastForager', icon: '🌿', label: 'Fast forager' },
+  { id: 'fastRunner', icon: '🏃', label: 'Fast runner' },
+  { id: 'loudHonker', icon: '📣', label: 'Loud honker' },
+]
+
+/** Draw a trait for a new duckling, the same way names are drawn: the seeded world rng
+ *  keeps the starting flock's quirks stable per seed; hatched ducklings pass Math.random. */
+export function subjectTrait(rand: Rng): DucklingTrait {
+  return DUCKLING_TRAITS[Math.floor(rand() * DUCKLING_TRAITS.length)].id
+}

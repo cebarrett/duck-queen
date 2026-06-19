@@ -29,6 +29,9 @@ export interface PatchSlice {
  *  behaviour (velocity, timers, current target) is not saved — it re-derives. */
 export interface SubjectSlice {
   kind: 'duckling' | 'drake' | 'hen'
+  /** This subject's quirk, kept from ducklinghood into adulthood. Optional so saves from
+   *  before traits existed still load (a duckling slice without one re-draws on restore). */
+  trait?: 'fastForager' | 'fastRunner' | 'loudHonker' | null
   x: number
   z: number
   heading: number

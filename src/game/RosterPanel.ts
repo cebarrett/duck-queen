@@ -1,5 +1,5 @@
 import type { RosterEntry } from './Flock'
-import type { SubjectKind } from './subjectKinds'
+import { type SubjectKind, type DucklingTrait, DUCKLING_TRAITS } from './subjectKinds'
 import type { SubjectActivity } from './DuckSubject'
 
 /**
@@ -19,6 +19,11 @@ const SECTIONS: { kind: SubjectKind; icon: string; label: string }[] = [
   { kind: 'hen', icon: '♀', label: 'Hens' },
   { kind: 'duckling', icon: '🐤', label: 'Ducklings' },
 ]
+
+// A subject's quirk badge, e.g. "🏃 Fast runner", keyed off the shared trait table.
+const TRAIT_BADGE: Record<DucklingTrait, string> = Object.fromEntries(
+  DUCKLING_TRAITS.map((t) => [t.id, `${t.icon} ${t.label}`]),
+) as Record<DucklingTrait, string>
 
 // A friendly icon + label for whatever a subject is up to right now.
 const ACTIVITY: Record<SubjectActivity, string> = {
@@ -93,7 +98,11 @@ export class RosterPanel {
           .map(
             (m) =>
               '<div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin-top:7px;">' +
-              `<span style="font-size:16px;font-weight:700;">${m.name}</span>` +
+              `<span style="font-size:16px;font-weight:700;">${m.name}` +
+              (m.trait
+                ? `<span style="font-size:12px;font-weight:600;opacity:.7;margin-left:8px;white-space:nowrap;">${TRAIT_BADGE[m.trait]}</span>`
+                : '') +
+              '</span>' +
               `<span style="font-size:13px;font-weight:600;opacity:.85;white-space:nowrap;">${ACTIVITY[m.activity]}</span>` +
               '</div>',
           )
