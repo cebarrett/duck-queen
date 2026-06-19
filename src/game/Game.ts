@@ -23,7 +23,7 @@ import { HUD, type MinimapSnapshot } from './HUD'
 import { SettingsMenu } from './SettingsMenu'
 import { deriveRng } from './rng'
 import { makeProgress } from './Progress'
-import { questViews } from './quests'
+import { questViews, FOOD_GOAL, REEDS_GOAL, NEST_GOAL, FLOCK_GOAL } from './quests'
 
 // The default world seed. A given seed always generates the same layout; pass
 // ?seed=123 in the URL to try another one.
@@ -289,7 +289,20 @@ export class Game {
     this.hud.setReeds(this.reeds.total)
     this.hud.setNests(this.nests.count)
     this.hud.setFrontier(this.frontier.claimedCount, this.frontier.total, this.progress.treatyDefeated)
-    this.hud.setQuests(questViews(this.progress, this.frontier.claimedCount, this.frontier.total))
+    this.updateBeginnerQuests()
+    this.hud.setQuests(
+      questViews(
+        this.progress,
+        {
+          food: this.food.total,
+          reeds: this.reeds.total,
+          nests: this.nests.count,
+          flock: this.flock.subjectCount,
+        },
+        this.frontier.claimedCount,
+        this.frontier.total,
+      ),
+    )
     this.updateMinimap()
 
     this.renderer.render(this.scene, this.camera)
@@ -434,6 +447,31 @@ export class Game {
     }
     const hint = page.last ? 'Press F to leave' : 'Press F to continue  ▸'
     this.hud.setDialogue(SWAN_NAME, page.text, hint)
+  }
+
+  /**
+   * Beginner quests: latch each tutorial milestone the first time its goal is met.
+   * The flags only ever go false→true (a completed lesson never reverts, even after
+   * the reeds are spent or a duck wanders off), and each completion fires a one-shot
+   * toast — the same showMessage cadence as building a nest or hatching an egg.
+   */
+  private updateBeginnerQuests(): void {
+    if (!this.progress.foragedFood && this.food.total >= FOOD_GOAL) {
+      this.progress.foragedFood = true
+      this.hud.showMessage('✓ Forage for food — complete!')
+    }
+    if (!this.progress.gatheredReeds && this.reeds.total >= REEDS_GOAL) {
+      this.progress.gatheredReeds = true
+      this.hud.showMessage('✓ Gather reeds — complete!')
+    }
+    if (!this.progress.builtNest && this.nests.count >= NEST_GOAL) {
+      this.progress.builtNest = true
+      this.hud.showMessage('✓ Build a nest — complete!')
+    }
+    if (!this.progress.ralliedFlock && this.flock.subjectCount >= FLOCK_GOAL) {
+      this.progress.ralliedFlock = true
+      this.hud.showMessage('✓ Rally your flock — complete!')
+    }
   }
 
   /**

@@ -1,23 +1,81 @@
 import { describe, it, expect } from 'vitest'
-import { questViews } from './quests'
-import { makeProgress } from './Progress'
+import { questViews, type QuestCounts, FLOCK_GOAL, REEDS_GOAL } from './quests'
+import { makeProgress, type Progress } from './Progress'
 
-// The quest log is a pure projection of campaign state. These tests pin down the
-// unlock chain (each act opens the next) so the log can't drift from the actual
-// progression in Progress/Frontier.
+// The quest log is a pure projection of campaign state. These tests pin down both
+// chains — the beginner tutorial (forage → reeds → nest → flock) and the main story
+// (Baron → Treaty → Frontier) — so the log can't drift from the actual progression
+// in Progress/Frontier.
 
-describe('questViews', () => {
+const NO_COUNTS: QuestCounts = { food: 0, reeds: 0, nests: 0, flock: 0 }
+
+// The main-story quests are the last three entries, after the beginner chain.
+const story = (progress: Progress, claimed = 0, total = 4, counts: QuestCounts = NO_COUNTS) =>
+  questViews(progress, counts, claimed, total).slice(-3)
+
+describe('questViews beginner chain', () => {
+  it('starts with only the forage quest active, the rest locked', () => {
+    const [forage, reeds, nest, rally] = questViews(makeProgress(), NO_COUNTS, 0, 4)
+    expect(forage.state).toBe('active')
+    expect(reeds.state).toBe('locked')
+    expect(nest.state).toBe('locked')
+    expect(rally.state).toBe('locked')
+  })
+
+  it('unlocks each step as the prior milestone latches', () => {
+    const progress = makeProgress()
+    progress.foragedFood = true
+    expect(questViews(progress, NO_COUNTS, 0, 4)[1].state).toBe('active') // reeds
+
+    progress.gatheredReeds = true
+    expect(questViews(progress, NO_COUNTS, 0, 4)[2].state).toBe('active') // nest
+
+    progress.builtNest = true
+    expect(questViews(progress, NO_COUNTS, 0, 4)[3].state).toBe('active') // rally
+
+    progress.ralliedFlock = true
+    expect(questViews(progress, NO_COUNTS, 0, 4)[3].state).toBe('complete')
+  })
+
+  it('shows the live count on the active step (clamped to the goal)', () => {
+    const progress = makeProgress()
+    progress.foragedFood = true // reeds quest is now the active step
+    const counts: QuestCounts = { food: 0, reeds: 7, nests: 0, flock: 0 }
+    expect(questViews(progress, counts, 0, 4)[1].progress).toBe(`7/${REEDS_GOAL} reeds gathered`)
+  })
+
+  it('clamps the progress count so it never overshoots the goal', () => {
+    const progress = makeProgress()
+    progress.builtNest = true // rally quest is the active step
+    const counts: QuestCounts = { food: 0, reeds: 0, nests: 0, flock: 99 }
+    expect(questViews(progress, counts, 0, 4)[3].progress).toBe(`${FLOCK_GOAL}/${FLOCK_GOAL} ducks following`)
+  })
+})
+
+describe('questViews main story', () => {
   it('starts with the Baron active and the later acts locked', () => {
-    const [baron, treaty, frontier] = questViews(makeProgress(), 0, 4)
+    const [baron, treaty, frontier] = story(makeProgress())
     expect(baron.state).toBe('active')
     expect(treaty.state).toBe('locked')
     expect(frontier.state).toBe('locked')
   })
 
+  it('stays active from the start regardless of the beginner chain', () => {
+    // The Baron is independent of the tutorial: a player who never touches the
+    // beginner quests still sees it open.
+    const progress = makeProgress()
+    expect(story(progress)[0].state).toBe('active')
+    progress.foragedFood = true
+    progress.gatheredReeds = true
+    progress.builtNest = true
+    progress.ralliedFlock = true
+    expect(story(progress)[0].state).toBe('active')
+  })
+
   it('completes the Baron and opens the Treaty Flats once he falls', () => {
     const progress = makeProgress()
     progress.baronDefeated = true
-    const [baron, treaty, frontier] = questViews(progress, 0, 4)
+    const [baron, treaty, frontier] = story(progress)
     expect(baron.state).toBe('complete')
     expect(treaty.state).toBe('active')
     expect(frontier.state).toBe('locked') // still gated on the Treaty
@@ -27,7 +85,7 @@ describe('questViews', () => {
     const progress = makeProgress()
     progress.baronDefeated = true
     progress.treatyDefeated = true
-    const [, treaty, frontier] = questViews(progress, 1, 4)
+    const [, treaty, frontier] = story(progress, 1, 4)
     expect(treaty.state).toBe('complete')
     expect(frontier.state).toBe('active')
     expect(frontier.progress).toBe('1/4 ponds reclaimed')
@@ -37,14 +95,14 @@ describe('questViews', () => {
     const progress = makeProgress()
     progress.baronDefeated = true
     progress.treatyDefeated = true
-    expect(questViews(progress, 3, 4)[2].state).toBe('active')
-    expect(questViews(progress, 4, 4)[2].state).toBe('complete')
+    expect(story(progress, 3, 4)[2].state).toBe('active')
+    expect(story(progress, 4, 4)[2].state).toBe('complete')
   })
 
   it('does not count an empty frontier (no ponds) as complete', () => {
     const progress = makeProgress()
     progress.baronDefeated = true
     progress.treatyDefeated = true
-    expect(questViews(progress, 0, 0)[2].state).toBe('active')
+    expect(story(progress, 0, 0)[2].state).toBe('active')
   })
 })
