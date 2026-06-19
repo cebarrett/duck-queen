@@ -53,6 +53,7 @@ are verified by eye in the browser, not by tests.
 | **E** | Seat a hen on a nearby empty nest |
 | **R** | Rouse a brooding hen off a nearby nest (she rejoins the flock; eggs stay) |
 | **X** | Raze a nearby nest, recovering half the reeds it cost (5) |
+| **J** | Open / close the quest log (also the 📜 **Quests** button, bottom-left) |
 
 The **B**, **E**, **R**, and **X** prompts only appear in the HUD when the action
 will actually work, so you don't have to memorize them.
@@ -95,6 +96,13 @@ will actually work, so you don't have to memorize them.
   **out-honk** each one to flip its pond back to you — the water clears to blue, the
   minimap recolours, and the HUD tracks your progress (🪶 Frontier). Reclaim them all
   and the swan has something to say about what comes next.
+
+- **Follow the quest log.** Press **J** (or click the 📜 **Quests** button in the
+  bottom-left) to open the quest log — the three main-story goals in order: breaking
+  the **Marsh Baron**, holding the **Treaty Flats** against Lord Boundary, and
+  **taking the frontier ponds**. Each unlocks the next; quests you haven't reached
+  yet are shown but kept under wraps until then. These are main-story quests, so
+  they can't be cancelled.
 
 ## World seed
 
