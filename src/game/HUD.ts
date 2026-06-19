@@ -1,4 +1,5 @@
 import type { DuckMode } from './DuckController'
+import type { QuestView } from './quests'
 
 interface MinimapPoint {
   x: number
@@ -89,6 +90,13 @@ export class HUD {
   private readonly dialogueText: HTMLElement
   private readonly dialogueHint: HTMLElement
 
+  // The quest log: a button (always visible) that toggles a centred panel listing
+  // the main-story quests. The panel re-renders only when its contents change.
+  private readonly questPanel: HTMLElement
+  private readonly questEntries: HTMLElement
+  private questLogOpen = false
+  private lastQuestHtml = ''
+
   constructor() {
     const el = document.getElementById('hud')
     // A clear error beats a silent no-op if the HTML and code drift apart.
@@ -172,6 +180,42 @@ export class HUD {
     this.dialogueName = dName
     this.dialogueText = dText
     this.dialogueHint = dHint
+
+    // The quest-log button: the one interactive overlay element, so it sets
+    // pointer-events:auto (everything else lets clicks fall through to the canvas
+    // for pointer lock). Clicking it toggles the panel; J does the same via Game.
+    const questBtn = document.createElement('button')
+    questBtn.textContent = '📜 Quests (J)'
+    questBtn.style.cssText =
+      'position:fixed;left:14px;bottom:14px;pointer-events:auto;cursor:pointer;' +
+      'background:rgba(16,20,27,.82);color:#f3f6f9;font:600 15px system-ui,sans-serif;' +
+      'border:2px solid rgba(238,241,245,.85);border-radius:10px;padding:8px 14px;' +
+      'text-shadow:0 1px 2px rgba(0,0,0,.55);box-shadow:0 2px 8px rgba(0,0,0,.35);'
+    questBtn.addEventListener('click', () => this.toggleQuestLog())
+    document.body.appendChild(questBtn)
+
+    // The quest-log panel: a centred, scrollable card, hidden until opened. Built
+    // here (like the dialogue box) with the same calm dark styling.
+    const panel = document.createElement('div')
+    panel.style.cssText =
+      'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);' +
+      'width:min(560px,90vw);max-height:80vh;overflow:auto;' +
+      'background:rgba(16,20,27,.92);border:2px solid rgba(238,241,245,.85);' +
+      'border-radius:14px;padding:20px 24px;color:#f3f6f9;' +
+      'text-shadow:0 1px 2px rgba(0,0,0,.55);pointer-events:none;user-select:none;display:none;'
+    const header = document.createElement('div')
+    header.textContent = '📜 Quest Log'
+    header.style.cssText = 'font-size:22px;font-weight:800;letter-spacing:.2px;'
+    const subtitle = document.createElement('div')
+    subtitle.textContent = 'Main Story'
+    subtitle.style.cssText = 'font-size:13px;font-weight:700;color:#cfe0f5;opacity:.8;margin:2px 0 14px;'
+    const entries = document.createElement('div')
+    panel.appendChild(header)
+    panel.appendChild(subtitle)
+    panel.appendChild(entries)
+    document.body.appendChild(panel)
+    this.questPanel = panel
+    this.questEntries = entries
   }
 
   /** Show a line of NPC dialogue, or hide the box when `name` is null. */
@@ -189,6 +233,46 @@ export class HUD {
   /** Whether the Queen is close enough to strike up a conversation — drives the F prompt. */
   setCanTalk(canTalk: boolean): void {
     this.talkPrompt.style.display = canTalk ? 'block' : 'none'
+  }
+
+  /** Open or close the quest-log panel (from the 📜 button or the J key). */
+  toggleQuestLog(): void {
+    this.questLogOpen = !this.questLogOpen
+    this.questPanel.style.display = this.questLogOpen ? 'block' : 'none'
+  }
+
+  /** Fill the quest-log panel from the current quest views. Only touches the DOM
+   *  when the rendered content changes (like render()), so it's cheap to call each
+   *  frame. A locked quest shows its title but hides its details behind ??? . */
+  setQuests(views: readonly QuestView[]): void {
+    const badge = (state: QuestView['state']): string =>
+      state === 'complete' ? '✓ Complete' : state === 'active' ? '▸ In progress' : '🔒 Locked'
+    const badgeColor = (state: QuestView['state']): string =>
+      state === 'complete' ? '#79d5a3' : state === 'active' ? '#ffd84a' : '#9aa6b0'
+
+    const html = views
+      .map((q) => {
+        const locked = q.state === 'locked'
+        const detail = locked
+          ? '<div style="font-size:15px;line-height:1.5;opacity:.6;">???</div>'
+          : `<div style="font-size:15px;line-height:1.5;opacity:.92;">${q.summary}</div>` +
+            (q.progress ? `<div style="font-size:13px;font-weight:700;color:#cfe0f5;margin-top:6px;">🪶 ${q.progress}</div>` : '')
+        return (
+          '<div style="border-top:1px solid rgba(238,241,245,.18);padding:12px 0;">' +
+          `<div style="font-size:12px;font-weight:800;color:${badgeColor(q.state)};letter-spacing:.4px;">${badge(q.state)}</div>` +
+          `<div style="font-size:17px;font-weight:700;margin:3px 0 5px;${locked ? 'opacity:.7;' : ''}">${q.title}</div>` +
+          detail +
+          '</div>'
+        )
+      })
+      .join('')
+
+    // The values are our own copy strings + integers, so nothing untrusted goes
+    // into innerHTML here (same reasoning as render()).
+    if (html !== this.lastQuestHtml) {
+      this.questEntries.innerHTML = html
+      this.lastQuestHtml = html
+    }
   }
 
   /** Show/hide the honk-off banner and set the resolve meter (0..1). `label` and

@@ -22,6 +22,7 @@ import { Nests } from './Nests'
 import { HUD, type MinimapSnapshot } from './HUD'
 import { deriveRng } from './rng'
 import { makeProgress } from './Progress'
+import { questViews } from './quests'
 
 // The default world seed. A given seed always generates the same layout; pass
 // ?seed=123 in the URL to try another one.
@@ -277,6 +278,7 @@ export class Game {
     this.handleNestKick()
     this.handleNestRaze()
     this.handleSwanDialogue()
+    if (this.input.justPressed('KeyJ')) this.hud.toggleQuestLog()
 
     // Keep the HUD in sync (both only redraw on change).
     this.hud.setMode(this.duckController.getMode())
@@ -285,6 +287,7 @@ export class Game {
     this.hud.setReeds(this.reeds.total)
     this.hud.setNests(this.nests.count)
     this.hud.setFrontier(this.frontier.claimedCount, this.frontier.total, this.progress.treatyDefeated)
+    this.hud.setQuests(questViews(this.progress, this.frontier.claimedCount, this.frontier.total))
     this.updateMinimap()
 
     this.renderer.render(this.scene, this.camera)
