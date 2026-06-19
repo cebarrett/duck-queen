@@ -21,6 +21,7 @@ import { Critters } from './Critters'
 import { Nests } from './Nests'
 import { HUD, type MinimapSnapshot } from './HUD'
 import { SettingsMenu } from './SettingsMenu'
+import { RosterPanel } from './RosterPanel'
 import { deriveRng } from './rng'
 import { makeProgress } from './Progress'
 import { SaveManager } from './persistence/SaveManager'
@@ -91,6 +92,7 @@ export class Game {
   private readonly critters: Critters
   private readonly hud = new HUD()
   private readonly settingsMenu = new SettingsMenu(() => { void this.resetGame() })
+  private readonly rosterPanel = new RosterPanel()
   private readonly nests: Nests
   private readonly pond: Pond
   private readonly frontier: Frontier
@@ -358,6 +360,7 @@ export class Game {
     this.handleNestRaze()
     this.handleSwanDialogue()
     if (this.input.justPressed('KeyJ')) this.hud.toggleQuestLog()
+    if (this.input.justPressed('KeyK')) this.rosterPanel.toggle()
 
     // Keep the HUD in sync (both only redraw on change).
     this.hud.setMode(this.duckController.getMode())
@@ -366,6 +369,7 @@ export class Game {
     this.hud.setReeds(this.reeds.total)
     this.hud.setNests(this.nests.count)
     this.hud.setFrontier(this.frontier.claimedCount, this.frontier.total, this.progress.treatyDefeated)
+    this.rosterPanel.setRoster(this.flock.roster)
     this.updateBeginnerQuests()
     const views = questViews(
       this.progress,

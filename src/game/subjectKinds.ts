@@ -1,5 +1,6 @@
 import { type DuckModelOptions, MALLARD_DRAKE, MALLARD_HEN } from './duckModel'
 import type { Sound } from './Sound'
+import type { Rng } from './rng'
 
 /**
  * The three flavours of flock subject. They behave IDENTICALLY (all share the one
@@ -39,4 +40,38 @@ export const SUBJECT_KINDS: Record<SubjectKind, SubjectKindDef> = {
     pitch: [0.95, 1.2],
     voice: (s, p, distance) => s.henQuack(p, { distance }),
   },
+}
+
+/**
+ * Court names for the roster, one pool per kind: stately titles for the grown
+ * drakes and hens, and small cosy names for the ducklings. A subject draws one at
+ * birth so the royal flock roster reads like a list of named subjects rather than
+ * a tally. Purely cosmetic — names never touch world generation or behaviour.
+ */
+export const SUBJECT_NAMES: Record<SubjectKind, readonly string[]> = {
+  duckling: [
+    'Pip', 'Waddles', 'Squeak', 'Nibble', 'Tuft', 'Bram', 'Puff', 'Dot',
+    'Sprout', 'Fuzz', 'Bubbles', 'Pebble', 'Wren', 'Quill', 'Tiny', 'Mossy',
+    'Sunny', 'Biscuit', 'Sniffle', 'Dewdrop',
+  ],
+  drake: [
+    'Sir Mallard', 'Duke Pondsworth', 'Lord Featherby', 'Baron Quillton',
+    'Sir Greencrest', 'Earl Dabbleton', 'Sir Paddington', 'Lord Reedwick',
+    'Count Quackmore', 'Sir Bartholo', 'Duke Wetherby', 'Lord Marshall',
+    'Sir Drakeworth', 'Baron Tealby', 'Sir Plumington', 'Lord Billsby',
+  ],
+  hen: [
+    'Dame Quackleton', 'Lady Featherton', 'Duchess Pondella', 'Lady Mottlewing',
+    'Dame Reedmore', 'Lady Brindle', 'Countess Dabbler', 'Dame Henrietta',
+    'Lady Marshmallow', 'Dame Pricilla', 'Lady Wadsworth', 'Duchess Quillford',
+    'Dame Esther', 'Lady Plumtree', 'Dame Goslina', 'Lady Tealwing',
+  ],
+}
+
+/** Draw a court name for a new subject of `kind` from a randomness source. The
+ *  seeded world rng keeps the starting flock's names stable per seed; hatched and
+ *  matured subjects pass Math.random, since they're born during play. */
+export function subjectName(kind: SubjectKind, rand: Rng): string {
+  const pool = SUBJECT_NAMES[kind]
+  return pool[Math.floor(rand() * pool.length)]
 }
