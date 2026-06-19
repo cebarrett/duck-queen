@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { buildDuckModel, setBillOpen } from './duckModel'
-import { type SubjectKind, SUBJECT_KINDS } from './subjectKinds'
+import { type SubjectKind, SUBJECT_KINDS, subjectName } from './subjectKinds'
 import { approachAngle, randRange, seekArrive, pointAround, faceHeading, easeFactor } from './mathUtils'
 import { type Collider, resolveWalls } from './collision'
 import type { Pond } from './Water'
@@ -118,6 +118,10 @@ const COLLIDE_HEIGHT = 0.7 // height at BASE_SCALE; canopies float well above (w
 // A subject is always in exactly one of these.
 type SubjectState = 'pausing' | 'wandering' | 'following' | 'distracted' | 'foraging' | 'scattered' | 'holding' | 'nesting' | 'worming'
 
+/** What one of the Queen's subjects is up to right now, for the roster window. The
+ *  'lost' wandering/pausing states aren't included — a lost duck is no longer hers. */
+export type SubjectActivity = 'following' | 'foraging' | 'distracted' | 'scattered' | 'holding' | 'nesting' | 'worming'
+
 /** What a following subject needs to know about the world each frame: where the
  *  Queen is, who its flockmates are, and where the flock's current home is. */
 export interface FlockContext {
@@ -142,6 +146,9 @@ export interface FlockContext {
  */
 export class DuckSubject {
   readonly group: THREE.Group
+
+  /** This subject's court name, shown in the royal flock roster (purely cosmetic). */
+  readonly name: string
 
   // Not readonly: when a subject gets "lost", we reset its home to wherever it
   // ended up, so it wanders off from there.
@@ -234,6 +241,7 @@ export class DuckSubject {
     this.voicePitch = rngRange(rng, def.pitch[0], def.pitch[1])
     this.heading = rng() * Math.PI * 2
     this.group.rotation.y = this.heading
+    this.name = subjectName(kind, rng)
     this.timer = randRange(0, PAUSE_MAX) // first-move timing — fine to stay unseeded
   }
 
@@ -247,6 +255,19 @@ export class DuckSubject {
    *  than lending their voices to a honk-off at the Queen's side. */
   get isHoldingHome(): boolean {
     return this.state === 'holding'
+  }
+
+  /** Is this one of the Queen's named subjects for the roster window? A following,
+   *  foraging, holding, etc. duck (isSubject) plus a brooding hen (off-duty, but
+   *  still hers); a lost wanderer is excluded. */
+  get inRoster(): boolean {
+    return this.isSubject || this.isNesting
+  }
+
+  /** What this subject is up to right now, for the roster window. Only meaningful
+   *  for roster members (see inRoster); the state strings line up by construction. */
+  get activity(): SubjectActivity {
+    return this.state as SubjectActivity
   }
 
   /** Can this subject currently add its voice to the Queen's chorus? */

@@ -54,6 +54,7 @@ are verified by eye in the browser, not by tests.
 | **R** | Rouse a brooding hen off a nearby nest (she rejoins the flock; eggs stay) |
 | **X** | Raze a nearby nest, recovering half the reeds it cost (5) |
 | **J** | Open / close the quest log (also the 📜 **Quests** button, bottom-left) |
+| **K** | Open / close the royal flock roster (also the 🪶 **Roster** button, bottom-left) |
 
 The **B**, **E**, **R**, and **X** prompts only appear in the HUD when the action
 will actually work, so you don't have to memorize them.
@@ -84,7 +85,10 @@ store instead of local storage without touching the game itself.
   follow the same. Their blocky bills open when they quack, peep, or call back.
   Lead them around, but don't stray too far or they get lost. You can lead **up
   to 10** at once for now — best the **Marsh Baron** to prove your leadership
-  and that cap lifts.
+  and that cap lifts. Press **K** (or the 🪶 **Roster** button, bottom-left) to open
+  the **royal flock roster** — a window listing every drake, hen, and duckling
+  subject by name, grouped by kind, with what each one is up to right now
+  (following, foraging, holding home, brooding, and so on).
 - **Move three ways.** Waddle on land, **hold Space** to fly (descend onto a rock
   or tree to perch on top), and paddle across the **pond**.
 - **Forage.** Your ducklings gather food plants; only the Queen herself harvests
@@ -182,6 +186,7 @@ src/
     Sound.ts           # SFX (recorded files or synthesized)
     Splash.ts          # water ripple effect
     HUD.ts             # on-screen status (mode, flock, resources, nests)
+    RosterPanel.ts     # 🪶 royal flock roster window (named drake/hen/duckling subjects)
     SettingsMenu.ts    # ⚙️ corner menu (reset game progress)
     mathUtils.ts       # shared steering helpers
     persistence/       # save/load: swappable storage backend + autosave

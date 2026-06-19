@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { DuckSubject, type FlockContext } from './DuckSubject'
+import { DuckSubject, type FlockContext, type SubjectActivity } from './DuckSubject'
 import type { DuckMode } from './DuckController'
 import type { SubjectKind } from './subjectKinds'
 import type { Input } from './Input'
@@ -35,6 +35,13 @@ export interface AllyMarker {
   subject: boolean
   nesting: boolean
   holding: boolean
+}
+
+/** One named subject's line in the royal flock roster window. */
+export interface RosterEntry {
+  name: string
+  kind: SubjectKind
+  activity: SubjectActivity
 }
 
 /**
@@ -152,6 +159,17 @@ export class Flock {
       else females++
     }
     return { ducklings, males, females, nesting }
+  }
+
+  /** Every named subject for the royal flock roster window — each drake, hen, and
+   *  duckling the Queen currently leads (brooding hens included; lost ducks not).
+   *  Ordered drakes, then hens, then ducklings so the window groups cleanly. */
+  get roster(): RosterEntry[] {
+    const order: Record<SubjectKind, number> = { drake: 0, hen: 1, duckling: 2 }
+    return this.members
+      .filter((m) => m.inRoster)
+      .map((m) => ({ name: m.name, kind: m.kind, activity: m.activity }))
+      .sort((a, b) => order[a.kind] - order[b.kind] || a.name.localeCompare(b.name))
   }
 
   /** The flock's "chorus" for honk-offs: how many active subjects it has, and how
