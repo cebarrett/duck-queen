@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { disposeObject } from './modelUtils'
+import type { PatchSlice } from './persistence/saveSchema'
 
 /** One collectible thing (a food plant, a reed, …) sitting in the world. */
 export interface Collectible {
@@ -109,6 +110,36 @@ export class ResourcePatch {
         item.collected = false
         item.mesh.visible = true
         item.regrowTimer = undefined
+      }
+    }
+  }
+
+  /** Snapshot the gathered total plus any item that's diverged from a fresh patch
+   *  (gathered, or mid-regrow). Items are keyed by index into the seeded scatter
+   *  order, so restore() can line them back up against the regenerated patch. */
+  toSave(): PatchSlice {
+    const items = this.items
+      .map((item, i) => ({ i, collected: item.collected, regrowTimer: item.regrowTimer ?? null }))
+      .filter((s) => s.collected || s.regrowTimer !== null)
+    return { total: this.count, items }
+  }
+
+  /** Apply a saved slice onto the freshly-scattered patch. The patch has already
+   *  regenerated identically from the seed, so we only re-apply the divergences,
+   *  mirroring what harvest() does to the mesh (hide-to-regrow vs. remove for good). */
+  restore(slice: PatchSlice): void {
+    this.count = slice.total
+    for (const s of slice.items) {
+      const item = this.items[s.i]
+      if (!item) continue // index out of range (seed/schema drift) — skip safely
+      item.collected = s.collected
+      item.regrowTimer = s.regrowTimer ?? undefined
+      if (!s.collected) continue
+      if (this.regrowDelay > 0) {
+        item.mesh.visible = false // a regrowing patch (Food): hidden until it grows back
+      } else {
+        this.scene.remove(item.mesh) // a one-shot patch (Reeds): gone for good
+        disposeObject(item.mesh)
       }
     }
   }

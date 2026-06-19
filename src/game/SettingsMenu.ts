@@ -7,14 +7,15 @@
  * clicks here — the gear and the panel — opt back in with `pointer-events:auto`
  * and live OUTSIDE the canvas, so clicking them never requests pointer lock.
  *
- * For now the only setting is "Reset game progress", which simply reloads the
- * page to start a fresh game.
+ * For now the only setting is "Reset game progress", which wipes the saved game
+ * and reloads the page to start fresh (the reset work itself lives in Game, handed
+ * to us as `onReset`).
  */
 export class SettingsMenu {
   private readonly panel: HTMLElement
   private open = false
 
-  constructor() {
+  constructor(private readonly onReset: () => void) {
     const button = document.createElement('button')
     button.textContent = '⚙️'
     button.setAttribute('aria-label', 'Settings')
@@ -47,9 +48,8 @@ export class SettingsMenu {
       'display:block;width:100%;padding:10px 12px;font-size:15px;font-weight:700;' +
       'cursor:pointer;color:#f3f6f9;background:rgba(255,95,97,.22);' +
       'border:2px solid rgba(255,120,122,.85);border-radius:10px;'
-    // A page reload throws away all in-memory state and rebuilds the world from
-    // scratch — the simplest possible "new game".
-    reset.addEventListener('click', () => window.location.reload())
+    // Hand off to Game, which clears the save and then reloads into a fresh world.
+    reset.addEventListener('click', () => this.onReset())
 
     panel.appendChild(title)
     panel.appendChild(reset)

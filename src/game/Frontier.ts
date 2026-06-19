@@ -1,5 +1,6 @@
 import type * as THREE from 'three'
 import { type PondCircle, CLEAN_WATER } from './Water'
+import type { FrontierSlice } from './persistence/saveSchema'
 
 /**
  * The frontier: the outlying ponds the geese hold, and which of them the Queen has
@@ -53,6 +54,21 @@ export class Frontier {
    *  lieutenant and its pond stay paired by index. */
   get list(): readonly Territory[] {
     return this.territories
+  }
+
+  /** Snapshot each territory's ownership, in `list` order. */
+  toSave(): FrontierSlice {
+    return { statuses: this.territories.map((t) => t.status) }
+  }
+
+  /** Re-apply saved ownership: claim() each territory the save records as the Queen's,
+   *  which also retints its water — reusing the live reclaim path rather than poking
+   *  status directly. Index-aligned with `list`; extra/missing entries are skipped. */
+  restore(slice: FrontierSlice): void {
+    slice.statuses.forEach((status, i) => {
+      const t = this.territories[i]
+      if (t && status === 'claimed') this.claim(t)
+    })
   }
 
   /** Reclaim a pond: flip it to the Queen's and clear its water from murky to blue. */

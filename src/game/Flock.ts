@@ -10,6 +10,7 @@ import type { Nest, Nests } from './Nests'
 import type { Collider } from './collision'
 import type { Rng } from './rng'
 import { FOLLOWER_CAP, type Progress } from './Progress'
+import type { SubjectSlice } from './persistence/saveSchema'
 
 // The flock roster: which kinds make up the subjects. A guaranteed mix (so you
 // always see some grown mallards), shuffled into random spawn slots by the seed.
@@ -100,6 +101,36 @@ export class Flock {
 
   setHonkOffTarget(active: boolean, x = 0, z = 0): void {
     this.honkOffTarget = active ? { x, z } : null
+  }
+
+  /** Snapshot every subject. `nestIndexOf` maps a brooding hen's nest to its index so
+   *  restore can re-seat her. */
+  toSave(nestIndexOf: (nest: Nest) => number): { subjects: SubjectSlice[] } {
+    return { subjects: this.members.map((m) => m.toSave(nestIndexOf)) }
+  }
+
+  /** Replace the seed-spawned roster with the saved one. The live roster diverges from
+   *  the seed over play (ducklings mature into adults, eggs hatch into new ducklings)
+   *  and a subject's kind is fixed at construction, so we rebuild from scratch rather
+   *  than reconcile. `nestForIndex` resolves a saved nestIndex back to the live Nest
+   *  (nests are restored before the flock), so a brooding hen re-settles on her nest. */
+  restore(slice: { subjects: SubjectSlice[] }, nestForIndex: (i: number | null) => Nest | null): void {
+    for (const m of this.members) {
+      this.scene.remove(m.group)
+      m.dispose()
+    }
+    this.members.length = 0
+
+    for (const s of slice.subjects) {
+      const subject = new DuckSubject(s.x, s.z, s.kind, this.pond, this.food, this.sound, this.queen, this.colliders, Math.random)
+      subject.restore(s)
+      this.members.push(subject)
+      this.scene.add(subject.group)
+      if (s.nesting) {
+        const nest = nestForIndex(s.nestIndex)
+        if (nest && !nest.occupied) subject.assignToNest(nest)
+      }
+    }
   }
 
   /** Current subjects split by kind, for the HUD. Ducklings have no sex (yet);

@@ -313,6 +313,25 @@ export class Geese {
     })
   }
 
+  /**
+   * Re-derive goose state from an already-restored save. Bosses need nothing — the
+   * Baron/Boundary fights read progress.baronDefeated / treatyDefeated live, so
+   * restoring Progress handles them. Lieutenants do hold their own state, so for each
+   * pond the restored Frontier marks 'claimed' we mirror the win: stand the lieutenant
+   * down (claimed + stop patrolling). We also pre-set the unlock-announce flags from
+   * progress so a restored late-game player isn't re-toasted the act intros on reload.
+   */
+  restore(): void {
+    this.treatyUnlockAnnounced = this.progress.baronDefeated
+    this.frontierUnlockAnnounced = this.progress.treatyDefeated
+    for (const lt of this.lieutenants) {
+      if (lt.territory.status === 'claimed') {
+        lt.claimed = true
+        lt.goose.stopTerritoryPatrol()
+      }
+    }
+  }
+
   update(delta: number): void {
     this.updateHonkOff(delta)
     this.updateBossFight(delta)

@@ -23,6 +23,8 @@ import { HUD, type MinimapSnapshot } from './HUD'
 import { SettingsMenu } from './SettingsMenu'
 import { deriveRng } from './rng'
 import { makeProgress } from './Progress'
+import { SaveManager } from './persistence/SaveManager'
+import { SAVE_VERSION, type SaveData } from './persistence/saveSchema'
 import { questViews, formatReward, FOOD_GOAL, REEDS_GOAL, NEST_GOAL, FLOCK_GOAL, type QuestView } from './quests'
 
 // The default world seed. A given seed always generates the same layout; pass
@@ -41,10 +43,14 @@ const SCARE_RANGE = 4 // a goose this close to a brooding hen scares her off (an
 const SWAN_TALK_RANGE = 4.5 // how close the Queen must be to start talking with the swan
 const SWAN_LEAVE_RANGE = 8 // drift this far from the swan mid-talk and the conversation closes
 
-function getWorldSeed(): number {
+/** The seed from an explicit ?seed= URL param, or null when it's absent/invalid.
+ *  null (no param) is distinct from a param so a save's seed can win when there's no
+ *  URL override — but an explicit ?seed= forces a fresh game in that exact world. */
+function getUrlSeed(): number | null {
   const raw = new URLSearchParams(window.location.search).get('seed')
-  const parsed = raw === null ? NaN : Number(raw)
-  return Number.isFinite(parsed) ? parsed : DEFAULT_WORLD_SEED
+  if (raw === null) return null
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) ? parsed : null
 }
 
 /**
@@ -84,17 +90,24 @@ export class Game {
   private readonly clouds: Clouds
   private readonly critters: Critters
   private readonly hud = new HUD()
-  private readonly settingsMenu = new SettingsMenu()
+  private readonly settingsMenu = new SettingsMenu(() => { void this.resetGame() })
   private readonly nests: Nests
   private readonly pond: Pond
   private readonly frontier: Frontier
   private readonly progress = makeProgress()
+  /** The world seed this session is actually running on (saved, so a reload restores
+   *  the same layout the save's overlay was captured against). */
+  private readonly seed: number
   /** Titles of quests whose one-time reward has already been paid out, so a quest
    *  that stays 'complete' every frame thereafter isn't rewarded again. */
   private readonly rewardedQuests = new Set<string>()
   private resolveShakenTimer = 0
 
-  constructor() {
+  /**
+   * @param saves  the persistence service (autosave + reset wiring).
+   * @param loaded the save read at boot, or null for a fresh game.
+   */
+  constructor(private readonly saves: SaveManager, loaded: SaveData | null) {
     // --- Renderer ---------------------------------------------------------
     // antialias smooths jagged edges. We append its <canvas> to the page.
     this.renderer = new THREE.WebGLRenderer({ antialias: true })
@@ -111,8 +124,15 @@ export class Game {
     // --- World seed -------------------------------------------------------
     // ONE seed drives all world generation, so a given seed always produces the
     // exact same layout. Each system gets its own derived stream (see rng.ts).
-    // Override with ?seed=123 in the URL to explore other layouts.
-    const seed = getWorldSeed()
+    //
+    // Precedence: an explicit ?seed= in the URL wins and starts a FRESH game in that
+    // world (so the save's overlay, captured against a different layout, is ignored);
+    // otherwise a save's own seed is used so a reload restores the same world. The
+    // save is only applied later when its seed matches the one we actually run on.
+    const urlSeed = getUrlSeed()
+    const save = urlSeed === null ? loaded : null
+    const seed = urlSeed ?? save?.seed ?? DEFAULT_WORLD_SEED
+    this.seed = seed
 
     // --- Scene ------------------------------------------------------------
     this.scene = new THREE.Scene()
@@ -237,6 +257,13 @@ export class Game {
 
     // Keep the camera/canvas correct when the window resizes.
     window.addEventListener('resize', this.onResize)
+
+    // --- Persistence ------------------------------------------------------
+    // Every system above was just generated fresh from the seed. If we have a save
+    // for THIS world, lay its gameplay state over the top (positions, resources,
+    // nests, claims, progress). Then arm autosave so play is captured going forward.
+    if (save && save.seed === seed) this.restore(save)
+    this.saves.begin(() => this.snapshot())
   }
 
   /** Start the render loop. */
@@ -244,6 +271,53 @@ export class Game {
     // setAnimationLoop calls our callback ~60x/sec (synced to the display).
     // It's Three's preferred loop because it also works in VR/AR contexts.
     this.renderer.setAnimationLoop(this.update)
+  }
+
+  /** Assemble a complete snapshot of the gameplay state for the SaveManager. Each
+   *  system contributes its own slice; Game adds the Queen, seed, and campaign flags. */
+  private snapshot(): SaveData {
+    const q = this.duck.group.position
+    return {
+      version: SAVE_VERSION,
+      seed: this.seed,
+      savedAt: Date.now(),
+      queen: { x: q.x, z: q.z, heading: this.duck.group.rotation.y },
+      food: this.food.toSave(),
+      reeds: this.reeds.toSave(),
+      flock: this.flock.toSave((nest) => this.nests.indexOf(nest)),
+      nests: this.nests.toSave(),
+      frontier: this.frontier.toSave(),
+      progress: { ...this.progress },
+      rewardedQuests: [...this.rewardedQuests],
+    }
+  }
+
+  /** Lay a loaded snapshot over the freshly-generated world. Order matters: nests are
+   *  restored before the flock (so a brooding hen can re-link to her nest), and the
+   *  frontier before the geese (so lieutenants can stand down on claimed ponds). */
+  private restore(save: SaveData): void {
+    this.duck.group.position.set(save.queen.x, 0, save.queen.z) // y recomputes each frame
+    this.duck.group.rotation.y = save.queen.heading
+
+    this.food.restore(save.food)
+    this.reeds.restore(save.reeds)
+
+    this.nests.restore(save.nests)
+    this.flock.restore(save.flock, (i) => (i === null ? null : this.nests.all[i] ?? null))
+
+    this.frontier.restore(save.frontier)
+    this.geese.restore()
+
+    Object.assign(this.progress, save.progress)
+    this.rewardedQuests.clear()
+    for (const title of save.rewardedQuests) this.rewardedQuests.add(title)
+  }
+
+  /** Settings → "Reset game progress": wipe the save, then reload into a brand-new
+   *  world. Clearing first guarantees the next boot reads no save and starts fresh. */
+  private async resetGame(): Promise<void> {
+    await this.saves.clear()
+    window.location.reload()
   }
 
   /**
@@ -310,6 +384,9 @@ export class Game {
 
     this.renderer.render(this.scene, this.camera)
     this.input.endFrame()
+
+    // Autosave on a timer (state has fully settled for this frame by now).
+    this.saves.tick(delta)
   }
 
   private updateMinimap(): void {
