@@ -23,7 +23,7 @@ import { HUD, type MinimapSnapshot } from './HUD'
 import { SettingsMenu } from './SettingsMenu'
 import { deriveRng } from './rng'
 import { makeProgress } from './Progress'
-import { questViews, FOOD_GOAL, REEDS_GOAL, NEST_GOAL, FLOCK_GOAL } from './quests'
+import { questViews, formatReward, FOOD_GOAL, REEDS_GOAL, NEST_GOAL, FLOCK_GOAL, type QuestView } from './quests'
 
 // The default world seed. A given seed always generates the same layout; pass
 // ?seed=123 in the URL to try another one.
@@ -89,6 +89,9 @@ export class Game {
   private readonly pond: Pond
   private readonly frontier: Frontier
   private readonly progress = makeProgress()
+  /** Titles of quests whose one-time reward has already been paid out, so a quest
+   *  that stays 'complete' every frame thereafter isn't rewarded again. */
+  private readonly rewardedQuests = new Set<string>()
   private resolveShakenTimer = 0
 
   constructor() {
@@ -290,19 +293,19 @@ export class Game {
     this.hud.setNests(this.nests.count)
     this.hud.setFrontier(this.frontier.claimedCount, this.frontier.total, this.progress.treatyDefeated)
     this.updateBeginnerQuests()
-    this.hud.setQuests(
-      questViews(
-        this.progress,
-        {
-          food: this.food.total,
-          reeds: this.reeds.total,
-          nests: this.nests.count,
-          flock: this.flock.subjectCount,
-        },
-        this.frontier.claimedCount,
-        this.frontier.total,
-      ),
+    const views = questViews(
+      this.progress,
+      {
+        food: this.food.total,
+        reeds: this.reeds.total,
+        nests: this.nests.count,
+        flock: this.flock.subjectCount,
+      },
+      this.frontier.claimedCount,
+      this.frontier.total,
     )
+    this.grantQuestRewards(views)
+    this.hud.setQuests(views)
     this.updateMinimap()
 
     this.renderer.render(this.scene, this.camera)
@@ -452,25 +455,30 @@ export class Game {
   /**
    * Beginner quests: latch each tutorial milestone the first time its goal is met.
    * The flags only ever go false→true (a completed lesson never reverts, even after
-   * the reeds are spent or a duck wanders off), and each completion fires a one-shot
-   * toast — the same showMessage cadence as building a nest or hatching an egg.
+   * the reeds are spent or a duck wanders off). The completion toast and payout are
+   * handled uniformly for every quest in grantQuestRewards().
    */
   private updateBeginnerQuests(): void {
-    if (!this.progress.foragedFood && this.food.total >= FOOD_GOAL) {
-      this.progress.foragedFood = true
-      this.hud.showMessage('✓ Forage for food — complete!')
-    }
-    if (!this.progress.gatheredReeds && this.reeds.total >= REEDS_GOAL) {
-      this.progress.gatheredReeds = true
-      this.hud.showMessage('✓ Gather reeds — complete!')
-    }
-    if (!this.progress.builtNest && this.nests.count >= NEST_GOAL) {
-      this.progress.builtNest = true
-      this.hud.showMessage('✓ Build a nest — complete!')
-    }
-    if (!this.progress.ralliedFlock && this.flock.subjectCount >= FLOCK_GOAL) {
-      this.progress.ralliedFlock = true
-      this.hud.showMessage('✓ Rally your flock — complete!')
+    if (this.food.total >= FOOD_GOAL) this.progress.foragedFood = true
+    if (this.reeds.total >= REEDS_GOAL) this.progress.gatheredReeds = true
+    if (this.nests.count >= NEST_GOAL) this.progress.builtNest = true
+    if (this.flock.subjectCount >= FLOCK_GOAL) this.progress.ralliedFlock = true
+  }
+
+  /**
+   * Pay out each quest's small reward the first time it reads as complete — beginner
+   * and main-story alike. Keyed by title in `rewardedQuests` so a quest that stays
+   * complete forever after only ever pays once. Granted resources land next frame's
+   * HUD counters; that one-frame lag is invisible. Mirrors the showMessage cadence of
+   * building a nest or hatching an egg.
+   */
+  private grantQuestRewards(views: readonly QuestView[]): void {
+    for (const q of views) {
+      if (q.state !== 'complete' || this.rewardedQuests.has(q.title)) continue
+      this.rewardedQuests.add(q.title)
+      if (q.reward.food) this.food.gain(q.reward.food)
+      if (q.reward.reeds) this.reeds.gain(q.reward.reeds)
+      this.hud.showMessage(`✓ ${q.title} — complete!   🎁 ${formatReward(q.reward)}`)
     }
   }
 
