@@ -58,6 +58,9 @@ are verified by eye in the browser, not by tests.
 The **B**, **E**, **R**, and **X** prompts only appear in the HUD when the action
 will actually work, so you don't have to memorize them.
 
+The **⚙️ Settings** button in the bottom-right opens a small menu. For now it holds
+a single option, **Reset game progress**, which reloads the page to start a fresh game.
+
 ## What you can do
 
 - **Rally a flock.** Quack (**Q**) to gather wandering ducks — yellow *ducklings*
@@ -156,6 +159,7 @@ src/
     Sound.ts           # SFX (recorded files or synthesized)
     Splash.ts          # water ripple effect
     HUD.ts             # on-screen status (mode, flock, resources, nests)
+    SettingsMenu.ts    # ⚙️ corner menu (reset game progress)
     mathUtils.ts       # shared steering helpers
 ```
 

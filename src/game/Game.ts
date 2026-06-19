@@ -20,6 +20,7 @@ import { Flora } from './Flora'
 import { Critters } from './Critters'
 import { Nests } from './Nests'
 import { HUD, type MinimapSnapshot } from './HUD'
+import { SettingsMenu } from './SettingsMenu'
 import { deriveRng } from './rng'
 import { makeProgress } from './Progress'
 import { questViews } from './quests'
@@ -83,6 +84,7 @@ export class Game {
   private readonly clouds: Clouds
   private readonly critters: Critters
   private readonly hud = new HUD()
+  private readonly settingsMenu = new SettingsMenu()
   private readonly nests: Nests
   private readonly pond: Pond
   private readonly frontier: Frontier
