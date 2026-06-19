@@ -88,7 +88,10 @@ store instead of local storage without touching the game itself.
   and that cap lifts. Press **K** (or the 🪶 **Roster** button, bottom-left) to open
   the **royal flock roster** — a window listing every drake, hen, and duckling
   subject by name, grouped by kind, with what each one is up to right now
-  (following, foraging, holding home, brooding, and so on).
+  (following, foraging, holding home, brooding, and so on). Each duckling also
+  has a little **quirk** — a *fast forager*, a *fast runner*, or a *loud honker* —
+  that nudges how it behaves and shows beside its name; it keeps that quirk even
+  after it grows into a drake or hen.
 - **Move three ways.** Waddle on land, **hold Space** to fly (descend onto a rock
   or tree to perch on top), and paddle across the **pond**.
 - **Forage.** Your ducklings gather food plants; only the Queen herself harvests

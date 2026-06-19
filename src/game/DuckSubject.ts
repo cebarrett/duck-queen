@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { buildDuckModel, setBillOpen } from './duckModel'
-import { type SubjectKind, SUBJECT_KINDS, subjectName } from './subjectKinds'
+import { type SubjectKind, type DucklingTrait, SUBJECT_KINDS, subjectName, subjectTrait } from './subjectKinds'
 import { approachAngle, randRange, seekArrive, pointAround, faceHeading, easeFactor } from './mathUtils'
 import { type Collider, resolveWalls } from './collision'
 import type { Pond } from './Water'
@@ -150,6 +150,10 @@ export class DuckSubject {
   /** This subject's court name, shown in the royal flock roster (purely cosmetic). */
   readonly name: string
 
+  /** This subject's quirk, shown in the roster and nudging one behaviour. Every duckling
+   *  has one and keeps it into adulthood; a duck born straight into adulthood has none. */
+  readonly trait: DucklingTrait | null
+
   // Not readonly: when a subject gets "lost", we reset its home to wherever it
   // ended up, so it wanders off from there.
   private homeX: number
@@ -195,6 +199,11 @@ export class DuckSubject {
   private readonly scale: number
   private readonly voice: (sound: Sound, pitch: number, distance?: number) => number
   private readonly voicePitch: number
+  // Per-individual behaviour, nudged by this subject's trait (1× / base for none).
+  private readonly forageSpeed: number = FORAGE_SPEED
+  private readonly forageRateMul: number = 1
+  private readonly followSpeed: number = FOLLOW_SPEED
+  private readonly callRateMul: number = 1
   private billTimer = 0
   private billDuration: number = VOICE_BILL_TIME.duckling
   private chorusTimer = 0
@@ -214,6 +223,7 @@ export class DuckSubject {
     private readonly listener: THREE.Object3D,
     private readonly colliders: readonly Collider[],
     rng: Rng,
+    inheritedTrait: DucklingTrait | null = null,
   ) {
     const def = SUBJECT_KINDS[kind]
     const model = buildDuckModel(def.model)
@@ -242,6 +252,21 @@ export class DuckSubject {
     this.heading = rng() * Math.PI * 2
     this.group.rotation.y = this.heading
     this.name = subjectName(kind, rng)
+    // A matured adult keeps the trait it had as a duckling; a fresh duckling draws one
+    // (seeded, in stream); a duck born straight into adulthood has none.
+    this.trait = inheritedTrait ?? (kind === 'duckling' ? subjectTrait(rng) : null)
+    switch (this.trait) {
+      case 'fastForager':
+        this.forageSpeed = FORAGE_SPEED * 1.5
+        this.forageRateMul = 1.5
+        break
+      case 'fastRunner':
+        this.followSpeed = FOLLOW_SPEED * 1.3
+        break
+      case 'loudHonker':
+        this.callRateMul = 2.2
+        break
+    }
     this.timer = randRange(0, PAUSE_MAX) // first-move timing — fine to stay unseeded
   }
 
@@ -300,6 +325,7 @@ export class DuckSubject {
   toSave(nestIndexOf: (nest: Nest) => number): SubjectSlice {
     return {
       kind: this.kind,
+      trait: this.trait,
       x: this.group.position.x,
       z: this.group.position.z,
       heading: this.heading,
@@ -441,7 +467,7 @@ export class DuckSubject {
     // A little call now and then (in its own voice); startled subjects complain
     // more often while they scatter. A brooding hen sits quietly (she only clucks
     // when she lays — see brood()).
-    const callRate = this.state === 'scattered' ? SCATTER_VOICE_RATE : VOICE_RATE
+    const callRate = (this.state === 'scattered' ? SCATTER_VOICE_RATE : VOICE_RATE) * this.callRateMul
     if (this.state !== 'nesting' && this.state !== 'worming' && Math.random() < callRate * delta) this.vocalize()
 
     switch (this.state) {
@@ -450,7 +476,7 @@ export class DuckSubject {
         // Very occasionally, snacks are not ON the ground but suspiciously IN it.
         if (this.tryStartWorming(delta, 'following')) break
         // Notice a nearby plant and peel off to go gather it...
-        if (Math.random() < FORAGE_RATE * delta && this.tryForage()) break
+        if (Math.random() < FORAGE_RATE * this.forageRateMul * delta && this.tryForage()) break
         // ...or, less usefully, get distracted and wander off for a bit.
         if (Math.random() < DISTRACT_RATE * delta && this.startDistraction(ctx)) break
         else this.followQueen(delta, ctx)
@@ -557,6 +583,7 @@ export class DuckSubject {
 
     // Seek: head for the Queen, but arrive at FOLLOW_RING (not her exact spot),
     // slowing through the arrival band so they don't jostle into her.
+    const top = this.followSpeed // a fast runner reels back in quicker than the rest
     let vx = 0
     let vz = 0
     const dx = ctx.queenX - pos.x
@@ -564,7 +591,7 @@ export class DuckSubject {
     const dist = Math.hypot(dx, dz)
     if (dist > FOLLOW_RING) {
       const over = dist - FOLLOW_RING
-      const speed = over < FOLLOW_ARRIVE_BAND ? FOLLOW_SPEED * (over / FOLLOW_ARRIVE_BAND) : FOLLOW_SPEED
+      const speed = over < FOLLOW_ARRIVE_BAND ? top * (over / FOLLOW_ARRIVE_BAND) : top
       vx = (dx / dist) * speed
       vz = (dz / dist) * speed
     }
@@ -585,9 +612,9 @@ export class DuckSubject {
 
     // Don't let separation overspeed it past its top follow speed.
     const mag = Math.hypot(vx, vz)
-    if (mag > FOLLOW_SPEED) {
-      vx = (vx / mag) * FOLLOW_SPEED
-      vz = (vz / mag) * FOLLOW_SPEED
+    if (mag > top) {
+      vx = (vx / mag) * top
+      vz = (vz / mag) * top
     }
 
     this.ease(vx, vz, delta, FOLLOW_RESPONSIVENESS)
@@ -785,7 +812,7 @@ export class DuckSubject {
       this.state = 'following'
       return
     }
-    const s = seekArrive(this.group.position, plant.x, plant.z, FORAGE_SPEED, ARRIVE_RADIUS, EAT_RADIUS)
+    const s = seekArrive(this.group.position, plant.x, plant.z, this.forageSpeed, ARRIVE_RADIUS, EAT_RADIUS)
     if (s.arrived) {
       this.food.collect(plant) // nom
       this.targetFood = null

@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { DuckSubject, type FlockContext, type SubjectActivity } from './DuckSubject'
 import type { DuckMode } from './DuckController'
-import type { SubjectKind } from './subjectKinds'
+import type { SubjectKind, DucklingTrait } from './subjectKinds'
 import type { Input } from './Input'
 import type { Sound } from './Sound'
 import type { Pond, PondCircle } from './Water'
@@ -42,6 +42,7 @@ export interface RosterEntry {
   name: string
   kind: SubjectKind
   activity: SubjectActivity
+  trait: DucklingTrait | null
 }
 
 /**
@@ -129,7 +130,7 @@ export class Flock {
     this.members.length = 0
 
     for (const s of slice.subjects) {
-      const subject = new DuckSubject(s.x, s.z, s.kind, this.pond, this.food, this.sound, this.queen, this.colliders, Math.random)
+      const subject = new DuckSubject(s.x, s.z, s.kind, this.pond, this.food, this.sound, this.queen, this.colliders, Math.random, s.trait ?? null)
       subject.restore(s)
       this.members.push(subject)
       this.scene.add(subject.group)
@@ -168,7 +169,7 @@ export class Flock {
     const order: Record<SubjectKind, number> = { drake: 0, hen: 1, duckling: 2 }
     return this.members
       .filter((m) => m.inRoster)
-      .map((m) => ({ name: m.name, kind: m.kind, activity: m.activity }))
+      .map((m) => ({ name: m.name, kind: m.kind, activity: m.activity, trait: m.trait }))
       .sort((a, b) => order[a.kind] - order[b.kind] || a.name.localeCompare(b.name))
   }
 
@@ -276,7 +277,8 @@ export class Flock {
   matureToAdult(duckling: DuckSubject): void {
     const kind: SubjectKind = Math.random() < 0.5 ? 'drake' : 'hen'
     const pos = duckling.group.position
-    const adult = new DuckSubject(pos.x, pos.z, kind, this.pond, this.food, this.sound, this.queen, this.colliders, Math.random)
+    // The grown duck carries the quirk it had as a duckling.
+    const adult = new DuckSubject(pos.x, pos.z, kind, this.pond, this.food, this.sound, this.queen, this.colliders, Math.random, duckling.trait)
     adult.recruit()
 
     const idx = this.members.indexOf(duckling)
