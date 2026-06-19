@@ -15,6 +15,13 @@ import type { Progress } from './Progress'
  */
 export type QuestState = 'locked' | 'active' | 'complete'
 
+/** A small payout granted once, the first time a quest completes. Plain data so
+ *  Game can hand it straight to `food`/`reeds` gain() and the HUD can render it. */
+export interface QuestReward {
+  readonly food?: number
+  readonly reeds?: number
+}
+
 export interface QuestView {
   readonly title: string
   /** Shown only once the quest is unlocked (state !== 'locked'); hidden until then. */
@@ -22,6 +29,20 @@ export interface QuestView {
   readonly state: QuestState
   /** A short progress note, e.g. '2/4 ponds reclaimed' — only on quests that track it. */
   readonly progress?: string
+  /** What completing the quest pays out. Game grants it once on completion; the
+   *  log shows it (via formatReward) as an incentive while active and a receipt
+   *  once complete. */
+  readonly reward: QuestReward
+}
+
+/** Render a reward as a short line like '🌿 +3 food' or '🌿 +10 food · 🌾 +10 reeds',
+ *  using the same 🌿/🌾 icons the HUD shows for the food and reed counters. Shared by
+ *  the quest log and the completion toast so they never disagree. */
+export function formatReward(reward: QuestReward): string {
+  const parts: string[] = []
+  if (reward.food) parts.push(`🌿 +${reward.food} food`)
+  if (reward.reeds) parts.push(`🌾 +${reward.reeds} reeds`)
+  return parts.join(' · ')
 }
 
 /** Beginner-quest goals. Single source of truth — Game imports these to know when
@@ -100,6 +121,7 @@ export function questViews(
         'Waddle over the wild plants dotting the marsh to gather food — your flock eats to hatch and grow. Bring in a first store of food.',
       state: forage,
       progress: `${Math.min(counts.food, FOOD_GOAL)}/${FOOD_GOAL} food gathered`,
+      reward: { reeds: 5 },
     },
     {
       title: 'Gather reeds',
@@ -107,6 +129,7 @@ export function questViews(
         'Reeds line every pond, and only the Queen can pull them. Gather a bundle — enough to weave your first nest.',
       state: reeds,
       progress: `${Math.min(counts.reeds, REEDS_GOAL)}/${REEDS_GOAL} reeds gathered`,
+      reward: { food: 3 },
     },
     {
       title: 'Build a nest',
@@ -114,6 +137,7 @@ export function questViews(
         'On dry land, press B to weave a nest from your reeds. A nest is where a hen broods eggs into new ducklings.',
       state: nest,
       progress: `${Math.min(counts.nests, NEST_GOAL)}/${NEST_GOAL} nests built`,
+      reward: { food: 5 },
     },
     {
       title: 'Rally your flock',
@@ -121,18 +145,21 @@ export function questViews(
         'Press Q to quack and rally nearby ducks to follow you. Gather a proper little flock at your side.',
       state: rally,
       progress: `${Math.min(counts.flock, FLOCK_GOAL)}/${FLOCK_GOAL} ducks following`,
+      reward: { food: 5, reeds: 5 },
     },
     {
       title: 'Break the Marsh Baron',
       summary:
         'Rally a formidable flock and out-honk the Marsh Baron to win the marsh — victory lifts the flock cap.',
       state: baron,
+      reward: { food: 10, reeds: 10 },
     },
     {
       title: 'Hold the Treaty Flats',
       summary:
         'Settle the Treaty Flats — build and brood nests there — then face down Lord Boundary.',
       state: treaty,
+      reward: { food: 10, reeds: 10 },
     },
     {
       title: 'Take the Frontier Ponds',
@@ -140,6 +167,7 @@ export function questViews(
         'Out-honk the lieutenant gander at each outlying pond to fly your banner over the whole frontier.',
       state: frontier,
       progress: `${frontierClaimed}/${frontierTotal} ponds reclaimed`,
+      reward: { food: 15, reeds: 15 },
     },
   ]
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { questViews, type QuestCounts, FLOCK_GOAL, REEDS_GOAL } from './quests'
+import { questViews, formatReward, type QuestCounts, FLOCK_GOAL, REEDS_GOAL } from './quests'
 import { makeProgress, type Progress } from './Progress'
 
 // The quest log is a pure projection of campaign state. These tests pin down both
@@ -104,5 +104,30 @@ describe('questViews main story', () => {
     progress.baronDefeated = true
     progress.treatyDefeated = true
     expect(story(progress, 0, 0)[2].state).toBe('active')
+  })
+})
+
+describe('quest rewards', () => {
+  it('gives every quest a non-empty reward', () => {
+    const views = questViews(makeProgress(), NO_COUNTS, 0, 4)
+    for (const q of views) {
+      expect((q.reward.food ?? 0) + (q.reward.reeds ?? 0)).toBeGreaterThan(0)
+    }
+  })
+})
+
+describe('formatReward', () => {
+  it('renders a single resource', () => {
+    expect(formatReward({ food: 3 })).toBe('🌿 +3 food')
+    expect(formatReward({ reeds: 5 })).toBe('🌾 +5 reeds')
+  })
+
+  it('joins food and reeds with a separator', () => {
+    expect(formatReward({ food: 10, reeds: 10 })).toBe('🌿 +10 food · 🌾 +10 reeds')
+  })
+
+  it('skips zero or missing amounts', () => {
+    expect(formatReward({ food: 0, reeds: 5 })).toBe('🌾 +5 reeds')
+    expect(formatReward({})).toBe('')
   })
 })

@@ -108,7 +108,8 @@ a single option, **Reset game progress**, which reloads the page to start a fres
   Baron** (always available from the start), holding the **Treaty Flats** against
   Lord Boundary, and **taking the frontier ponds**. Each chain unlocks in sequence;
   quests you haven't reached yet are shown but kept under wraps until then. None can
-  be cancelled.
+  be cancelled. Every quest pays out a small **reward** of 🌿 food and/or 🌾 reeds the
+  first time you complete it — the log shows what each one gives.
 
 ## World seed
 

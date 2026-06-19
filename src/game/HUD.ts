@@ -1,5 +1,5 @@
 import type { DuckMode } from './DuckController'
-import type { QuestView } from './quests'
+import { formatReward, type QuestView } from './quests'
 
 interface MinimapPoint {
   x: number
@@ -253,10 +253,13 @@ export class HUD {
     const html = views
       .map((q) => {
         const locked = q.state === 'locked'
+        // Past tense once it's in the bag, an enticement while you're working on it.
+        const rewardLabel = q.state === 'complete' ? '🎁 Earned' : '🎁 Reward'
         const detail = locked
           ? '<div style="font-size:15px;line-height:1.5;opacity:.6;">???</div>'
           : `<div style="font-size:15px;line-height:1.5;opacity:.92;">${q.summary}</div>` +
-            (q.progress ? `<div style="font-size:13px;font-weight:700;color:#cfe0f5;margin-top:6px;">🪶 ${q.progress}</div>` : '')
+            (q.progress ? `<div style="font-size:13px;font-weight:700;color:#cfe0f5;margin-top:6px;">🪶 ${q.progress}</div>` : '') +
+            `<div style="font-size:13px;font-weight:700;color:#ffd84a;margin-top:6px;">${rewardLabel}: ${formatReward(q.reward)}</div>`
         return (
           '<div style="border-top:1px solid rgba(238,241,245,.18);padding:12px 0;">' +
           `<div style="font-size:12px;font-weight:800;color:${badgeColor(q.state)};letter-spacing:.4px;">${badge(q.state)}</div>` +
