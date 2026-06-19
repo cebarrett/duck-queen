@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { buildNest, addEgg, MAX_EGGS } from './nestModel'
 import type { DuckSubject } from './DuckSubject'
+import type { NestSlice, NestsSlice } from './persistence/saveSchema'
 
 const HATCH_TIME = 18 // seconds of brooding to incubate one egg into a duckling
 
@@ -34,6 +35,19 @@ export class Nest {
     this.group = buildNest()
     this.group.position.set(x, 0, z)
     this.group.rotation.y = Math.random() * Math.PI * 2 // player-driven placement, not seeded
+  }
+
+  /** Snapshot this nest: where it sits, its eggs, current brood progress, and facing. */
+  toSave(): NestSlice {
+    return { x: this.x, z: this.z, eggs: this.eggs, broodTime: this.broodTime, rotationY: this.group.rotation.y }
+  }
+
+  /** Rebuild a freshly-built nest's contents from a saved slice: re-add its eggs (which
+   *  reconstructs the egg meshes via the normal path), restore brood progress and facing. */
+  restore(s: NestSlice): void {
+    this.group.rotation.y = s.rotationY
+    for (let i = 0; i < s.eggs; i++) this.layEgg()
+    this.broodTime = s.broodTime
   }
 
   /** Lay one more egg into the bowl, up to the nest's capacity. */
@@ -115,6 +129,24 @@ export class Nests {
     this.scene.add(nest.group)
     this.all.push(nest)
     return nest
+  }
+
+  /** This nest's index in the array (for pairing a brooding hen with her nest in a save). */
+  indexOf(nest: Nest): number {
+    return this.all.indexOf(nest)
+  }
+
+  /** Snapshot every standing nest. */
+  toSave(): NestsSlice {
+    return { nests: this.all.map((nest) => nest.toSave()) }
+  }
+
+  /** Rebuild the saved nests onto a fresh (empty) Nests via the normal build path. */
+  restore(slice: NestsSlice): void {
+    for (const s of slice.nests) {
+      const nest = this.build(s.x, s.z)
+      nest.restore(s)
+    }
   }
 
   /** Tear a nest down: drop it from the scene and free its meshes. Any eggs still

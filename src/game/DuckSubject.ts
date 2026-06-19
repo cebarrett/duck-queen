@@ -9,6 +9,7 @@ import type { Food, FoodItem } from './Food'
 import type { Nest } from './Nests'
 import type { Sound } from './Sound'
 import { type Rng, rngRange } from './rng'
+import type { SubjectSlice } from './persistence/saveSchema'
 
 // --- Idle wander tuning ----------------------------------------------------
 const WANDER_SPEED = 1.5 // top amble speed (units/sec) — slow and unhurried
@@ -269,6 +270,37 @@ export class DuckSubject {
    *  she can afford the food to do so is checked by the Flock/Game.) */
   get isReadyToMature(): boolean {
     return this.kind === 'duckling' && this.isSubject && this.age >= MATURE_AGE
+  }
+
+  /** Snapshot the persistent fields. `nestIndexOf` maps a brooding hen's nest to its
+   *  index in Nests, so restore can re-seat her on the same one. Transient behaviour
+   *  (velocity, timers, current food/idle target) is intentionally omitted — it
+   *  re-derives within a frame or two of play. */
+  toSave(nestIndexOf: (nest: Nest) => number): SubjectSlice {
+    return {
+      kind: this.kind,
+      x: this.group.position.x,
+      z: this.group.position.z,
+      heading: this.heading,
+      age: this.age,
+      homeX: this.homeX,
+      homeZ: this.homeZ,
+      nesting: this.state === 'nesting',
+      nestIndex: this.state === 'nesting' && this.targetNest ? nestIndexOf(this.targetNest) : null,
+    }
+  }
+
+  /** Apply saved persistent fields onto a freshly-constructed subject (built with the
+   *  saved kind). State defaults to 'following'; a brooding hen is re-seated explicitly
+   *  by Flock.restore via assignToNest, which sets state='nesting' and re-links the nest. */
+  restore(s: SubjectSlice): void {
+    this.group.position.set(s.x, 0, s.z)
+    this.heading = s.heading
+    this.group.rotation.y = s.heading
+    this.age = s.age
+    this.homeX = s.homeX
+    this.homeZ = s.homeZ
+    this.state = 'following'
   }
 
   /** Free this subject's GPU resources (geometry + materials) — call when it's

@@ -59,7 +59,23 @@ The **B**, **E**, **R**, and **X** prompts only appear in the HUD when the actio
 will actually work, so you don't have to memorize them.
 
 The **⚙️ Settings** button in the bottom-right opens a small menu. For now it holds
-a single option, **Reset game progress**, which reloads the page to start a fresh game.
+a single option, **Reset game progress**, which wipes your saved game and reloads
+the page to start fresh.
+
+## Saving & progress
+
+Your progress is **saved automatically** to the browser's local storage, so your
+flock, foraged food and reeds, built nests (and the eggs in them), reclaimed
+frontier ponds, defeated bosses, and quest rewards all survive a page reload —
+the world picks up right where you left it. The game autosaves every so often and
+again whenever you leave or hide the tab.
+
+To start over, use **⚙️ Settings → Reset game progress**, which clears the save and
+reloads into a brand-new game.
+
+The persistence layer is built around a small swappable **storage backend**
+(`src/game/persistence/`), so the same saves could later be pointed at a cloud
+store instead of local storage without touching the game itself.
 
 ## What you can do
 
@@ -114,8 +130,11 @@ a single option, **Reset game progress**, which reloads the page to start a fres
 ## World seed
 
 The world (scenery, pond, food, reeds, flock, geese) is generated from a single
-seed, so the **same seed always produces the same layout**. Add `?seed=123` to the
-URL to explore a different one.
+seed, so the **same seed always produces the same layout**. Your save remembers its
+own seed, so a reload restores the same world. Add `?seed=123` to the URL to explore
+a different one — an explicit `?seed=` **starts a fresh game in that world** and
+ignores your save (handy for poking at layouts), while removing it again returns to
+your saved game.
 
 ## Your own sounds (optional)
 
@@ -165,6 +184,11 @@ src/
     HUD.ts             # on-screen status (mode, flock, resources, nests)
     SettingsMenu.ts    # ⚙️ corner menu (reset game progress)
     mathUtils.ts       # shared steering helpers
+    persistence/       # save/load: swappable storage backend + autosave
+      saveSchema.ts        # the versioned save shape (plain data)
+      StorageBackend.ts    # the swappable storage interface (local today, cloud later)
+      LocalStorageBackend.ts
+      SaveManager.ts       # JSON, versioning/migration, autosave lifecycle
 ```
 
 See [`CLAUDE.md`](CLAUDE.md) for the conventions the code follows (deterministic
