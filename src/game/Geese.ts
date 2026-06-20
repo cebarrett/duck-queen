@@ -45,6 +45,13 @@ const MAX_PASSIVE_SUPPORT = GOOSE_DRAIN - 0.015 // flock help can steady the met
 // one-note flock is much weaker — "unity must be maintained". Indexed by voices.
 const CHORUS_MULT = [0.6, 0.6, 0.8, 1.0]
 
+// --- Goose chorus (nearby geese rallying to a honk-off) ---------------------
+// Geese within this distance of the engaged goose will join in and face the Queen.
+const GAGGLE_SUPPORT_RANGE = 18
+// Each supporting goose subtracts this many resolve/sec from passive support,
+// effectively tightening the drain and making the standoff harder for the Queen.
+const GOOSE_CHORUS_DRAIN = 0.07
+
 // --- The Marsh Baron boss fight --------------------------------------------
 const BOSS_TRIGGER_RANGE = 6 // the Queen must come this close to face the Baron
 const BOSS_DISENGAGE_RANGE = 11 // backing this far off forfeits the boss fight
@@ -138,6 +145,7 @@ export class Geese {
   private activeLieutenant: Lieutenant | null = null
   private frontierUnlockAnnounced = false
   private frontierUnlockDelay = 0
+  private supportingGeese: Goose[] = []
 
   constructor(
     scene: THREE.Scene,
@@ -214,10 +222,12 @@ export class Geese {
     const clearCurrent = () => {
       this.currentStandoff = null
       this.flock.setHonkOffTarget(false)
+      this.clearGeeseChorus()
     }
     const gagglePassive = () => {
       const { size, layers } = this.flock.chorus
-      return Math.min(FLOCK_FILL * size * CHORUS_MULT[layers], MAX_PASSIVE_SUPPORT)
+      const duckSupport = Math.min(FLOCK_FILL * size * CHORUS_MULT[layers], MAX_PASSIVE_SUPPORT)
+      return duckSupport - this.supportingGeese.length * GOOSE_CHORUS_DRAIN
     }
     const gaggleStart = () =>
       Math.max(0.05, Math.min(0.55, 0.22 + this.flock.chorus.size * 0.05) - this.resolvePenalty())
@@ -390,6 +400,7 @@ export class Geese {
 
   private updateHonkOff(delta: number): void {
     if (this.currentStandoff === this.gaggleStandoff) {
+      this.updateSupportersAim()
       this.gaggleStandoff.update(delta)
       return
     }
@@ -409,7 +420,7 @@ export class Geese {
         nearest = g
       }
     }
-    if (nearest) this.startStandoff(this.gaggleStandoff, nearest)
+    if (nearest) this.startStandoff(this.gaggleStandoff, nearest, true)
   }
 
   private updateBossFight(delta: number): void {
@@ -486,6 +497,7 @@ export class Geese {
     }
 
     if (this.currentStandoff === this.frontierStandoff) {
+      this.updateSupportersAim()
       this.frontierStandoff.update(delta)
       return
     }
@@ -508,7 +520,7 @@ export class Geese {
     }
     if (nearest) {
       this.activeLieutenant = nearest
-      this.startStandoff(this.frontierStandoff, nearest.goose)
+      this.startStandoff(this.frontierStandoff, nearest.goose, true)
     }
   }
 
@@ -538,9 +550,10 @@ export class Geese {
     }
   }
 
-  private startStandoff(standoff: Standoff, goose: Goose): void {
+  private startStandoff(standoff: Standoff, goose: Goose, cueGeeseChorus = false): void {
     this.currentStandoff = standoff
     this.flock.setHonkOffTarget(true, goose.group.position.x, goose.group.position.z)
+    if (cueGeeseChorus) this.cueGeeseChorus(goose)
     standoff.start(goose)
   }
 
@@ -646,6 +659,28 @@ export class Geese {
   private distanceToQueen(x: number, z: number): number {
     const qp = this.queen.position
     return Math.hypot(x - qp.x, z - qp.z)
+  }
+
+  private cueGeeseChorus(engagedGoose: Goose): void {
+    const gp = engagedGoose.group.position
+    const qp = this.queen.position
+    this.supportingGeese = []
+    for (const g of this.geese) {
+      if (g === engagedGoose || !g.engageable) continue
+      if (Math.hypot(g.group.position.x - gp.x, g.group.position.z - gp.z) > GAGGLE_SUPPORT_RANGE) continue
+      g.joinChorus(qp.x, qp.z)
+      this.supportingGeese.push(g)
+    }
+  }
+
+  private clearGeeseChorus(): void {
+    for (const g of this.supportingGeese) g.leaveChorus()
+    this.supportingGeese = []
+  }
+
+  private updateSupportersAim(): void {
+    const qp = this.queen.position
+    for (const g of this.supportingGeese) g.updateSupportAim(qp.x, qp.z)
   }
 }
 
