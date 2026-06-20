@@ -65,6 +65,7 @@ export interface FrontierSlice {
 /** The campaign flags. Structurally the Progress interface, but kept distinct so the
  *  save format is free to diverge from gameplay later. */
 export interface ProgressSlice {
+  metSwan: boolean
   foragedFood: boolean
   gatheredReeds: boolean
   builtNest: boolean
