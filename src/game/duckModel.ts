@@ -2,7 +2,8 @@ import * as THREE from 'three'
 import { box } from './modelUtils'
 
 // Shared palette for all ducks. Feather colour is per-duck (the Queen is white,
-// her subjects are duckling-yellow), so it's passed in rather than fixed here.
+// the mallards brown/green, the ducklings yellow), so it's passed in rather than
+// fixed here.
 const ORANGE = 0xff9f1c
 const BLACK = 0x222222
 const GOLD = 0xffd700
@@ -26,8 +27,12 @@ export interface DuckModelOptions {
   bodyColor?: number // body + tail + wings — defaults to featherColor
   headColor?: number // head — defaults to featherColor (a drake gets a green head)
   billColor?: number // beak — defaults to orange
+  wingColor?: number // wings — defaults to bodyColor
   neckRingColor?: number // optional collar band (the drake's white neck ring)
   breastColor?: number // optional breast patch (the drake's chestnut front)
+  capColor?: number // optional dark crown cap (a mallard duckling's brown head top)
+  eyeStripeColor?: number // optional dark stripe through each eye to the nape (mallard duckling)
+  backColor?: number // optional dark patch over the back + tail (mallard duckling's brown back)
   crown?: boolean // give her the golden crown (the Queen) — default no
   scale?: number // overall size multiplier (ducklings are smaller) — default 1
 }
@@ -49,6 +54,8 @@ export function buildDuckModel(opts: DuckModelOptions = {}): DuckModel {
   const body = opts.bodyColor ?? feather
   const headColor = opts.headColor ?? feather
   const bill = opts.billColor ?? ORANGE
+  const wing = opts.wingColor ?? body
+  const tailColor = opts.backColor ?? body
   const withCrown = opts.crown ?? false
   const scale = opts.scale ?? 1
 
@@ -86,16 +93,35 @@ export function buildDuckModel(opts: DuckModelOptions = {}): DuckModel {
 
   head.add(box(0.12, 0.12, 0.12, BLACK, [-0.22, 0.4, -0.42])) // eyes
   head.add(box(0.12, 0.12, 0.12, BLACK, [0.22, 0.4, -0.42]))
+
+  // Mallard-duckling head markings (optional): a dark cap over the crown and a
+  // dark stripe running through each eye back to the nape. Added to the head pivot
+  // so they tip and turn with the head. The yellow face shows between them.
+  if (opts.capColor !== undefined) {
+    head.add(box(0.74, 0.18, 0.62, opts.capColor, [0, 0.53, -0.12])) // dark crown cap, meeting the eye tops
+  }
+  if (opts.eyeStripeColor !== undefined) {
+    for (const side of [-1, 1]) {
+      head.add(box(0.07, 0.17, 0.66, opts.eyeStripeColor, [side * 0.355, 0.4, -0.06])) // along the side, eye → nape
+      head.add(box(0.22, 0.17, 0.07, opts.eyeStripeColor, [side * 0.27, 0.4, -0.45])) // a touch on the face, meeting the eye
+    }
+  }
   group.add(head)
 
+  // Optional dark back patch (the mallard duckling's brown back over a yellow
+  // underside), riding on top of the body and leaving the breast/face yellow.
+  if (opts.backColor !== undefined) {
+    group.add(box(1.02, 0.22, 1.2, opts.backColor, [0, 0.9, 0.05]))
+  }
+
   // Tail — a stub at the back (+Z), tilted upward for a jaunty look.
-  const tail = box(0.5, 0.35, 0.4, body, [0, 0.8, 0.8])
+  const tail = box(0.5, 0.35, 0.4, tailColor, [0, 0.8, 0.8])
   tail.rotation.x = -0.5 // tilt the top backward/up (radians)
   group.add(tail)
 
   // Wings — hinged pivots so they can flap (see makeWing).
-  const leftWing = makeWing(-1, body)
-  const rightWing = makeWing(1, body)
+  const leftWing = makeWing(-1, wing)
+  const rightWing = makeWing(1, wing)
   group.add(leftWing, rightWing)
 
   // Crown rides on the head pivot (Queen only), so it'd tip with her head too.
@@ -124,6 +150,18 @@ export const MALLARD_HEN: DuckModelOptions = {
   bodyColor: 0x8a6c49, // mottled brown body
   headColor: 0x6f5536, // darker brown crown
   billColor: 0xcf9a4c, // dull orange bill
+}
+
+/** Mallard duckling: the classic two-tone fluffball — a warm yellow face and
+ *  underside, a dark brown cap, the dark stripe through the eye, and a brown
+ *  back and wings. Small and bright so the babies still read as "hers". */
+export const MALLARD_DUCKLING: DuckModelOptions = {
+  bodyColor: 0xf2d873, // warm yellow face + underside
+  capColor: 0x5a4327, // dark brown crown cap
+  eyeStripeColor: 0x3a2a17, // near-black brown stripe through the eye
+  backColor: 0x6f5734, // brown back + tail
+  wingColor: 0x6f5734, // brown wings
+  billColor: 0x4d4842, // dark duckling bill (not yet the adult's orange)
 }
 
 
