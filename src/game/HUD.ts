@@ -97,6 +97,9 @@ export class HUD {
   private questLogOpen = false
   private lastQuestHtml = ''
 
+  /** Called before the quest log opens or closes — used by Game to dismiss other modals. */
+  onBeforeToggle?: () => void
+
   constructor() {
     const el = document.getElementById('hud')
     // A clear error beats a silent no-op if the HTML and code drift apart.
@@ -237,8 +240,15 @@ export class HUD {
 
   /** Open or close the quest-log panel (from the 📜 button or the J key). */
   toggleQuestLog(): void {
+    this.onBeforeToggle?.()
     this.questLogOpen = !this.questLogOpen
     this.questPanel.style.display = this.questLogOpen ? 'block' : 'none'
+  }
+
+  /** Close the quest-log panel unconditionally (called by Game when another modal opens). */
+  closeQuestLog(): void {
+    this.questLogOpen = false
+    this.questPanel.style.display = 'none'
   }
 
   /** Fill the quest-log panel from the current quest views. Only touches the DOM
