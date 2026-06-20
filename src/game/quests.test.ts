@@ -63,17 +63,26 @@ describe('questViews beginner chain', () => {
 })
 
 describe('questViews main story', () => {
-  it('starts with the Baron active and the later acts locked', () => {
+  it('starts with all acts locked until Aldermere speaks', () => {
     const [baron, treaty, frontier] = story(makeProgress())
+    expect(baron.state).toBe('locked')
+    expect(treaty.state).toBe('locked')
+    expect(frontier.state).toBe('locked')
+  })
+
+  it('activates the Baron quest once Aldermere gives it', () => {
+    const progress = makeProgress()
+    progress.questGivenBaron = true
+    const [baron, treaty, frontier] = story(progress)
     expect(baron.state).toBe('active')
     expect(treaty.state).toBe('locked')
     expect(frontier.state).toBe('locked')
   })
 
-  it('stays active from the start regardless of the beginner chain', () => {
-    // The Baron is independent of the tutorial: a player who never touches the
-    // beginner quests still sees it open.
+  it('Baron quest is independent of the beginner chain once given', () => {
+    // Completing or skipping beginner quests doesn't affect the Baron quest state.
     const progress = makeProgress()
+    progress.questGivenBaron = true
     expect(story(progress)[0].state).toBe('active')
     progress.foragedFood = true
     progress.gatheredReeds = true
@@ -82,19 +91,34 @@ describe('questViews main story', () => {
     expect(story(progress)[0].state).toBe('active')
   })
 
-  it('completes the Baron and opens the Treaty Flats once he falls', () => {
+  it('completes the Baron quest once he falls', () => {
     const progress = makeProgress()
+    progress.questGivenBaron = true
     progress.baronDefeated = true
+    const [baron, treaty, frontier] = story(progress)
+    expect(baron.state).toBe('complete')
+    expect(treaty.state).toBe('locked') // Aldermere hasn't given Treaty yet
+    expect(frontier.state).toBe('locked')
+  })
+
+  it('activates Treaty once Aldermere gives it after the Baron falls', () => {
+    const progress = makeProgress()
+    progress.questGivenBaron = true
+    progress.baronDefeated = true
+    progress.questGivenTreaty = true
     const [baron, treaty, frontier] = story(progress)
     expect(baron.state).toBe('complete')
     expect(treaty.state).toBe('active')
     expect(frontier.state).toBe('locked') // still gated on the Treaty
   })
 
-  it('opens the frontier once the Treaty holds', () => {
+  it('opens the frontier once Aldermere gives it and the Treaty holds', () => {
     const progress = makeProgress()
+    progress.questGivenBaron = true
     progress.baronDefeated = true
+    progress.questGivenTreaty = true
     progress.treatyDefeated = true
+    progress.questGivenFrontier = true
     const [, treaty, frontier] = story(progress, 1, 4)
     expect(treaty.state).toBe('complete')
     expect(frontier.state).toBe('active')
@@ -103,16 +127,22 @@ describe('questViews main story', () => {
 
   it('only completes the frontier when every pond is reclaimed', () => {
     const progress = makeProgress()
+    progress.questGivenBaron = true
     progress.baronDefeated = true
+    progress.questGivenTreaty = true
     progress.treatyDefeated = true
+    progress.questGivenFrontier = true
     expect(story(progress, 3, 4)[2].state).toBe('active')
     expect(story(progress, 4, 4)[2].state).toBe('complete')
   })
 
   it('does not count an empty frontier (no ponds) as complete', () => {
     const progress = makeProgress()
+    progress.questGivenBaron = true
     progress.baronDefeated = true
+    progress.questGivenTreaty = true
     progress.treatyDefeated = true
+    progress.questGivenFrontier = true
     expect(story(progress, 0, 0)[2].state).toBe('active')
   })
 })

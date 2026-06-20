@@ -75,6 +75,9 @@ export interface ProgressSlice {
   ralliedFlock: boolean
   baronDefeated: boolean
   treatyDefeated: boolean
+  questGivenBaron: boolean
+  questGivenTreaty: boolean
+  questGivenFrontier: boolean
 }
 
 /** A complete saved game. */

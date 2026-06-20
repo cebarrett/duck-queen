@@ -102,21 +102,27 @@ export function questViews(
       ? 'active'
       : 'locked'
 
-  // The opening main-story quest: always available from the very start.
-  const baron: QuestState = progress.baronDefeated ? 'complete' : 'active'
-
-  // Act II opens once the Baron falls.
-  const treaty: QuestState = progress.treatyDefeated
+  // Act I: Aldermere sends the Queen after the Marsh Baron on the first talk.
+  const baron: QuestState = progress.baronDefeated
     ? 'complete'
-    : progress.baronDefeated
+    : progress.questGivenBaron
       ? 'active'
       : 'locked'
 
-  // Act III opens once the Treaty Flats hold; done when every far pond is reclaimed.
+  // Act II: Aldermere gives this quest the first time the Queen speaks to him
+  // after the Baron falls.
+  const treaty: QuestState = progress.treatyDefeated
+    ? 'complete'
+    : progress.questGivenTreaty && progress.baronDefeated
+      ? 'active'
+      : 'locked'
+
+  // Act III: Aldermere gives this quest the first time the Queen speaks to him
+  // after the Treaty Flats are held; done when every far pond is reclaimed.
   const frontierDone = frontierTotal > 0 && frontierClaimed === frontierTotal
   const frontier: QuestState = frontierDone
     ? 'complete'
-    : progress.treatyDefeated
+    : progress.questGivenFrontier && progress.treatyDefeated
       ? 'active'
       : 'locked'
 
@@ -163,21 +169,21 @@ export function questViews(
     {
       title: 'Break the Marsh Baron',
       summary:
-        'Rally a formidable flock and out-honk the Marsh Baron to win the marsh — victory lifts the flock cap.',
+        'Aldermere has marked a goose past the reeds who fancies himself a Baron. Rally a formidable flock and out-honk him to win the marsh — victory lifts the flock cap.',
       state: baron,
       reward: { food: 10, reeds: 10 },
     },
     {
       title: 'Hold the Treaty Flats',
       summary:
-        'Settle the Treaty Flats — build and brood nests there — then face down Lord Boundary.',
+        'Aldermere warns that Lord Boundary has staked a claim on the Treaty Flats. Settle there — build and brood nests — then face him down.',
       state: treaty,
       reward: { food: 10, reeds: 10 },
     },
     {
       title: 'Take the Frontier Ponds',
       summary:
-        'Out-honk the lieutenant gander at each outlying pond to fly your banner over the whole frontier.',
+        'Aldermere points to the far ponds, each held by a lieutenant gander. Out-honk each one to fly your banner over the whole frontier.',
       state: frontier,
       progress: `${frontierClaimed}/${frontierTotal} ponds reclaimed`,
       reward: { food: 15, reeds: 15 },

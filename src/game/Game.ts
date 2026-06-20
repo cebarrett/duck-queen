@@ -317,6 +317,20 @@ export class Game {
     this.geese.restore()
 
     Object.assign(this.progress, save.progress)
+
+    // Backward-compat: saves from before questGiven* flags existed won't have
+    // them. Infer their values so old saves don't lock main-story quests that
+    // were already active or complete.
+    if (this.progress.metSwan && !this.progress.questGivenBaron) {
+      this.progress.questGivenBaron = true
+    }
+    if (this.progress.baronDefeated && !this.progress.questGivenTreaty) {
+      this.progress.questGivenTreaty = true
+    }
+    if (this.progress.treatyDefeated && !this.progress.questGivenFrontier) {
+      this.progress.questGivenFrontier = true
+    }
+
     this.rewardedQuests.clear()
     for (const title of save.rewardedQuests) this.rewardedQuests.add(title)
   }
@@ -525,7 +539,20 @@ export class Game {
         this.showDialoguePage(this.swan.advanceDialogue())
       } else if (inRange) {
         this.progress.metSwan = true // latch the beginner "meet the swan" quest
-        this.showDialoguePage(this.swan.beginDialogue(this.progress.baronDefeated, this.frontier.allClaimed))
+
+        // Each main-story quest is given by Aldermere the first time the player
+        // speaks to him at the right point in the campaign.
+        if (!this.progress.questGivenBaron) this.progress.questGivenBaron = true
+        if (this.progress.baronDefeated && !this.progress.questGivenTreaty) this.progress.questGivenTreaty = true
+        if (this.progress.treatyDefeated && !this.progress.questGivenFrontier) this.progress.questGivenFrontier = true
+
+        this.showDialoguePage(
+          this.swan.beginDialogue(
+            this.progress.baronDefeated,
+            this.progress.treatyDefeated,
+            this.frontier.allClaimed,
+          ),
+        )
       }
     }
   }

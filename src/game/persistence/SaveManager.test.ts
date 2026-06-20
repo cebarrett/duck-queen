@@ -39,6 +39,9 @@ function validSave(): SaveData {
       ralliedFlock: false,
       baronDefeated: false,
       treatyDefeated: false,
+      questGivenBaron: false,
+      questGivenTreaty: false,
+      questGivenFrontier: false,
     },
     rewardedQuests: ['Forage'],
   }

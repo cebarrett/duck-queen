@@ -85,6 +85,26 @@ export const AFTER_BARON: readonly Discourse[] = [
 ]
 
 /**
+ * After the Treaty Flats hold: Aldermere acknowledges the victory over Lord Boundary
+ * and sends the Queen to the outlying ponds — the far edge each king ignores until it
+ * is lost. This phase lasts until the frontier is fully reclaimed.
+ */
+export const AFTER_TREATY: readonly Discourse[] = [
+  // Quest-giving: the frontier assignment.
+  [
+    'The Treaty Flats hold. Lord Boundary is gone from the water, and the line he kept is yours to walk now. I confess I am relieved — he was a patient goose, and patience outlasts almost everything. But it seems you were more stubborn than he was precise.',
+    'Now look to the far ponds. I warned you of them when the Baron fell — the ones at the sleepiest edges, the furthest corners, each quietly occupied by a lieutenant who has spent the season making himself local and difficult.',
+    'They will not challenge you grandly. They will simply be there, holding a pond that should be yours, waiting for you to decide the far edge is not worth the journey. Do not agree with them. Go to each one. Bring your voice. Bring your ducks. Drown their patience in numbers, and make those ponds ordinary and blue and ours.',
+    'The frontier is the last frontier. Off you go, Majesty. I would not say so if I did not think you could hold it.',
+  ],
+  // A shorter musing for repeat visits while the frontier campaign is ongoing.
+  [
+    'Still at it? Good. The far ponds are stubborn things — but then, so are you, which rather tips the balance.',
+    'A lieutenant gander is not a great strategist. He is merely present. The answer to a patient local is a more patient one — and one who happens to have a great deal more ducks. Return when he expects silence; hold when he expects you to tire. Out-local the local. It is the oldest conquest on the water, and it still works every time.',
+  ],
+]
+
+/**
  * After every outlying pond is reclaimed: the swan marks the frontier won — the
  * "furthest, sleepiest edge" he warned of is quiet — and turns the Queen's eye to
  * the last, unspoken fear: not a louder honk, but a Queendom that holds itself

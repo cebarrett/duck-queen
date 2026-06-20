@@ -11,7 +11,11 @@ export const FOLLOWER_CAP = 10
  *  They're latched (not read live) because the things they track (a one-off chat,
  *  food/reed stock, flock size) don't persist as live state, and a tutorial
  *  milestone should never un-complete. `metSwan` is latched by Game when a talk with
- *  Aldermere opens; the rest are flipped in updateBeginnerQuests(). */
+ *  Aldermere opens; the rest are flipped in updateBeginnerQuests().
+ *
+ *  The three `questGiven*` flags gate the main story quests: each unlocks the
+ *  moment the player first talks to Aldermere at the right point in the campaign.
+ *  That way Aldermere is the one who sends the Queen on each act, not the UI. */
 export interface Progress {
   metSwan: boolean
   foragedFood: boolean
@@ -20,6 +24,9 @@ export interface Progress {
   ralliedFlock: boolean
   baronDefeated: boolean
   treatyDefeated: boolean
+  questGivenBaron: boolean
+  questGivenTreaty: boolean
+  questGivenFrontier: boolean
 }
 
 export function makeProgress(): Progress {
@@ -31,5 +38,8 @@ export function makeProgress(): Progress {
     ralliedFlock: false,
     baronDefeated: false,
     treatyDefeated: false,
+    questGivenBaron: false,
+    questGivenTreaty: false,
+    questGivenFrontier: false,
   }
 }

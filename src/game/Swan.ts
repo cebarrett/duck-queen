@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { buildSwan } from './swanModel'
 import { seekArrive, faceHeading, easeFactor, randRange, pointAround, approachAngle } from './mathUtils'
-import { BEFORE_BARON, AFTER_BARON, AFTER_FRONTIER, type Discourse } from './swanDialogue'
+import { BEFORE_BARON, AFTER_BARON, AFTER_TREATY, AFTER_FRONTIER, type Discourse } from './swanDialogue'
 import type { Pond } from './Water'
 import type { Rng } from './rng'
 
@@ -63,8 +63,8 @@ export class Swan {
   private talking = false
   private active: Discourse | null = null
   private page = 0
-  private phase: 'before' | 'after' | 'frontier' = 'before'
-  private readonly indices = { before: 0, after: 0, frontier: 0 }
+  private phase: 'before' | 'after' | 'after_treaty' | 'frontier' = 'before'
+  private readonly indices = { before: 0, after: 0, after_treaty: 0, frontier: 0 }
 
   constructor(
     private readonly pond: Pond,
@@ -135,12 +135,26 @@ export class Swan {
     return this.talking
   }
 
-  /** Begin a conversation, choosing the script by how far the war has come: the
-   *  whole frontier reclaimed, then the Marsh Baron broken, else the opening tier.
+  /** Begin a conversation, choosing the script by how far the war has come:
+   *  frontier fully reclaimed → AFTER_FRONTIER; treaty fallen (but frontier not
+   *  yet won) → AFTER_TREATY; baron fallen → AFTER_BARON; else BEFORE_BARON.
    *  Returns the opening page. */
-  beginDialogue(baronDefeated: boolean, frontierWon: boolean): DialoguePage {
-    this.phase = frontierWon ? 'frontier' : baronDefeated ? 'after' : 'before'
-    const pool = frontierWon ? AFTER_FRONTIER : baronDefeated ? AFTER_BARON : BEFORE_BARON
+  beginDialogue(baronDefeated: boolean, treatyDefeated: boolean, frontierWon: boolean): DialoguePage {
+    this.phase = frontierWon
+      ? 'frontier'
+      : treatyDefeated
+        ? 'after_treaty'
+        : baronDefeated
+          ? 'after'
+          : 'before'
+    const pool =
+      this.phase === 'frontier'
+        ? AFTER_FRONTIER
+        : this.phase === 'after_treaty'
+          ? AFTER_TREATY
+          : this.phase === 'after'
+            ? AFTER_BARON
+            : BEFORE_BARON
     this.active = pool[this.indices[this.phase] % pool.length]
     this.page = 0
     this.talking = true
