@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { buildDuckModel, setBillOpen } from './duckModel'
+import { buildDuckModel, setBillOpen, varyDuckAppearance } from './duckModel'
 import { type SubjectKind, type DucklingTrait, SUBJECT_KINDS, subjectName, subjectTrait } from './subjectKinds'
 import { approachAngle, randRange, seekArrive, pointAround, faceHeading, easeFactor } from './mathUtils'
 import { type Collider, resolveWalls } from './collision'
@@ -8,7 +8,7 @@ import type { DuckMode } from './DuckController'
 import type { Food, FoodItem } from './Food'
 import type { Nest } from './Nests'
 import type { Sound } from './Sound'
-import { type Rng, rngRange } from './rng'
+import { type Rng, rngRange, mulberry32 } from './rng'
 import type { SubjectSlice } from './persistence/saveSchema'
 
 // --- Idle wander tuning ----------------------------------------------------
@@ -154,6 +154,10 @@ export class DuckSubject {
    *  has one and keeps it into adulthood; a duck born straight into adulthood has none. */
   readonly trait: DucklingTrait | null
 
+  /** The seed for this duck's individual look (size + feather shades). Persisted so a
+   *  reloaded subject keeps the exact appearance it had, rather than re-rolling one. */
+  readonly appearanceSeed: number
+
   // Not readonly: when a subject gets "lost", we reset its home to wherever it
   // ended up, so it wanders off from there.
   private homeX: number
@@ -224,9 +228,14 @@ export class DuckSubject {
     private readonly colliders: readonly Collider[],
     rng: Rng,
     inheritedTrait: DucklingTrait | null = null,
+    appearanceSeed?: number,
   ) {
     const def = SUBJECT_KINDS[kind]
-    const model = buildDuckModel(def.model)
+    // Give this individual its own size + feather shades: a per-duck seed (saved, so a
+    // reload looks identical) drives a gentle variation of the kind's species palette.
+    this.appearanceSeed = appearanceSeed ?? Math.floor(rng() * 0x100000000)
+    const look = varyDuckAppearance(def.model, mulberry32(this.appearanceSeed))
+    const model = buildDuckModel(look)
     this.group = model.group
     this.leftWing = model.leftWing
     this.rightWing = model.rightWing
@@ -240,7 +249,7 @@ export class DuckSubject {
     this.homeX = x
     this.homeZ = z
 
-    this.scale = def.model.scale ?? 1
+    this.scale = look.scale ?? 1
     this.voice = def.voice
     this.billDuration = VOICE_BILL_TIME[kind]
     this.collideRadius = COLLIDE_RADIUS * (this.scale / BASE_SCALE)
@@ -326,6 +335,7 @@ export class DuckSubject {
     return {
       kind: this.kind,
       trait: this.trait,
+      appearanceSeed: this.appearanceSeed,
       x: this.group.position.x,
       z: this.group.position.z,
       heading: this.heading,

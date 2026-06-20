@@ -32,6 +32,9 @@ export interface SubjectSlice {
   /** This subject's quirk, kept from ducklinghood into adulthood. Optional so saves from
    *  before traits existed still load (a duckling slice without one re-draws on restore). */
   trait?: 'fastForager' | 'fastRunner' | 'loudHonker' | null
+  /** Seed for this subject's individual look (size + feather shades). Optional so saves
+   *  from before per-duck variation still load (a slice without one re-rolls on restore). */
+  appearanceSeed?: number
   x: number
   z: number
   heading: number
