@@ -83,7 +83,11 @@ store instead of local storage without touching the game itself.
 - **Rally a flock.** Quack (**Q**) to gather wandering ducks — yellow mallard
   *ducklings* (dark cap and an eye stripe over a brown back) plus adult *drakes*
   (♂) and *hens* (♀), who look and sound different but all
-  follow the same. Their blocky bills open when they quack, peep, or call back.
+  follow the same. No two are quite alike: each duck is built a touch bigger or
+  smaller, with its own subtly-shaded feathers (a greener or duller drake head, a
+  lighter or darker hen brown, a slightly different duckling pattern), so a
+  gathered flock reads as a crowd of individuals. Their blocky bills open when
+  they quack, peep, or call back.
   Lead them around, but don't stray too far or they get lost. You can lead **up
   to 10** at once for now — best the **Marsh Baron** to prove your leadership
   and that cap lifts. Press **K** (or the 🪶 **Roster** button, bottom-left) to open

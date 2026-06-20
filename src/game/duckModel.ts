@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { box } from './modelUtils'
+import { type Rng, rngRange } from './rng'
 
 // Shared palette for all ducks. Feather colour is per-duck (the Queen is white,
 // the mallards brown/green, the ducklings yellow), so it's passed in rather than
@@ -162,6 +163,51 @@ export const MALLARD_DUCKLING: DuckModelOptions = {
   backColor: 0x6f5734, // brown back + tail
   wingColor: 0x6f5734, // brown wings
   billColor: 0x4d4842, // dark duckling bill (not yet the adult's orange)
+}
+
+// --- Per-individual appearance variation -----------------------------------
+// A kind's palette above is the *species* look; every actual duck is built from a
+// gently varied copy so a row of drakes (or hens, or ducklings) isn't a clone army.
+
+/** Nudge one colour's hue / saturation / lightness by small seeded amounts. Working
+ *  in HSL keeps a shift believable — a green head wanders green↔teal and lighter or
+ *  glossier, never toward a muddy off-colour — and `(…+1)%1` wraps hue cleanly. */
+function jitterColor(hex: number, rng: Rng, dh: number, ds: number, dl: number): number {
+  const c = new THREE.Color(hex)
+  const hsl = { h: 0, s: 0, l: 0 }
+  c.getHSL(hsl)
+  const h = (hsl.h + rngRange(rng, -dh, dh) + 1) % 1
+  const s = THREE.MathUtils.clamp(hsl.s + rngRange(rng, -ds, ds), 0, 1)
+  const l = THREE.MathUtils.clamp(hsl.l + rngRange(rng, -dl, dl), 0, 1)
+  c.setHSL(h, s, l)
+  return c.getHex()
+}
+
+/**
+ * Turn a kind's base palette + size into a unique per-individual variant: a slightly
+ * different overall size and gently re-shaded feathers (greener/duller head, lighter
+ * or darker plumage, …), so no two ducks of a kind look quite alike. Only the colours
+ * a kind actually uses are touched, so the draw count is stable per kind.
+ *
+ * Deterministic in `rng`: seed it from a per-duck appearance seed (see DuckSubject)
+ * and the same duck — in a seeded world, or after a reload — looks the same every time.
+ */
+export function varyDuckAppearance(opts: DuckModelOptions, rng: Rng): DuckModelOptions {
+  const out: DuckModelOptions = { ...opts }
+  out.scale = (opts.scale ?? 1) * rngRange(rng, 0.92, 1.08) // ±8% size
+  if (opts.featherColor !== undefined) out.featherColor = jitterColor(opts.featherColor, rng, 0.012, 0.05, 0.05)
+  if (opts.bodyColor !== undefined) out.bodyColor = jitterColor(opts.bodyColor, rng, 0.02, 0.07, 0.07)
+  if (opts.headColor !== undefined) out.headColor = jitterColor(opts.headColor, rng, 0.035, 0.1, 0.08)
+  if (opts.breastColor !== undefined) out.breastColor = jitterColor(opts.breastColor, rng, 0.025, 0.07, 0.07)
+  if (opts.billColor !== undefined) out.billColor = jitterColor(opts.billColor, rng, 0.015, 0.05, 0.05)
+  if (opts.neckRingColor !== undefined) out.neckRingColor = jitterColor(opts.neckRingColor, rng, 0, 0.02, 0.03)
+  // Mallard-duckling markings: vary the brown back/wings like body, and the dark
+  // cap/eye-stripe just a touch so each fluffball's pattern is a little its own.
+  if (opts.wingColor !== undefined) out.wingColor = jitterColor(opts.wingColor, rng, 0.02, 0.07, 0.07)
+  if (opts.backColor !== undefined) out.backColor = jitterColor(opts.backColor, rng, 0.02, 0.07, 0.07)
+  if (opts.capColor !== undefined) out.capColor = jitterColor(opts.capColor, rng, 0.02, 0.05, 0.05)
+  if (opts.eyeStripeColor !== undefined) out.eyeStripeColor = jitterColor(opts.eyeStripeColor, rng, 0.02, 0.05, 0.04)
+  return out
 }
 
 

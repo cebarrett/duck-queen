@@ -130,7 +130,7 @@ export class Flock {
     this.members.length = 0
 
     for (const s of slice.subjects) {
-      const subject = new DuckSubject(s.x, s.z, s.kind, this.pond, this.food, this.sound, this.queen, this.colliders, Math.random, s.trait ?? null)
+      const subject = new DuckSubject(s.x, s.z, s.kind, this.pond, this.food, this.sound, this.queen, this.colliders, Math.random, s.trait ?? null, s.appearanceSeed)
       subject.restore(s)
       this.members.push(subject)
       this.scene.add(subject.group)
