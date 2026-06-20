@@ -1,4 +1,4 @@
-import { type DuckModelOptions, MALLARD_DRAKE, MALLARD_HEN } from './duckModel'
+import { type DuckModelOptions, MALLARD_DRAKE, MALLARD_HEN, MALLARD_DUCKLING } from './duckModel'
 import type { Sound } from './Sound'
 import type { Rng } from './rng'
 
@@ -19,12 +19,10 @@ export interface SubjectKindDef {
   voice: (sound: Sound, pitch: number, distance?: number) => number
 }
 
-const DUCKLING_YELLOW = 0xffe680 // small + yellow so the babies read as "hers"
-
 export const SUBJECT_KINDS: Record<SubjectKind, SubjectKindDef> = {
-  // The little ones: yellow, small, peeping.
+  // The little ones: yellow mallard ducklings — dark cap, eye stripe, brown back.
   duckling: {
-    model: { featherColor: DUCKLING_YELLOW, scale: 0.4 },
+    model: { ...MALLARD_DUCKLING, scale: 0.4 },
     pitch: [0.85, 1.25],
     voice: (s, p, distance) => s.peep(p, { distance }),
   },

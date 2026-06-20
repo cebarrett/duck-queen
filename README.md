@@ -80,8 +80,9 @@ store instead of local storage without touching the game itself.
 
 ## What you can do
 
-- **Rally a flock.** Quack (**Q**) to gather wandering ducks — yellow *ducklings*
-  plus adult *drakes* (♂) and *hens* (♀), who look and sound different but all
+- **Rally a flock.** Quack (**Q**) to gather wandering ducks — yellow mallard
+  *ducklings* (dark cap and an eye stripe over a brown back) plus adult *drakes*
+  (♂) and *hens* (♀), who look and sound different but all
   follow the same. Their blocky bills open when they quack, peep, or call back.
   Lead them around, but don't stray too far or they get lost. You can lead **up
   to 10** at once for now — best the **Marsh Baron** to prove your leadership
