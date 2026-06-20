@@ -266,6 +266,12 @@ export class Game {
     // nests, claims, progress). Then arm autosave so play is captured going forward.
     if (save && save.seed === seed) this.restore(save)
     this.saves.begin(() => this.snapshot())
+
+    // Ensure only one modal can be open at a time: each panel's onBeforeToggle
+    // closes the other two before the toggle completes.
+    this.hud.onBeforeToggle = () => { this.rosterPanel.close(); this.settingsMenu.close() }
+    this.rosterPanel.onBeforeToggle = () => { this.hud.closeQuestLog(); this.settingsMenu.close() }
+    this.settingsMenu.onBeforeToggle = () => { this.hud.closeQuestLog(); this.rosterPanel.close() }
   }
 
   /** Start the render loop. */

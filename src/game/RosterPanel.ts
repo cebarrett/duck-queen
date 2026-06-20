@@ -42,6 +42,9 @@ export class RosterPanel {
   private open = false
   private lastHtml = '' // only touch the DOM when the rendered roster changes
 
+  /** Called before the roster opens or closes — used by Game to dismiss other modals. */
+  onBeforeToggle?: () => void
+
   constructor() {
     const button = document.createElement('button')
     button.textContent = '🪶 Roster (K)'
@@ -78,8 +81,15 @@ export class RosterPanel {
 
   /** Open or close the roster window (from the 🪶 button or the K key). */
   toggle(): void {
+    this.onBeforeToggle?.()
     this.open = !this.open
     this.panel.style.display = this.open ? 'block' : 'none'
+  }
+
+  /** Close the roster window unconditionally (called by Game when another modal opens). */
+  close(): void {
+    this.open = false
+    this.panel.style.display = 'none'
   }
 
   /** Fill the window from the current roster. Grouped by kind, each subject its own

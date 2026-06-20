@@ -15,6 +15,9 @@ export class SettingsMenu {
   private readonly panel: HTMLElement
   private open = false
 
+  /** Called before the settings panel opens or closes — used by Game to dismiss other modals. */
+  onBeforeToggle?: () => void
+
   constructor(private readonly onReset: () => void) {
     const button = document.createElement('button')
     button.textContent = '⚙️'
@@ -58,7 +61,14 @@ export class SettingsMenu {
   }
 
   private toggle(): void {
+    this.onBeforeToggle?.()
     this.open = !this.open
     this.panel.style.display = this.open ? 'block' : 'none'
+  }
+
+  /** Close the settings panel unconditionally (called by Game when another modal opens). */
+  close(): void {
+    this.open = false
+    this.panel.style.display = 'none'
   }
 }
