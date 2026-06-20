@@ -7,11 +7,13 @@ export const FOLLOWER_CAP = 10
 /** Plain-data campaign flags. Game owns this object; Geese writes to it; Flock,
  *  Swan (via Game), and the HUD (via Game) read from it.
  *
- *  The first four are the beginner-quest milestones — once true they stay true.
- *  They're latched (not read live) because the things they track (food/reed stock,
- *  flock size) all fall again as you spend or lose them, and a tutorial milestone
- *  should never un-complete. Game flips them in updateBeginnerQuests(). */
+ *  The first five are the beginner-quest milestones — once true they stay true.
+ *  They're latched (not read live) because the things they track (a one-off chat,
+ *  food/reed stock, flock size) don't persist as live state, and a tutorial
+ *  milestone should never un-complete. `metSwan` is latched by Game when a talk with
+ *  Aldermere opens; the rest are flipped in updateBeginnerQuests(). */
 export interface Progress {
+  metSwan: boolean
   foragedFood: boolean
   gatheredReeds: boolean
   builtNest: boolean
@@ -22,6 +24,7 @@ export interface Progress {
 
 export function makeProgress(): Progress {
   return {
+    metSwan: false,
     foragedFood: false,
     gatheredReeds: false,
     builtNest: false,

@@ -32,6 +32,7 @@ function validSave(): SaveData {
     nests: { nests: [] },
     frontier: { statuses: [] },
     progress: {
+      metSwan: true,
       foragedFood: true,
       gatheredReeds: false,
       builtNest: false,

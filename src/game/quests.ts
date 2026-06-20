@@ -7,8 +7,8 @@ import type { Progress } from './Progress'
  * `Frontier` — so this module owns no state of its own. It just holds the quest
  * *copy* in one place and derives each quest's current standing from that state.
  *
- * The log is a beginner chain (forage → reeds → nest → flock) that teaches the
- * basics, followed by the three main-story quests. Both are sequential (each
+ * The log is a beginner chain (swan → forage → reeds → nest → flock) that teaches
+ * the basics, followed by the three main-story quests. Both are sequential (each
  * unlocks the next) and cannot be cancelled, so there's no "abandon" notion here.
  * Kept free of THREE/DOM imports so it stays a pure, testable function like
  * rng.ts/mathUtils.ts.
@@ -79,7 +79,13 @@ export function questViews(
   //     milestone is latched, and completes once its own flag is set. The progress
   //     note shows the live count while a step is active (it's hidden once locked
   //     or complete, so it never displays a stale or post-spend number).
-  const forage: QuestState = progress.foragedFood ? 'complete' : 'active'
+  // The opening lesson: meet Aldermere, the old swan, who sends you off to forage.
+  const swan: QuestState = progress.metSwan ? 'complete' : 'active'
+  const forage: QuestState = progress.foragedFood
+    ? 'complete'
+    : progress.metSwan
+      ? 'active'
+      : 'locked'
   const reeds: QuestState = progress.gatheredReeds
     ? 'complete'
     : progress.foragedFood
@@ -115,6 +121,13 @@ export function questViews(
       : 'locked'
 
   return [
+    {
+      title: 'Meet Aldermere the swan',
+      summary:
+        'An old swan named Aldermere glides your pond. Swim out to him and press F to talk — he keeps the count of every Duck Queen and has counsel for a young crown.',
+      state: swan,
+      reward: { reeds: 1 },
+    },
     {
       title: 'Forage for food',
       summary:

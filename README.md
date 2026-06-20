@@ -126,9 +126,9 @@ store instead of local storage without touching the game itself.
 
 - **Follow the quest log.** Press **J** (or click the 📜 **Quests** button in the
   bottom-left) to open the quest log. It opens with a short **beginner chain** that
-  teaches the basics one step at a time — **forage for food**, **gather reeds**,
-  **build a nest**, and **rally your flock** — each unlocking the next as you reach
-  it. After those come the three main-story goals in order: breaking the **Marsh
+  teaches the basics one step at a time — **meet Aldermere the swan**, **forage for
+  food**, **gather reeds**, **build a nest**, and **rally your flock** — each
+  unlocking the next as you reach it. After those come the three main-story goals in order: breaking the **Marsh
   Baron** (always available from the start), holding the **Treaty Flats** against
   Lord Boundary, and **taking the frontier ponds**. Each chain unlocks in sequence;
   quests you haven't reached yet are shown but kept under wraps until then. None can

@@ -518,6 +518,7 @@ export class Game {
       if (this.swan.isTalking) {
         this.showDialoguePage(this.swan.advanceDialogue())
       } else if (inRange) {
+        this.progress.metSwan = true // latch the beginner "meet the swan" quest
         this.showDialoguePage(this.swan.beginDialogue(this.progress.baronDefeated, this.frontier.allClaimed))
       }
     }

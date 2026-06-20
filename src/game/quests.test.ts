@@ -3,9 +3,9 @@ import { questViews, formatReward, type QuestCounts, FLOCK_GOAL, REEDS_GOAL } fr
 import { makeProgress, type Progress } from './Progress'
 
 // The quest log is a pure projection of campaign state. These tests pin down both
-// chains — the beginner tutorial (forage → reeds → nest → flock) and the main story
-// (Baron → Treaty → Frontier) — so the log can't drift from the actual progression
-// in Progress/Frontier.
+// chains — the beginner tutorial (swan → forage → reeds → nest → flock) and the main
+// story (Baron → Treaty → Frontier) — so the log can't drift from the actual
+// progression in Progress/Frontier.
 
 const NO_COUNTS: QuestCounts = { food: 0, reeds: 0, nests: 0, flock: 0 }
 
@@ -14,41 +14,51 @@ const story = (progress: Progress, claimed = 0, total = 4, counts: QuestCounts =
   questViews(progress, counts, claimed, total).slice(-3)
 
 describe('questViews beginner chain', () => {
-  it('starts with only the forage quest active, the rest locked', () => {
-    const [forage, reeds, nest, rally] = questViews(makeProgress(), NO_COUNTS, 0, 4)
-    expect(forage.state).toBe('active')
+  it('starts with only the meet-the-swan quest active, the rest locked', () => {
+    const [swan, forage, reeds, nest, rally] = questViews(makeProgress(), NO_COUNTS, 0, 4)
+    expect(swan.state).toBe('active')
+    expect(forage.state).toBe('locked')
     expect(reeds.state).toBe('locked')
     expect(nest.state).toBe('locked')
     expect(rally.state).toBe('locked')
   })
 
+  it('rewards a single reed for meeting the swan', () => {
+    const [swan] = questViews(makeProgress(), NO_COUNTS, 0, 4)
+    expect(swan.reward).toEqual({ reeds: 1 })
+  })
+
   it('unlocks each step as the prior milestone latches', () => {
     const progress = makeProgress()
+    progress.metSwan = true
+    expect(questViews(progress, NO_COUNTS, 0, 4)[1].state).toBe('active') // forage
+
     progress.foragedFood = true
-    expect(questViews(progress, NO_COUNTS, 0, 4)[1].state).toBe('active') // reeds
+    expect(questViews(progress, NO_COUNTS, 0, 4)[2].state).toBe('active') // reeds
 
     progress.gatheredReeds = true
-    expect(questViews(progress, NO_COUNTS, 0, 4)[2].state).toBe('active') // nest
+    expect(questViews(progress, NO_COUNTS, 0, 4)[3].state).toBe('active') // nest
 
     progress.builtNest = true
-    expect(questViews(progress, NO_COUNTS, 0, 4)[3].state).toBe('active') // rally
+    expect(questViews(progress, NO_COUNTS, 0, 4)[4].state).toBe('active') // rally
 
     progress.ralliedFlock = true
-    expect(questViews(progress, NO_COUNTS, 0, 4)[3].state).toBe('complete')
+    expect(questViews(progress, NO_COUNTS, 0, 4)[4].state).toBe('complete')
   })
 
   it('shows the live count on the active step (clamped to the goal)', () => {
     const progress = makeProgress()
+    progress.metSwan = true
     progress.foragedFood = true // reeds quest is now the active step
     const counts: QuestCounts = { food: 0, reeds: 7, nests: 0, flock: 0 }
-    expect(questViews(progress, counts, 0, 4)[1].progress).toBe(`7/${REEDS_GOAL} reeds gathered`)
+    expect(questViews(progress, counts, 0, 4)[2].progress).toBe(`7/${REEDS_GOAL} reeds gathered`)
   })
 
   it('clamps the progress count so it never overshoots the goal', () => {
     const progress = makeProgress()
     progress.builtNest = true // rally quest is the active step
     const counts: QuestCounts = { food: 0, reeds: 0, nests: 0, flock: 99 }
-    expect(questViews(progress, counts, 0, 4)[3].progress).toBe(`${FLOCK_GOAL}/${FLOCK_GOAL} ducks following`)
+    expect(questViews(progress, counts, 0, 4)[4].progress).toBe(`${FLOCK_GOAL}/${FLOCK_GOAL} ducks following`)
   })
 })
 
