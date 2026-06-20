@@ -71,6 +71,11 @@ const POSTURE_HEAD_BOB = 0.16 // neck jab layered onto the lifted posture
 const GOOSE_BILL_TIME = 0.46 // how long the bill gapes after a honk
 const GOOSE_BILL_SYLLABLE = 0.2
 const HONKOFF_COOLDOWN = 5 // after losing a honk-off (it won), brief no-re-fight gap
+
+// --- Chorus support (backing up a nearby goose's honk-off) ------------------
+const SUPPORT_PUFF_SCALE = 1.12 // smaller swell than the primary fighter
+const SUPPORT_HONK_RATE = 0.25 // occasional solidarity honks
+const SUPPORT_TURN = 6 // turn speed toward the Queen (gentler than posturing)
 const BOLD_TIME = 12 // after winning a honk-off, it struts and steals harder
 const BOLD_TRIGGER_SCALE = 1.25 // Geese can use this to slightly widen trigger range
 
@@ -178,6 +183,10 @@ export class Goose {
   private cowed = 0 // seconds it stays rattled after a defeat (won't forage)
   private bold = 0 // seconds of smug confidence after it wins a honk-off
 
+  private supporting = false // backing up a nearby goose's fight (not the primary fighter)
+  private supportAimX = 0
+  private supportAimZ = 0
+
   constructor(
     x: number,
     z: number,
@@ -233,9 +242,9 @@ export class Goose {
   }
 
   /** Can the Queen start a honk-off with it right now? (Not already posturing,
-   *  and not in the brief cooldown after the last one.) */
+   *  not in the brief cooldown after the last one, and not backing up another fight.) */
   get engageable(): boolean {
-    return !this.posturing && this.cooldown <= 0
+    return !this.posturing && !this.supporting && this.cooldown <= 0
   }
 
   /** A bold goose has just won a honk-off and is acting like it owns the pond. */
@@ -339,10 +348,37 @@ export class Goose {
     this.aimZ = z
   }
 
+  /** Rally to back up a nearby goose's honk-off. */
+  joinChorus(queenX: number, queenZ: number): void {
+    if (this.posturing) return
+    this.supporting = true
+    this.supportAimX = queenX
+    this.supportAimZ = queenZ
+    this.targetFood = null
+    this.targetNest = null
+    this.idleAction = 'none'
+  }
+
+  /** Update which direction to face while supporting (call each frame). */
+  updateSupportAim(queenX: number, queenZ: number): void {
+    this.supportAimX = queenX
+    this.supportAimZ = queenZ
+  }
+
+  /** Release from chorus support and return to normal behaviour. */
+  leaveChorus(): void {
+    this.supporting = false
+  }
+
   update(delta: number): void {
     // While posturing, the honk-off takes over completely.
     if (this.posturing) {
       this.updatePosture(delta)
+      return
+    }
+    // While supporting a nearby goose's fight, hold position and face the Queen.
+    if (this.supporting) {
+      this.updateSupport(delta)
       return
     }
     // Deflate back to normal size after a honk-off.
@@ -555,6 +591,40 @@ export class Goose {
     }
     const dip = Math.max(0, Math.sin(this.idleTime * 5)) // 0 -> down -> up, twice
     this.neck.rotation.set(dip, 0, 0)
+  }
+
+  /** Back up a nearby goose's fight: hold position, face the Queen, puff up slightly. */
+  private updateSupport(delta: number): void {
+    const pos = this.group.position
+    const dx = this.supportAimX - pos.x
+    const dz = this.supportAimZ - pos.z
+    if (Math.hypot(dx, dz) > 0.01) {
+      const target = Math.atan2(-dx, -dz)
+      this.heading = approachAngle(this.heading, target, SUPPORT_TURN * delta)
+    }
+    this.ease(0, 0, delta)
+    pos.x += this.velX * delta
+    pos.z += this.velZ * delta
+
+    if (Math.random() < SUPPORT_HONK_RATE * delta) this.honk(this.honkPitch, 'urgent')
+    this.updateBill(delta)
+
+    this.puff += (SUPPORT_PUFF_SCALE - this.puff) * easeFactor(PUFF_EASE, delta)
+    this.group.scale.setScalar(this.baseScale * this.puff)
+    this.walkPhase += delta * POSTURE_FLAP_SPEED * 0.55
+    const beat = Math.max(0, Math.sin(this.walkPhase))
+    const bob = Math.abs(Math.sin(this.walkPhase)) * POSTURE_BOB * 0.5
+    pos.y = this.pond.isWater(pos.x, pos.z) ? SWIM_FLOAT_Y + bob * 0.4 : bob
+    this.group.rotation.y = this.heading
+    this.group.rotation.z = Math.sin(this.walkPhase * 0.55) * POSTURE_SWAY * 0.4
+    this.neck.rotation.set(
+      POSTURE_HEAD_LIFT * 0.55 + POSTURE_HEAD_BOB * beat * 0.5,
+      Math.sin(this.walkPhase * 0.75) * 0.1,
+      0,
+    )
+    const wingSpread = (POSTURE_WING_REST + POSTURE_WING_FLAP * beat * 0.6) * 0.75
+    this.leftWing.rotation.z = -wingSpread
+    this.rightWing.rotation.z = wingSpread
   }
 
   /** Square up to the Queen, hold ground, puff up, and honk a lot. */
