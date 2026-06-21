@@ -73,6 +73,18 @@ export class SaveManager {
     }
   }
 
+  /**
+   * Disarm autosave: drop the snapshot provider and detach the unload listeners, so
+   * no further tick() or flush() can write. Essential before a reset-and-reload —
+   * otherwise reload() fires pagehide/visibilitychange, which would flush the current
+   * (about-to-be-discarded) state straight back over the save we just cleared.
+   */
+  stop(): void {
+    this.snapshot = null
+    document.removeEventListener('visibilitychange', this.flushBound)
+    window.removeEventListener('pagehide', this.flushBound)
+  }
+
   /** Wipe the save (Settings → Reset game progress). */
   async clear(): Promise<void> {
     await this.backend.clear(this.key)

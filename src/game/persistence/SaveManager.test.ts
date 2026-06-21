@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { SaveManager } from './SaveManager'
 import type { StorageBackend } from './StorageBackend'
 import { SAVE_VERSION, type SaveData } from './saveSchema'
@@ -85,6 +85,47 @@ describe('SaveManager.clear', () => {
     backend.store.set(KEY, JSON.stringify(validSave()))
     const mgr = new SaveManager(backend, KEY)
     await mgr.clear()
+    expect(await mgr.load()).toBeNull()
+  })
+})
+
+describe('SaveManager.stop', () => {
+  // begin()/stop() attach and detach unload listeners on document/window, which the
+  // default (node) test environment doesn't provide. Stub them with no-op event APIs
+  // so we can drive the real autosave-arming code paths.
+  const noopEvents = { addEventListener() {}, removeEventListener() {} }
+  beforeEach(() => {
+    ;(globalThis as { document?: unknown }).document = noopEvents
+    ;(globalThis as { window?: unknown }).window = noopEvents
+  })
+  afterEach(() => {
+    delete (globalThis as { document?: unknown }).document
+    delete (globalThis as { window?: unknown }).window
+  })
+
+  it('disarms autosave so tick and flush can no longer write', async () => {
+    const backend = new FakeBackend()
+    const mgr = new SaveManager(backend, KEY)
+    mgr.begin(() => validSave())
+    mgr.stop()
+
+    // Neither a timer-triggered flush nor a direct flush should re-create the save.
+    mgr.tick(9999)
+    await mgr.flush()
+    expect(await mgr.load()).toBeNull()
+  })
+
+  it('keeps a cleared save cleared even if a flush is attempted afterward', async () => {
+    const backend = new FakeBackend()
+    backend.store.set(KEY, JSON.stringify(validSave()))
+    const mgr = new SaveManager(backend, KEY)
+    mgr.begin(() => validSave())
+
+    // The reset sequence: stop autosave, then clear. A later flush (as a page-unload
+    // handler would attempt) must not bring the save back.
+    mgr.stop()
+    await mgr.clear()
+    await mgr.flush()
     expect(await mgr.load()).toBeNull()
   })
 })

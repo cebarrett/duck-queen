@@ -336,8 +336,11 @@ export class Game {
   }
 
   /** Settings → "Reset game progress": wipe the save, then reload into a brand-new
-   *  world. Clearing first guarantees the next boot reads no save and starts fresh. */
+   *  world. We stop autosave FIRST so the reload's pagehide/visibilitychange can't
+   *  flush the current state back over the cleared save; only then is the next boot
+   *  guaranteed to read no save and start fresh. */
   private async resetGame(): Promise<void> {
+    this.saves.stop()
     await this.saves.clear()
     window.location.reload()
   }
