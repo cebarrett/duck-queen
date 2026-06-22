@@ -26,6 +26,23 @@ npm run dev
 Then **click the page once** (this captures the mouse for looking around and
 unlocks audio), and play.
 
+### Trying it on Meta Quest 3
+
+The game now exposes an **ENTER VR** button when WebXR immersive VR is available.
+Quest Browser requires a secure context for WebXR: a production build served from
+HTTPS works, and a trusted HTTPS tunnel/proxy to your local Vite server works.
+Opening `http://<your-computer-ip>:5173` directly from the headset is not enough
+for WebXR, even though the flat page may load.
+
+For local headset testing, start Vite on your network and put an HTTPS tunnel in
+front of it:
+
+```bash
+npm run dev -- --host 0.0.0.0
+```
+
+Then open the tunnel's HTTPS URL in Quest Browser and press **ENTER VR**.
+
 ### Other commands
 
 ```bash
@@ -59,6 +76,26 @@ are verified by eye in the browser, not by tests.
 
 The **B**, **E**, **R**, and **X** prompts only appear in the HUD when the action
 will actually work, so you don't have to memorize them.
+
+### Quest 3 WebXR controls
+
+| Input | Action |
+|-------|--------|
+| **Left stick** | Move / paddle / waddle relative to the VR camera rig |
+| **Right stick left/right** | Comfort snap-turn the third-person camera rig |
+| **Right trigger** | Quack / mash during honk-offs |
+| **Right grip** | Take off / hold to fly up · release to glide down |
+| **A** | Talk to the swan / advance dialogue |
+| **B** | Build a nest when the prompt is active |
+| **X** | Seat a hen, or rouse a brooding hen when nearby |
+| **Y** | Raze a nearby nest |
+| **Right stick click** | Open / close the quest log |
+| **Left stick click** | Open / close the royal flock roster |
+| **Left trigger** | Dismiss the active dialogue or VR panel |
+
+In VR, the normal DOM HUD is replaced inside the headset by lightweight in-world
+canvas panels for status, prompts, honk-offs, dialogue, quests, and the roster.
+Quest/roster panels scroll with either stick while open.
 
 The **⚙️ Settings** button in the bottom-right opens a small menu. For now it holds
 a single option, **Reset game progress**, which wipes your saved game and reloads
@@ -178,8 +215,8 @@ src/
     rng.ts             # seeded RNG for deterministic world generation
     Duck.ts            # the player: the duck Queen
     DuckController.ts  # the Queen's movement & feel (waddle / fly / swim), collision
-    ThirdPersonCamera.ts
-    Input.ts           # keyboard, mouse, pointer lock
+    ThirdPersonCamera.ts # desktop orbit camera + Quest WebXR third-person rig
+    Input.ts           # semantic keyboard/mouse/WebXR controller input
     duckModel.ts       # shared blocky-duck builder (Queen, ducklings, mallards)
     DuckSubject.ts     # a flock subject: wander / follow / forage / brood
     subjectKinds.ts    # the duckling / drake / hen kinds (look + voice)
@@ -195,6 +232,7 @@ src/
     Sound.ts           # SFX (recorded files or synthesized)
     Splash.ts          # water ripple effect
     HUD.ts             # on-screen status (mode, flock, resources, nests)
+    XRHud.ts           # in-headset canvas HUD/panels for WebXR
     RosterPanel.ts     # 🪶 royal flock roster window (named drake/hen/duckling subjects)
     SettingsMenu.ts    # ⚙️ corner menu (reset game progress)
     mathUtils.ts       # shared steering helpers

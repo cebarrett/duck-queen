@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import type { Input } from './Input'
-import type { ThirdPersonCamera } from './ThirdPersonCamera'
+import type { CameraController } from './ThirdPersonCamera'
 import type { Duck } from './Duck'
 import { type Collider, resolveWalls, floorHeightAt } from './collision'
 import type { Pond } from './Water'
@@ -114,7 +114,7 @@ export class DuckController {
   constructor(
     private readonly duck: Duck,
     private readonly input: Input,
-    private readonly camera: ThirdPersonCamera,
+    private readonly camera: CameraController,
     private readonly colliders: Collider[],
     private readonly pond: Pond,
     // Reeds only the Queen can gather (the ducklings never touch these).
@@ -163,25 +163,10 @@ export class DuckController {
     const rightX = Math.cos(yaw)
     const rightZ = -Math.sin(yaw)
 
-    // --- WASD -> a horizontal direction, normalized so diagonals aren't fast -
-    let dirX = 0
-    let dirZ = 0
-    if (this.input.isDown('KeyW')) {
-      dirX += forwardX
-      dirZ += forwardZ
-    }
-    if (this.input.isDown('KeyS')) {
-      dirX -= forwardX
-      dirZ -= forwardZ
-    }
-    if (this.input.isDown('KeyD')) {
-      dirX += rightX
-      dirZ += rightZ
-    }
-    if (this.input.isDown('KeyA')) {
-      dirX -= rightX
-      dirZ -= rightZ
-    }
+    // --- Movement intent -> a horizontal direction, normalized so diagonals aren't fast -
+    const move = this.input.getMovement()
+    let dirX = forwardX * move.forward + rightX * move.right
+    let dirZ = forwardZ * move.forward + rightZ * move.right
     const len = Math.hypot(dirX, dirZ)
     if (len > 0) {
       dirX /= len
@@ -282,7 +267,7 @@ export class DuckController {
     // Space to take off. Resting on the ground (or on a rock) folds them —
     // otherwise she sits there with her wings stuck out mid-glide.
     const airborne = this.altitude > this.groundHeight + GROUND_EPS
-    const flapping = this.input.isDown('Space')
+    const flapping = this.input.isFlyHeld
     const wingsOut = this.mode === 'fly' && (airborne || flapping)
 
     if (wingsOut) {
@@ -337,7 +322,7 @@ export class DuckController {
     //   else over the pond               -> swim
     //   else                             -> waddle
     const airborne = this.altitude > this.groundHeight + GROUND_EPS
-    const wantsUp = this.input.isDown('Space') && !this.isPanicking()
+    const wantsUp = this.input.isFlyHeld && !this.isPanicking()
     if (wantsUp || airborne) this.mode = 'fly'
     else if (this.overWater) this.mode = 'swim'
     else this.mode = 'waddle'
@@ -366,7 +351,7 @@ export class DuckController {
     // Hold Space to fly up; release to drift gently back down. There's always a
     // downward "fall" target, and holding Space overrides it with a rise target.
     // (The actual altitude change + floor/ceiling clamp happen in updateAltitude.)
-    const rising = this.input.isDown('Space')
+    const rising = this.input.isFlyHeld
     const targetY = rising ? FLY_RISE_SPEED : -FLY_FALL_SPEED
 
     const targetX = dirX * FLY_SPEED

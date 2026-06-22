@@ -362,7 +362,7 @@ export class Flock {
    *  distraction so they fall back in behind her), AND recruit any new ducks in
    *  range. So a quack is both "come here" to strangers and "to me!" to her own. */
   private handleQuack(): void {
-    if (!this.input.justPressed('KeyQ')) return
+    if (!this.input.justPressedAction('quack')) return
     const duration = this.sound.quack() // the Queen quacks — even if no ducks are in earshot
     this.onQueenQuack(duration)
 

@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { VRButton } from 'three/addons/webxr/VRButton.js'
 import { World } from './World'
 import type { Pond } from './Water'
 import { Duck } from './Duck'
@@ -20,6 +21,7 @@ import { Flora } from './Flora'
 import { Critters } from './Critters'
 import { Nests } from './Nests'
 import { HUD, type MinimapSnapshot } from './HUD'
+import { XRHud } from './XRHud'
 import { SettingsMenu } from './SettingsMenu'
 import { RosterPanel } from './RosterPanel'
 import { deriveRng } from './rng'
@@ -91,6 +93,7 @@ export class Game {
   private readonly clouds: Clouds
   private readonly critters: Critters
   private readonly hud = new HUD()
+  private readonly xrHud: XRHud
   private readonly settingsMenu = new SettingsMenu(() => { void this.resetGame() })
   private readonly rosterPanel = new RosterPanel()
   private readonly nests: Nests
@@ -104,6 +107,8 @@ export class Game {
    *  that stays 'complete' every frame thereafter isn't rewarded again. */
   private readonly rewardedQuests = new Set<string>()
   private resolveShakenTimer = 0
+  private xrActive = false
+  private seatOrRouseConsumed = false
 
   /**
    * @param saves  the persistence service (autosave + reset wiring).
@@ -121,7 +126,14 @@ export class Game {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
     this.renderer.toneMappingExposure = 0.9
+    this.renderer.xr.enabled = true
+    this.renderer.xr.setReferenceSpaceType('local-floor')
+    this.renderer.xr.setFramebufferScaleFactor(0.86)
+    this.renderer.xr.setFoveation(1)
     document.body.appendChild(this.renderer.domElement)
+    document.body.appendChild(VRButton.createButton(this.renderer, {
+      optionalFeatures: ['local-floor', 'bounded-floor'],
+    }))
 
     // --- World seed -------------------------------------------------------
     // ONE seed drives all world generation, so a given seed always produces the
@@ -178,7 +190,10 @@ export class Game {
     // follows the duck and orbits via the mouse. The rig now drives the camera
     // every frame, so we no longer set camera.position by hand.
     this.input = new Input(this.renderer.domElement)
-    this.cameraRig = new ThirdPersonCamera(this.camera, this.input, this.duck.group)
+    this.cameraRig = new ThirdPersonCamera(this.scene, this.camera, this.input, this.duck.group)
+    this.xrHud = new XRHud(this.camera)
+    this.renderer.xr.addEventListener('sessionstart', this.onXRSessionStart)
+    this.renderer.xr.addEventListener('sessionend', this.onXRSessionEnd)
     // Scatter edible plants for the flock to forage (land + pond).
     this.food = new Food(this.scene, world.pond, deriveRng(seed, 'food'))
     // Reeds grow on the shoreline — only the Queen gathers these.
@@ -213,7 +228,7 @@ export class Game {
       this.food,
       this.nests,
       world.colliders,
-      (text) => this.hud.showMessage(text),
+      (text) => this.showMessage(text),
       (duration) => {
         this.duck.quack(duration)
         this.duckController.quackFlourish(duration)
@@ -236,10 +251,10 @@ export class Game {
       this.duck.group,
       this.flock,
       (active, resolve, label?, color?) => {
-        this.hud.setHonkOff(active, resolve, label, color)
+        this.setHonkOff(active, resolve, label, color)
         this.duckController.setHonkOffActive(active)
       },
-      (text) => this.hud.showMessage(text),
+      (text) => this.showMessage(text),
       (gooseX, gooseZ, _queenX, _queenZ, message) => this.handleQueenLostHonkOff(gooseX, gooseZ, message),
       () => this.resolvePenalty(),
       this.frontier,
@@ -279,6 +294,23 @@ export class Game {
     // setAnimationLoop calls our callback ~60x/sec (synced to the display).
     // It's Three's preferred loop because it also works in VR/AR contexts.
     this.renderer.setAnimationLoop(this.update)
+  }
+
+  private onXRSessionStart = (): void => {
+    this.xrActive = true
+    this.input.setXRSession(this.renderer.xr.getSession())
+    this.cameraRig.setXRActive(true)
+    this.xrHud.setActive(true)
+    this.showMessage('Quest VR mode enabled')
+  }
+
+  private onXRSessionEnd = (): void => {
+    this.xrActive = false
+    this.input.setXRSession(null)
+    this.input.setXRPanelOpen(false)
+    this.cameraRig.setXRActive(false)
+    this.xrHud.setActive(false)
+    this.showMessage('Exited VR')
   }
 
   /** Assemble a complete snapshot of the gameplay state for the SaveManager. Each
@@ -359,6 +391,8 @@ export class Game {
     // off the map, or tunnelling straight through a tree before collision can
     // catch it). Capping the step keeps a hiccup from breaking the simulation.
     const delta = Math.min(this.clock.getDelta(), 0.1)
+    this.input.setXRPanelOpen(this.xrActive && this.xrHud.isPanelOpen)
+    this.input.update()
 
     // Move the duck first, then let the camera follow her new position.
     this.duckController.update(delta)
@@ -378,22 +412,32 @@ export class Game {
     this.hud.update(delta)
     this.cameraRig.update(delta)
     this.handleNestBuild()
+    this.seatOrRouseConsumed = false
     this.handleNestSeat()
     this.handleNestKick()
     this.handleNestRaze()
     this.handleSwanDialogue()
-    if (this.input.justPressed('Escape') || this.input.justPressed('MouseRight')) this.closeActiveModal()
-    if (this.input.justPressed('KeyJ')) this.hud.toggleQuestLog()
-    if (this.input.justPressed('KeyK')) this.rosterPanel.toggle()
+    if (this.input.justPressedAction('dismiss')) this.closeActiveModal()
+    if (this.input.justPressedAction('questLog')) this.toggleQuestLog()
+    if (this.input.justPressedAction('roster')) this.toggleRoster()
 
     // Keep the HUD in sync (both only redraw on change).
-    this.hud.setMode(this.duckController.getMode())
+    const mode = this.duckController.getMode()
+    const subjects = this.flock.subjectBreakdown
+    this.hud.setMode(mode)
+    this.xrHud.setMode(mode)
     this.hud.setSubjects(this.flock.subjectBreakdown)
+    this.xrHud.setSubjects(subjects)
     this.hud.setFood(this.food.total)
+    this.xrHud.setFood(this.food.total)
     this.hud.setReeds(this.reeds.total)
+    this.xrHud.setReeds(this.reeds.total)
     this.hud.setNests(this.nests.count)
+    this.xrHud.setNests(this.nests.count)
     this.hud.setFrontier(this.frontier.claimedCount, this.frontier.total, this.progress.treatyDefeated)
+    this.xrHud.setFrontier(this.frontier.claimedCount, this.frontier.total, this.progress.treatyDefeated)
     this.rosterPanel.setRoster(this.flock.roster)
+    this.xrHud.setRoster(this.flock.roster)
     this.updateBeginnerQuests()
     const views = questViews(
       this.progress,
@@ -408,7 +452,9 @@ export class Game {
     )
     this.grantQuestRewards(views)
     this.hud.setQuests(views)
+    this.xrHud.setQuests(views)
     this.updateMinimap()
+    this.xrHud.update(delta, this.input.getMenuScroll())
 
     this.renderer.render(this.scene, this.camera)
     this.input.endFrame()
@@ -447,12 +493,13 @@ export class Game {
     // "On land" = waddle mode (not swimming the pond, not airborne).
     const canBuild = this.duckController.getMode() === 'waddle' && this.reeds.total >= NEST_COST
     this.hud.setCanBuildNest(canBuild)
+    this.xrHud.setCanBuildNest(canBuild)
 
-    if (this.input.justPressed('KeyB') && canBuild && this.reeds.spend(NEST_COST)) {
+    if (this.input.justPressedAction('buildNest') && canBuild && this.reeds.spend(NEST_COST)) {
       const pos = this.duck.group.position
       this.nests.build(pos.x, pos.z)
       this.sound.nestBuilt()
-      this.hud.showMessage('🪺 Nest built!')
+      this.showMessage('🪺 Nest built!')
     }
   }
 
@@ -466,11 +513,14 @@ export class Game {
     const nest = this.nests.nearestEmpty(pos.x, pos.z, SEAT_RANGE)
     const hen = nest ? this.flock.nearestFollowingHen(nest.x, nest.z) : null
     this.hud.setCanSeatHen(nest !== null && hen !== null)
+    this.xrHud.setCanSeatHen(nest !== null && hen !== null)
 
-    if (this.input.justPressed('KeyE') && nest && hen) {
+    const combinedSeat = this.input.justPressedAction('seatOrRouseHen')
+    if ((this.input.justPressedAction('seatHen') || combinedSeat) && nest && hen) {
+      if (combinedSeat) this.seatOrRouseConsumed = true
       hen.assignToNest(nest)
       hen.vocalize() // a contented settling cluck
-      this.hud.showMessage('🥚 A hen settles in')
+      this.showMessage('🥚 A hen settles in')
     }
   }
 
@@ -486,11 +536,14 @@ export class Game {
     const nest = this.nests.nearestOccupied(pos.x, pos.z, SEAT_RANGE)
     const hen = nest ? this.flock.henOnNest(nest) : null
     this.hud.setCanKickHen(hen !== null)
+    this.xrHud.setCanKickHen(hen !== null)
 
-    if (this.input.justPressed('KeyR') && hen) {
+    const wantsRouse = this.input.justPressedAction('rouseHen') ||
+      (this.input.justPressedAction('seatOrRouseHen') && !this.seatOrRouseConsumed)
+    if (wantsRouse && hen) {
       hen.leaveNest()
       hen.vocalize() // an indignant cluck as she's shooed off
-      this.hud.showMessage('🐤 The hen is roused off')
+      this.showMessage('🐤 The hen is roused off')
     }
   }
 
@@ -505,14 +558,15 @@ export class Game {
     const onLand = this.duckController.getMode() === 'waddle'
     const nest = onLand ? this.nests.nearestNest(pos.x, pos.z, SEAT_RANGE) : null
     this.hud.setCanRazeNest(nest !== null)
+    this.xrHud.setCanRazeNest(nest !== null)
 
-    if (this.input.justPressed('KeyX') && nest) {
+    if (this.input.justPressedAction('razeNest') && nest) {
       const hen = this.flock.henOnNest(nest)
       if (hen) hen.leaveNest()
       this.nests.remove(nest)
       this.reeds.gain(NEST_REFUND, { countsAsGathered: false })
       this.sound.nestBuilt() // a thud as the bowl comes apart
-      this.hud.showMessage(`♻️ Nest razed · +${NEST_REFUND} reeds recovered`)
+      this.showMessage(`♻️ Nest razed · +${NEST_REFUND} reeds recovered`)
     }
   }
 
@@ -531,14 +585,15 @@ export class Game {
     // Wandered off mid-conversation? The swan lets her go.
     if (this.swan.isTalking && dist > SWAN_LEAVE_RANGE) {
       this.swan.endDialogue()
-      this.hud.setDialogue(null)
+      this.setDialogue(null)
     }
 
     const inRange = dist <= SWAN_TALK_RANGE
     this.hud.setCanTalk(inRange && !this.swan.isTalking)
+    this.xrHud.setCanTalk(inRange && !this.swan.isTalking)
 
     // One press = one action: open the talk, or advance / close it.
-    if (this.input.justPressed('KeyF')) {
+    if (this.input.justPressedAction('talk')) {
       if (this.swan.isTalking) {
         this.showDialoguePage(this.swan.advanceDialogue())
       } else if (inRange) {
@@ -564,11 +619,11 @@ export class Game {
   /** Draw a dialogue page in the HUD, or hide the box when the talk is over (null). */
   private showDialoguePage(page: { text: string; last: boolean } | null): void {
     if (page === null) {
-      this.hud.setDialogue(null)
+      this.setDialogue(null)
       return
     }
     const hint = page.last ? 'Press F to leave' : 'Press F to continue  ▸'
-    this.hud.setDialogue(SWAN_NAME, page.text, hint)
+    this.setDialogue(SWAN_NAME, page.text, hint)
   }
 
   /** Escape dismisses whatever overlay is currently in the Queen's way. */
@@ -576,10 +631,48 @@ export class Game {
     this.hud.closeQuestLog()
     this.rosterPanel.close()
     this.settingsMenu.close()
+    this.xrHud.closePanels()
     if (this.swan.isTalking) {
       this.swan.endDialogue()
-      this.hud.setDialogue(null)
+      this.setDialogue(null)
     }
+  }
+
+  private toggleQuestLog(): void {
+    if (this.xrActive) {
+      this.rosterPanel.close()
+      this.settingsMenu.close()
+      this.hud.closeQuestLog()
+      this.xrHud.toggleQuestLog()
+    } else {
+      this.hud.toggleQuestLog()
+    }
+  }
+
+  private toggleRoster(): void {
+    if (this.xrActive) {
+      this.hud.closeQuestLog()
+      this.settingsMenu.close()
+      this.rosterPanel.close()
+      this.xrHud.toggleRoster()
+    } else {
+      this.rosterPanel.toggle()
+    }
+  }
+
+  private showMessage(text: string, seconds?: number): void {
+    this.hud.showMessage(text, seconds)
+    this.xrHud.showMessage(text, seconds)
+  }
+
+  private setDialogue(name: string | null, text = '', hint = ''): void {
+    this.hud.setDialogue(name, text, hint)
+    this.xrHud.setDialogue(name, text, hint)
+  }
+
+  private setHonkOff(active: boolean, resolve: number, label?: string, color?: string): void {
+    this.hud.setHonkOff(active, resolve, label, color)
+    this.xrHud.setHonkOff(active, resolve, label, color)
   }
 
   /**
@@ -608,7 +701,7 @@ export class Game {
       this.rewardedQuests.add(q.title)
       if (q.reward.food) this.food.gain(q.reward.food, { countsAsGathered: false })
       if (q.reward.reeds) this.reeds.gain(q.reward.reeds, { countsAsGathered: false })
-      this.hud.showMessage(`✓ ${q.title} — complete!   🎁 ${formatReward(q.reward)}`)
+      this.showMessage(`✓ ${q.title} — complete!   🎁 ${formatReward(q.reward)}`)
     }
   }
 
@@ -621,7 +714,7 @@ export class Game {
     for (const duckling of this.flock.maturableDucklings()) {
       if (!this.food.spend(MATURE_FOOD_COST)) break // out of food — the rest wait their turn
       this.flock.matureToAdult(duckling)
-      this.hud.showMessage('🦆 A duckling grew up!')
+      this.showMessage('🦆 A duckling grew up!')
     }
   }
 
@@ -636,7 +729,7 @@ export class Game {
     for (const nest of this.nests.collectHatches(delta)) {
       if (!this.food.spend(HATCH_FOOD_COST)) break // ran out mid-frame (several nests hatched at once) — the rest wait their turn
       this.flock.hatchAt(nest.x, nest.z)
-      this.hud.showMessage('🐣 An egg hatched!')
+      this.showMessage('🐣 An egg hatched!')
     }
   }
 
@@ -661,7 +754,7 @@ export class Game {
         const qp = this.duck.group.position
         const distance = Math.hypot(goose.x - qp.x, goose.z - qp.z)
         this.sound.honk(1, { distance }) // the goose honks, triumphant
-        this.hud.showMessage(guards > 0 ? '🪿 The guard ducks delayed a raid, but the goose broke through!' : '🪿 A goose raided the nest!')
+        this.showMessage(guards > 0 ? '🪿 The guard ducks delayed a raid, but the goose broke through!' : '🪿 A goose raided the nest!')
       }
     }
   }
@@ -670,8 +763,9 @@ export class Game {
     this.duckController.startPanicFlee(gooseX, gooseZ)
     this.flock.scatterChorusFrom(gooseX, gooseZ)
     this.resolveShakenTimer = RESOLVE_SHAKEN_TIME
-    this.hud.showMessage(message)
+    this.showMessage(message)
     this.hud.setResolveShaken(true)
+    this.xrHud.setResolveShaken(true)
   }
 
   private resolvePenalty(): number {
@@ -681,6 +775,7 @@ export class Game {
   private updateResolveShaken(delta: number): void {
     if (this.resolveShakenTimer <= 0) {
       this.hud.setResolveShaken(false)
+      this.xrHud.setResolveShaken(false)
       return
     }
     this.resolveShakenTimer = Math.max(0, this.resolveShakenTimer - delta)
@@ -688,6 +783,7 @@ export class Game {
       this.resolveShakenTimer = 0
     }
     this.hud.setResolveShaken(this.resolveShakenTimer > 0)
+    this.xrHud.setResolveShaken(this.resolveShakenTimer > 0)
   }
 
   private onResize = (): void => {

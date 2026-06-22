@@ -78,7 +78,7 @@ export class Standoff {
       }
     }
 
-    if (this.input.justPressed('KeyQ')) this.resolve += QUACK_GAIN
+    if (this.input.justPressedAction('quack')) this.resolve += QUACK_GAIN
 
     this.resolve += (this.cfg.passiveSupport() - this.cfg.drain) * delta
     this.resolve = Math.max(0, Math.min(1, this.resolve))
