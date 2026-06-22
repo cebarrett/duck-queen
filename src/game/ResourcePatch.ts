@@ -21,6 +21,7 @@ export interface Collectible {
 export class ResourcePatch {
   readonly items: Collectible[] = []
   private count = 0
+  private gatheredCount = 0
 
   /** `regrowDelay` > 0 makes harvested items grow back after that many seconds
    *  (Food); 0 means once gathered they're gone for good (Reeds). */
@@ -29,9 +30,14 @@ export class ResourcePatch {
     private readonly regrowDelay = 0,
   ) {}
 
-  /** How many WE have gathered (for the HUD). */
+  /** Current inventory available to spend or show in the HUD. */
   get total(): number {
     return this.count
+  }
+
+  /** Lifetime resources earned through active gathering, excluding rewards/refunds. */
+  get gatheredTotal(): number {
+    return this.gatheredCount
   }
 
   /** Current uncollected items for UI/AI that needs to know what remains in the
@@ -48,10 +54,11 @@ export class ResourcePatch {
     return true
   }
 
-  /** Add gathered resources that did not come from a visible patch item, such as
-   *  a duck triumphantly yanking a worm out of the ground. */
-  gain(n = 1): void {
+  /** Add resources that did not come from a visible patch item, such as a duck
+   *  triumphantly yanking a worm out of the ground, a quest reward, or a refund. */
+  gain(n = 1, options: { countsAsGathered?: boolean } = {}): void {
     this.count += n
+    if (options.countsAsGathered ?? true) this.gatheredCount += n
   }
 
   /** The closest uncollected item within `radius` of (x, z), or null. Plain O(n)
@@ -75,7 +82,7 @@ export class ResourcePatch {
   collect(item: Collectible): void {
     if (item.collected) return
     this.harvest(item)
-    this.count++
+    this.gain()
   }
 
   /** A rival snatches an item: same removal as collect(), but it never credits
@@ -121,7 +128,7 @@ export class ResourcePatch {
     const items = this.items
       .map((item, i) => ({ i, collected: item.collected, regrowTimer: item.regrowTimer ?? null }))
       .filter((s) => s.collected || s.regrowTimer !== null)
-    return { total: this.count, items }
+    return { total: this.count, gathered: this.gatheredCount, items }
   }
 
   /** Apply a saved slice onto the freshly-scattered patch. The patch has already
@@ -142,6 +149,15 @@ export class ResourcePatch {
         disposeObject(item.mesh)
       }
     }
+    this.gatheredCount = slice.gathered ?? this.inferLegacyGathered(slice)
+  }
+
+  /** Old saves only stored the current inventory. Reeds are one-shot, so harvested
+   *  item count is the closest reward-proof gather history; food regrows, so total
+   *  is the best legacy signal and the early food quest had no food rewards before it. */
+  private inferLegacyGathered(slice: PatchSlice): number {
+    if (this.regrowDelay > 0) return slice.total
+    return slice.items.filter((s) => s.collected).length
   }
 
   /** Subclasses call this to drop a built mesh into the world at (x, y, z) and
@@ -152,4 +168,3 @@ export class ResourcePatch {
     this.items.push({ x, z, mesh, collected: false })
   }
 }
-

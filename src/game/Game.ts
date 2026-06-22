@@ -398,8 +398,8 @@ export class Game {
     const views = questViews(
       this.progress,
       {
-        food: this.food.total,
-        reeds: this.reeds.total,
+        food: this.food.gatheredTotal,
+        reeds: this.reeds.gatheredTotal,
         nests: this.nests.count,
         flock: this.flock.subjectCount,
       },
@@ -510,7 +510,7 @@ export class Game {
       const hen = this.flock.henOnNest(nest)
       if (hen) hen.leaveNest()
       this.nests.remove(nest)
-      this.reeds.gain(NEST_REFUND)
+      this.reeds.gain(NEST_REFUND, { countsAsGathered: false })
       this.sound.nestBuilt() // a thud as the bowl comes apart
       this.hud.showMessage(`♻️ Nest razed · +${NEST_REFUND} reeds recovered`)
     }
@@ -589,8 +589,8 @@ export class Game {
    * handled uniformly for every quest in grantQuestRewards().
    */
   private updateBeginnerQuests(): void {
-    if (this.food.total >= FOOD_GOAL) this.progress.foragedFood = true
-    if (this.reeds.total >= REEDS_GOAL) this.progress.gatheredReeds = true
+    if (this.food.gatheredTotal >= FOOD_GOAL) this.progress.foragedFood = true
+    if (this.reeds.gatheredTotal >= REEDS_GOAL) this.progress.gatheredReeds = true
     if (this.nests.count >= NEST_GOAL) this.progress.builtNest = true
     if (this.flock.subjectCount >= FLOCK_GOAL) this.progress.ralliedFlock = true
   }
@@ -606,8 +606,8 @@ export class Game {
     for (const q of views) {
       if (q.state !== 'complete' || this.rewardedQuests.has(q.title)) continue
       this.rewardedQuests.add(q.title)
-      if (q.reward.food) this.food.gain(q.reward.food)
-      if (q.reward.reeds) this.reeds.gain(q.reward.reeds)
+      if (q.reward.food) this.food.gain(q.reward.food, { countsAsGathered: false })
+      if (q.reward.reeds) this.reeds.gain(q.reward.reeds, { countsAsGathered: false })
       this.hud.showMessage(`✓ ${q.title} — complete!   🎁 ${formatReward(q.reward)}`)
     }
   }

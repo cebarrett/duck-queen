@@ -54,9 +54,9 @@ export const REEDS_GOAL = 10
 export const NEST_GOAL = 1
 export const FLOCK_GOAL = 6
 
-/** Live resource/flock counts, passed in so this module needn't touch the game
- *  systems. Only used for the active beginner quest's progress note — completion
- *  itself is latched on `Progress`, not read from these. */
+/** Live gathered-resource/flock counts, passed in so this module needn't touch the
+ *  game systems. Only used for the active beginner quest's progress note —
+ *  completion itself is latched on `Progress`, not read from these. */
 export interface QuestCounts {
   readonly food: number
   readonly reeds: number

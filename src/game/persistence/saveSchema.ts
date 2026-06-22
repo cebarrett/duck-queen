@@ -21,6 +21,9 @@ export const SAVE_KEY = 'duck-queen/save/v1'
  *  items that diverge from a freshly-generated patch (gathered or mid-regrow). */
 export interface PatchSlice {
   total: number
+  /** Lifetime resources earned through actual gathering. Optional so v1 saves from
+   *  before this field existed still load and can infer a sensible value. */
+  gathered?: number
   items: { i: number; collected: boolean; regrowTimer: number | null }[]
 }
 
