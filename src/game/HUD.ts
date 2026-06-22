@@ -96,6 +96,7 @@ export class HUD {
   private readonly questEntries: HTMLElement
   private questLogOpen = false
   private lastQuestHtml = ''
+  private readonly questWheelHandler = (event: WheelEvent): void => this.handleQuestWheel(event)
 
   /** Called before the quest log opens or closes — used by Game to dismiss other modals. */
   onBeforeToggle?: () => void
@@ -205,7 +206,7 @@ export class HUD {
       'width:min(560px,90vw);max-height:80vh;overflow:auto;' +
       'background:rgba(16,20,27,.92);border:2px solid rgba(238,241,245,.85);' +
       'border-radius:14px;padding:20px 24px;color:#f3f6f9;' +
-      'text-shadow:0 1px 2px rgba(0,0,0,.55);pointer-events:none;user-select:none;display:none;'
+      'text-shadow:0 1px 2px rgba(0,0,0,.55);pointer-events:auto;user-select:none;display:none;z-index:10;'
     const header = document.createElement('div')
     header.textContent = '📜 Quest Log'
     header.style.cssText = 'font-size:22px;font-weight:800;letter-spacing:.2px;'
@@ -219,6 +220,16 @@ export class HUD {
     document.body.appendChild(panel)
     this.questPanel = panel
     this.questEntries = entries
+    window.addEventListener('wheel', this.questWheelHandler, { capture: true, passive: false })
+  }
+
+  private handleQuestWheel(event: WheelEvent): void {
+    if (!this.questLogOpen) return
+    if (this.questPanel.scrollHeight <= this.questPanel.clientHeight) return
+
+    this.questPanel.scrollTop += event.deltaY
+    event.preventDefault()
+    event.stopPropagation()
   }
 
   /** Show a line of NPC dialogue, or hide the box when `name` is null. */
@@ -260,20 +271,32 @@ export class HUD {
     const badgeColor = (state: QuestView['state']): string =>
       state === 'complete' ? '#79d5a3' : state === 'active' ? '#ffd84a' : '#9aa6b0'
 
-    const html = views
+    const sortedViews = [
+      ...views.filter((q) => q.state !== 'complete'),
+      ...views.filter((q) => q.state === 'complete'),
+    ]
+
+    const html = sortedViews
       .map((q) => {
         const locked = q.state === 'locked'
+        const complete = q.state === 'complete'
         // Past tense once it's in the bag, an enticement while you're working on it.
-        const rewardLabel = q.state === 'complete' ? '🎁 Earned' : '🎁 Reward'
+        const rewardLabel = complete ? '🎁 Earned' : '🎁 Reward'
+        const entryStyle = complete ? 'opacity:.62;' : ''
+        const titleStyle = complete
+          ? 'color:#9aa6b0;text-decoration:line-through;text-decoration-thickness:2px;'
+          : locked
+            ? 'opacity:.7;'
+            : ''
         const detail = locked
           ? '<div style="font-size:15px;line-height:1.5;opacity:.6;">???</div>'
-          : `<div style="font-size:15px;line-height:1.5;opacity:.92;">${q.summary}</div>` +
+          : `<div style="font-size:15px;line-height:1.5;opacity:${complete ? '.7' : '.92'};">${q.summary}</div>` +
             (q.progress ? `<div style="font-size:13px;font-weight:700;color:#cfe0f5;margin-top:6px;">🪶 ${q.progress}</div>` : '') +
-            `<div style="font-size:13px;font-weight:700;color:#ffd84a;margin-top:6px;">${rewardLabel}: ${formatReward(q.reward)}</div>`
+            `<div style="font-size:13px;font-weight:700;color:${complete ? '#9aa6b0' : '#ffd84a'};margin-top:6px;">${rewardLabel}: ${formatReward(q.reward)}</div>`
         return (
-          '<div style="border-top:1px solid rgba(238,241,245,.18);padding:12px 0;">' +
+          `<div style="border-top:1px solid rgba(238,241,245,.18);padding:12px 0;${entryStyle}">` +
           `<div style="font-size:12px;font-weight:800;color:${badgeColor(q.state)};letter-spacing:.4px;">${badge(q.state)}</div>` +
-          `<div style="font-size:17px;font-weight:700;margin:3px 0 5px;${locked ? 'opacity:.7;' : ''}">${q.title}</div>` +
+          `<div style="font-size:17px;font-weight:700;margin:3px 0 5px;${titleStyle}">${q.title}</div>` +
           detail +
           '</div>'
         )

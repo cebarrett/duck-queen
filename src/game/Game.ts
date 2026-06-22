@@ -382,6 +382,7 @@ export class Game {
     this.handleNestKick()
     this.handleNestRaze()
     this.handleSwanDialogue()
+    if (this.input.justPressed('Escape') || this.input.justPressed('MouseRight')) this.closeActiveModal()
     if (this.input.justPressed('KeyJ')) this.hud.toggleQuestLog()
     if (this.input.justPressed('KeyK')) this.rosterPanel.toggle()
 
@@ -568,6 +569,17 @@ export class Game {
     }
     const hint = page.last ? 'Press F to leave' : 'Press F to continue  ▸'
     this.hud.setDialogue(SWAN_NAME, page.text, hint)
+  }
+
+  /** Escape dismisses whatever overlay is currently in the Queen's way. */
+  private closeActiveModal(): void {
+    this.hud.closeQuestLog()
+    this.rosterPanel.close()
+    this.settingsMenu.close()
+    if (this.swan.isTalking) {
+      this.swan.endDialogue()
+      this.hud.setDialogue(null)
+    }
   }
 
   /**

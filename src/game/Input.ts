@@ -27,6 +27,15 @@ export class Input {
     // Held keys never get a keyup when the window loses focus, so clear them on blur.
     window.addEventListener('blur', () => this.keys.clear())
 
+    // Right-click is a game command (dismiss the current modal), so don't let the
+    // browser context menu cover the canvas or UI panels.
+    window.addEventListener('pointerdown', (e) => {
+      if (e.button !== 2) return
+      this.pressed.add('MouseRight')
+      e.preventDefault()
+    }, { capture: true })
+    window.addEventListener('contextmenu', (e) => e.preventDefault())
+
     // Pointer lock hides the cursor and gives us raw mouse movement (great for
     // looking around). The browser REQUIRES a user gesture to start it, which
     // is why we request it on click — you can't auto-lock on page load.

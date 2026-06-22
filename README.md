@@ -55,6 +55,7 @@ are verified by eye in the browser, not by tests.
 | **X** | Raze a nearby nest, recovering half the reeds it cost (5) |
 | **J** | Open / close the quest log (also the 📜 **Quests** button, bottom-left) |
 | **K** | Open / close the royal flock roster (also the 🪶 **Roster** button, bottom-left) |
+| **Esc / Right-click** | Dismiss the quest log, roster, settings menu, or active dialogue; Esc also releases captured mouse |
 
 The **B**, **E**, **R**, and **X** prompts only appear in the HUD when the action
 will actually work, so you don't have to memorize them.
