@@ -11,19 +11,36 @@ import type { Collider } from './collision'
 import type { Rng } from './rng'
 import { FOLLOWER_CAP, type Progress } from './Progress'
 import type { SubjectSlice } from './persistence/saveSchema'
+import { TREATY_FLATS } from './Biomes'
 
-// The flock roster: which kinds make up the subjects. A guaranteed mix (so you
-// always see some grown mallards), shuffled into random spawn slots by the seed.
-const COMPOSITION: SubjectKind[] = [
-  'duckling', 'duckling', 'duckling', 'duckling',
-  'drake', 'drake',
-  'hen', 'hen',
-]
+// The generated flock starts as a handful of adult mallard couples, not a crowd of
+// ducklings around the Queen. Each pair spawns together; the pairs themselves are
+// scattered through the broader marsh so finding subjects is an exploration beat.
+const STARTING_PAIR_COUNT = 5
+const STARTING_PAIR_SPREAD = 105
+const STARTING_PAIR_MIN_DIST = 24
+const STARTING_PAIR_MAX_DIST = 112
+const STARTING_PAIR_GAP = 1.55
+const STARTING_PAIR_CLEARANCE = 16
+const STARTING_PAIR_WATER_MARGIN = 1.2
+const STARTING_PAIR_COLLIDER_MARGIN = 1.2
+const STARTING_PAIR_TREATY_CLEAR = TREATY_FLATS.radius + 7
+const OPENING_GAGGLE_X = 0
+const OPENING_GAGGLE_Z = -50
+const STARTING_PAIR_GAGGLE_CLEAR = 18
+const MARSH_BARON_X = 0
+const MARSH_BARON_Z = -72
+const STARTING_PAIR_BARON_CLEAR = 15
 const QUACK_RANGE = 12 // a quack recruits idle ducks within this distance
 const SCATTER_RANGE = 10 // subjects this close to conflict briefly scatter
 const GUARD_RADIUS = 4.5 // adults holding this close to a nest slow a raid
 const HONKOFF_CHORUS_RANGE = 13 // visible/audio responders near the Queen
 const HONKOFF_MAX_VOICES = 6 // keep the chorus cute instead of a wall of samples
+
+interface StartingPairSpot {
+  drake: { x: number; z: number }
+  hen: { x: number; z: number }
+}
 
 /** Game wires this to the HUD so the flock can explain why a duck won't join. */
 type OnMessage = (text: string) => void
@@ -70,20 +87,13 @@ export class Flock {
     private readonly progress: Progress,
     rng: Rng,
   ) {
-    // Shuffle the roster into random spawn slots, deterministically from the seed
-    // (Fisher–Yates). So a given seed always yields the same mix in the same spots.
-    const kinds = [...COMPOSITION]
-    for (let i = kinds.length - 1; i > 0; i--) {
-      const j = Math.floor(rng() * (i + 1))
-      ;[kinds[i], kinds[j]] = [kinds[j], kinds[i]]
-    }
-
-    for (const kind of kinds) {
-      const angle = rng() * Math.PI * 2
-      const radius = 6 + rng() * 8
-      const subject = new DuckSubject(Math.cos(angle) * radius, Math.sin(angle) * radius, kind, pond, food, this.sound, this.queen, colliders, rng)
-      this.members.push(subject)
-      scene.add(subject.group)
+    const spots = this.pickStartingPairSpots(rng)
+    for (const spot of spots) {
+      const drake = new DuckSubject(spot.drake.x, spot.drake.z, 'drake', pond, food, this.sound, this.queen, colliders, rng)
+      const hen = new DuckSubject(spot.hen.x, spot.hen.z, 'hen', pond, food, this.sound, this.queen, colliders, rng)
+      this.members.push(drake, hen)
+      scene.add(drake.group)
+      scene.add(hen.group)
     }
   }
 
@@ -453,5 +463,55 @@ export class Flock {
       }
     }
     return best
+  }
+
+  private pickStartingPairSpots(rng: Rng): StartingPairSpot[] {
+    const spots: StartingPairSpot[] = []
+    for (let i = 0; i < STARTING_PAIR_COUNT; i++) {
+      const spot = this.pickStartingPairSpot(rng, spots)
+      if (!spot) break
+      spots.push(spot)
+    }
+    return spots
+  }
+
+  private pickStartingPairSpot(rng: Rng, existing: readonly StartingPairSpot[]): StartingPairSpot | null {
+    for (let guard = 0; guard < 800; guard++) {
+      const x = (rng() * 2 - 1) * STARTING_PAIR_SPREAD
+      const z = (rng() * 2 - 1) * STARTING_PAIR_SPREAD
+      const distFromSpawn = Math.hypot(x, z)
+      if (distFromSpawn < STARTING_PAIR_MIN_DIST || distFromSpawn > STARTING_PAIR_MAX_DIST) continue
+      if (Math.hypot(x - OPENING_GAGGLE_X, z - OPENING_GAGGLE_Z) < STARTING_PAIR_GAGGLE_CLEAR) continue
+      if (Math.hypot(x - TREATY_FLATS.x, z - TREATY_FLATS.z) < STARTING_PAIR_TREATY_CLEAR) continue
+      if (Math.hypot(x - MARSH_BARON_X, z - MARSH_BARON_Z) < STARTING_PAIR_BARON_CLEAR) continue
+      if (this.tooCloseToExistingPair(x, z, existing)) continue
+
+      const angle = rng() * Math.PI * 2
+      const dx = Math.cos(angle) * STARTING_PAIR_GAP * 0.5
+      const dz = Math.sin(angle) * STARTING_PAIR_GAP * 0.5
+      const drakeFirst = rng() < 0.5
+      const a = { x: x + dx, z: z + dz }
+      const b = { x: x - dx, z: z - dz }
+      if (!this.isGoodStartingSpot(a.x, a.z) || !this.isGoodStartingSpot(b.x, b.z)) continue
+      return drakeFirst ? { drake: a, hen: b } : { drake: b, hen: a }
+    }
+    return null
+  }
+
+  private isGoodStartingSpot(x: number, z: number): boolean {
+    if (this.pond.overlaps(x, z, STARTING_PAIR_WATER_MARGIN)) return false
+    for (const c of this.colliders) {
+      if (Math.hypot(x - c.x, z - c.z) < c.radius + STARTING_PAIR_COLLIDER_MARGIN) return false
+    }
+    return true
+  }
+
+  private tooCloseToExistingPair(x: number, z: number, existing: readonly StartingPairSpot[]): boolean {
+    for (const pair of existing) {
+      const cx = (pair.drake.x + pair.hen.x) * 0.5
+      const cz = (pair.drake.z + pair.hen.z) * 0.5
+      if (Math.hypot(x - cx, z - cz) < STARTING_PAIR_CLEARANCE) return true
+    }
+    return false
   }
 }

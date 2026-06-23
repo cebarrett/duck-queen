@@ -2,7 +2,7 @@
  * Seeded randomness for WORLD GENERATION.
  *
  * Everything that decides the world's layout — where the trees, rocks, pond
- * plants, reeds, ducklings, and geese spawn — must draw from one of these, NOT
+ * plants, reeds, flock pairs, and geese spawn — must draw from one of these, NOT
  * from Math.random(). That's what makes a given seed always produce the exact
  * same world. (Behaviour during play — a duck wandering, a goose honking — stays
  * on Math.random(); that's gameplay, not generation.)

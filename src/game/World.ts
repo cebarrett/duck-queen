@@ -21,7 +21,7 @@ export class World {
   readonly colliders: Collider[] = []
 
   // The pond — a short waddle ahead of spawn (-Z). The duck controller and the
-  // ducklings read this to know where they can swim.
+  // flock subjects read this to know where they can swim.
   readonly pond = new Pond(0, -26, 10)
 
   // The outlying ponds the geese hold — Act III's contestable territory. Recorded

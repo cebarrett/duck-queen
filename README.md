@@ -1,7 +1,7 @@
 # 🦆 Duck Queen
 
-A cozy, blocky 3D browser game where you play a duck **Queen**. Rally a flock of
-ducklings and grown mallards, forage food and reeds, swim your pond, and build
+A cozy, blocky 3D browser game where you play a duck **Queen**. Rally scattered
+mallard pairs, raise ducklings, forage food and reeds, swim your pond, and build
 nests for your hens to brood in — all while fending off rival **geese** with
 non-violent **honk-offs** before they raid your nests.
 
@@ -118,26 +118,27 @@ store instead of local storage without touching the game itself.
 
 ## What you can do
 
-- **Rally a flock.** Quack (**Q**) to gather wandering ducks — yellow mallard
-  *ducklings* (dark cap and an eye stripe over a brown back) plus adult *drakes*
-  (♂) and *hens* (♀), who look and sound different but all
-  follow the same. No two are quite alike: each duck is built a touch bigger or
+- **Rally a flock.** Quack (**Q**) to gather wandering adult mallards — paired
+  *drakes* (♂) and *hens* (♀) who spawn together but are scattered across the
+  marsh instead of clustered around the home pond. No two are quite alike: each
+  duck is built a touch bigger or
   smaller, with its own subtly-shaded feathers (a greener or duller drake head, a
-  lighter or darker hen brown, a slightly different duckling pattern), so a
-  gathered flock reads as a crowd of individuals. Their blocky bills open when
-  they quack, peep, or call back.
+  lighter or darker hen brown, and later a slightly different duckling pattern),
+  so a gathered flock reads as a crowd of individuals. Their blocky bills open
+  when they quack, peep, or call back.
   Lead them around, but don't stray too far or they get lost. You can lead **up
   to 10** at once for now — best the **Marsh Baron** to prove your leadership
   and that cap lifts. Press **K** (or the 🪶 **Roster** button, bottom-left) to open
   the **royal flock roster** — a window listing every drake, hen, and duckling
   subject by name, grouped by kind, with what each one is up to right now
-  (following, foraging, holding home, brooding, and so on). Each duckling also
+  (following, foraging, holding home, brooding, and so on). Ducklings arrive from
+  hatched eggs rather than the starter world population; each duckling also
   has a little **quirk** — a *fast forager*, a *fast runner*, or a *loud honker* —
   that nudges how it behaves and shows beside its name; it keeps that quirk even
   after it grows into a drake or hen.
 - **Move three ways.** Waddle on land, **hold Space** to fly (descend onto a rock
   or tree to perch on top), and paddle across the **pond**.
-- **Forage.** Your ducklings gather food plants; only the Queen herself harvests
+- **Forage.** Your flock gathers food plants; only the Queen herself harvests
   the **reeds** along the shoreline.
 - **Honk off the geese.** Get close to a rival goose and it squares up — **mash Q**
   to out-honk it (a bigger flock at your back helps). A first gaggle waits near
@@ -149,7 +150,7 @@ store instead of local storage without touching the game itself.
 - **Build nests and brood.** Spend 10 reeds to **build a nest** (**B**), then
   **seat a hen** on it (**E**). She'll settle in and lay eggs over time. An egg
   hatches into a duckling only once you've foraged **5 food** to feed it — and
-  hatching spends that food, so keep your ducklings gathering.
+  hatching spends that food, so keep your flock gathering.
 - **Leave the flock with duties.** If the Queen travels too far, her subjects
   hold the home pond instead of wandering off: adults post near nests, ducklings
   huddle close, and nearby food still gets foraged.
@@ -179,12 +180,12 @@ store instead of local storage without touching the game itself.
 
 ## World seed
 
-The world (scenery, pond, food, reeds, flock, geese) is generated from a single
-seed, so the **same seed always produces the same layout**. Your save remembers its
-own seed, so a reload restores the same world. Add `?seed=123` to the URL to explore
-a different one — an explicit `?seed=` **starts a fresh game in that world** and
-ignores your save (handy for poking at layouts), while removing it again returns to
-your saved game.
+The world (scenery, pond, food, reeds, scattered mallard pairs, geese) is
+generated from a single seed, so the **same seed always produces the same
+layout**. Your save remembers its own seed, so a reload restores the same world.
+Add `?seed=123` to the URL to explore a different one — an explicit `?seed=`
+**starts a fresh game in that world** and ignores your save (handy for poking at
+layouts), while removing it again returns to your saved game.
 
 ## Your own sounds (optional)
 
@@ -220,7 +221,7 @@ src/
     duckModel.ts       # shared blocky-duck builder (Queen, ducklings, mallards)
     DuckSubject.ts     # a flock subject: wander / follow / forage / brood
     subjectKinds.ts    # the duckling / drake / hen kinds (look + voice)
-    Flock.ts           # spawns subjects, handles the quack rally
+    Flock.ts           # spawns mallard pairs, handles the quack rally
     gooseModel.ts      # blocky goose builder
     Goose.ts           # a rival goose: wander / forage / posture / flee / raid
     Geese.ts           # spawns geese, runs the honk-offs
