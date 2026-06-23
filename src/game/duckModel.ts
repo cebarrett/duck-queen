@@ -153,16 +153,9 @@ export const MALLARD_HEN: DuckModelOptions = {
   billColor: 0xcf9a4c, // dull orange bill
 }
 
-/** Mallard duckling: the classic two-tone fluffball — a warm yellow face and
- *  underside, a dark brown cap, the dark stripe through the eye, and a brown
- *  back and wings. Small and bright so the babies still read as "hers". */
-export const MALLARD_DUCKLING: DuckModelOptions = {
-  bodyColor: 0xf2d873, // warm yellow face + underside
-  capColor: 0x5a4327, // dark brown crown cap
-  eyeStripeColor: 0x3a2a17, // near-black brown stripe through the eye
-  backColor: 0x6f5734, // brown back + tail
-  wingColor: 0x6f5734, // brown wings
-  billColor: 0x4d4842, // dark duckling bill (not yet the adult's orange)
+/** Duckling: small and bright yellow so the babies read as "hers". */
+export const YELLOW_DUCKLING: DuckModelOptions = {
+  featherColor: 0xffe680,
 }
 
 // --- Per-individual appearance variation -----------------------------------
@@ -201,8 +194,7 @@ export function varyDuckAppearance(opts: DuckModelOptions, rng: Rng): DuckModelO
   if (opts.breastColor !== undefined) out.breastColor = jitterColor(opts.breastColor, rng, 0.025, 0.07, 0.07)
   if (opts.billColor !== undefined) out.billColor = jitterColor(opts.billColor, rng, 0.015, 0.05, 0.05)
   if (opts.neckRingColor !== undefined) out.neckRingColor = jitterColor(opts.neckRingColor, rng, 0, 0.02, 0.03)
-  // Mallard-duckling markings: vary the brown back/wings like body, and the dark
-  // cap/eye-stripe just a touch so each fluffball's pattern is a little its own.
+  // Optional markings: if a future kind uses them, keep their shades varied too.
   if (opts.wingColor !== undefined) out.wingColor = jitterColor(opts.wingColor, rng, 0.02, 0.07, 0.07)
   if (opts.backColor !== undefined) out.backColor = jitterColor(opts.backColor, rng, 0.02, 0.07, 0.07)
   if (opts.capColor !== undefined) out.capColor = jitterColor(opts.capColor, rng, 0.02, 0.05, 0.05)

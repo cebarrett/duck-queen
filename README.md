@@ -123,7 +123,7 @@ store instead of local storage without touching the game itself.
   marsh instead of clustered around the home pond. No two are quite alike: each
   duck is built a touch bigger or
   smaller, with its own subtly-shaded feathers (a greener or duller drake head, a
-  lighter or darker hen brown, and later a slightly different duckling pattern),
+  lighter or darker hen brown, and a slightly warmer or paler duckling yellow),
   so a gathered flock reads as a crowd of individuals. Their blocky bills open
   when they quack, peep, or call back.
   Lead them around, but don't stray too far or they get lost. You can lead **up
