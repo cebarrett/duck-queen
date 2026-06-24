@@ -96,6 +96,7 @@ export class Game {
   private readonly xrHud: XRHud
   private readonly settingsMenu = new SettingsMenu(() => { void this.resetGame() })
   private readonly rosterPanel = new RosterPanel()
+  private readonly world: World
   private readonly nests: Nests
   private readonly pond: Pond
   private readonly frontier: Frontier
@@ -152,25 +153,25 @@ export class Game {
     this.scene = new THREE.Scene()
     // World adds the ground, sky, fog, lights, and scenery to the scene, and
     // exposes the scenery's colliders so the duck can bump into them.
-    const world = new World(
+    this.world = new World(
       this.scene,
       deriveRng(seed, 'scenery'),
       deriveRng(seed, 'ponds'),
       deriveRng(seed, 'terrain'),
       this.wind,
     )
-    this.pond = world.pond
+    this.pond = this.world.pond
     // Ambient scenery that doesn't affect gameplay: drifting clouds, scattered
     // grass/flowers, and a few flitting critters. Each draws its placement from
     // its OWN seeded stream, so they can't shift the tree/pond/flock layouts.
     this.clouds = new Clouds(deriveRng(seed, 'clouds'))
     this.scene.add(this.clouds.group)
-    new Flora(this.scene, world.pond, this.wind, deriveRng(seed, 'flora'))
+    new Flora(this.scene, this.world.pond, this.wind, deriveRng(seed, 'flora'))
     this.critters = new Critters(deriveRng(seed, 'critters'))
     this.scene.add(this.critters.group)
     // The frontier: ownership state for the outlying ponds (Act III). Built from the
     // contestable ponds World generated; Geese spawns a lieutenant to hold each.
-    this.frontier = new Frontier(world.frontierPonds)
+    this.frontier = new Frontier(this.world.frontierPonds)
 
     // --- Camera -----------------------------------------------------------
     // PerspectiveCamera(fov, aspect, near, far):
@@ -195,20 +196,20 @@ export class Game {
     this.renderer.xr.addEventListener('sessionstart', this.onXRSessionStart)
     this.renderer.xr.addEventListener('sessionend', this.onXRSessionEnd)
     // Scatter edible plants for the flock to forage (land + pond).
-    this.food = new Food(this.scene, world.pond, deriveRng(seed, 'food'))
+    this.food = new Food(this.scene, this.world.pond, deriveRng(seed, 'food'))
     // Reeds grow on the shoreline — only the Queen gathers these.
-    this.reeds = new Reeds(this.scene, world.pond, deriveRng(seed, 'reeds'), this.wind)
+    this.reeds = new Reeds(this.scene, this.world.pond, deriveRng(seed, 'reeds'), this.wind)
     // Nests the Queen builds by spending reeds (they don't do anything yet).
     this.nests = new Nests(this.scene)
 
     // Splash effects live on the water surface; a splash plays a sound + ripple.
-    this.splashFx = new Splash(this.scene, world.pond.surfaceY)
+    this.splashFx = new Splash(this.scene, this.world.pond.surfaceY)
     this.duckController = new DuckController(
       this.duck,
       this.input,
       this.cameraRig,
-      world.colliders,
-      world.pond,
+      this.world.colliders,
+      this.world.pond,
       this.reeds,
       this.food,
       (x, z, strength) => {
@@ -224,10 +225,10 @@ export class Game {
       this.input,
       this.duck.group,
       this.sound,
-      world.pond,
+      this.world.pond,
       this.food,
       this.nests,
-      world.colliders,
+      this.world.colliders,
       (text) => this.showMessage(text),
       (duration) => {
         this.duck.quack(duration)
@@ -245,7 +246,7 @@ export class Game {
       this.scene,
       this.sound,
       this.food,
-      world.pond,
+      this.world.pond,
       this.nests,
       this.input,
       this.duck.group,
@@ -259,7 +260,7 @@ export class Game {
       () => this.resolvePenalty(),
       this.frontier,
       this.progress,
-      world.colliders,
+      this.world.colliders,
       deriveRng(seed, 'geese'),
       deriveRng(seed, 'frontier'),
     )
@@ -269,7 +270,7 @@ export class Game {
     // and speak with him: an ancient witness who advises her on the past and the war
     // to come. His spawn spot comes from the seeded rng so the world stays
     // deterministic; he takes the Queen's Group so he can turn to face her mid-talk.
-    this.swan = new Swan(world.pond, this.duck.group, deriveRng(seed, 'swan'))
+    this.swan = new Swan(this.world.pond, this.duck.group, deriveRng(seed, 'swan'))
     this.scene.add(this.swan.group)
 
     // Keep the camera/canvas correct when the window resizes.
@@ -406,6 +407,7 @@ export class Game {
     this.food.update(delta) // foraged/stolen plants slowly grow back
     this.pond.update(delta)
     this.splashFx.update(delta)
+    this.world.update(delta) // cosmetic day/night lighting and sky
     this.wind.update(delta) // sway the trees, reeds, grass and flora
     this.clouds.update(delta) // drift the clouds across the sky
     this.critters.update(delta) // flutter the butterflies and dragonflies

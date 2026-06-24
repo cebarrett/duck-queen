@@ -10,11 +10,27 @@ import { Wind } from './Wind'
 // hemisphere light can all share the same palette (keeps everything cohesive).
 const SKY_COLOR = 0x8ec9ff
 const GROUND_COLOR = 0x88bb55
+const DAY_SECONDS = 180
+const NIGHT_SECONDS = 180
+const FULL_DAY_SECONDS = DAY_SECONDS + NIGHT_SECONDS
+const CELESTIAL_DISTANCE = 120
+
+interface SkyTexture {
+  texture: THREE.CanvasTexture
+  paint: (palette: SkyPalette) => void
+}
+
+interface SkyPalette {
+  top: THREE.ColorRepresentation
+  horizon: THREE.ColorRepresentation
+  lower: THREE.ColorRepresentation
+  fog: THREE.ColorRepresentation
+}
 
 /**
- * World builds the static environment: the ground, the sky/background, fog,
- * and the lights. It doesn't animate anything, so it has no update() — it just
- * adds its objects to the Scene it's handed in the constructor.
+ * World builds the environment: the ground, the sky/background, fog, lights,
+ * water, scenery, and the cosmetic day/night clock. World generation still
+ * happens once from seeded RNG streams; update() only animates visual state.
  */
 export class World {
   // Filled in by addScenery(); the DuckController reads this to block movement.
@@ -28,9 +44,27 @@ export class World {
   // here (with each disc's tint handle) as they're generated, for the Frontier.
   readonly frontierPonds: FrontierPond[] = []
 
+  private readonly skyTexture: SkyTexture
+  private readonly scene: THREE.Scene
+  private readonly hemi: THREE.HemisphereLight
+  private readonly sun: THREE.DirectionalLight
+  private readonly moon: THREE.DirectionalLight
+  private readonly sunBlock: THREE.Sprite
+  private readonly moonBlock: THREE.Sprite
+  private readonly fogColor = new THREE.Color(SKY_COLOR)
+  private timeOfDay = DAY_SECONDS * 0.25 // begin in a bright, welcoming morning
+
   constructor(scene: THREE.Scene, rng: Rng, pondRng: Rng, terrainRng: Rng, private readonly wind: Wind) {
+    this.scene = scene
+    this.skyTexture = makeSkyGradient()
     this.addSky(scene)
-    this.addLights(scene)
+    const lights = this.addLights(scene)
+    this.hemi = lights.hemi
+    this.sun = lights.sun
+    this.moon = lights.moon
+    const celestials = this.addCelestials(scene)
+    this.sunBlock = celestials.sun
+    this.moonBlock = celestials.moon
     this.addGround(scene, terrainRng)
     // Scatter the extra ponds BEFORE the scenery so trees/rocks avoid them too.
     this.addTreatyFlatsWater()
@@ -38,6 +72,39 @@ export class World {
     scene.add(this.pond.mesh)
     this.addTreatyFlatsDressing(scene, rng)
     this.addScenery(scene, rng)
+    this.update(0)
+  }
+
+  /** Day and night each last about three minutes. For now this is cosmetic: it
+   *  tints the sky/fog and changes light levels without moving any gameplay
+   *  state or world-generation placement. Keeping the clock here gives later
+   *  gameplay systems one world-time source to read from. */
+  update(delta: number): void {
+    this.timeOfDay = (this.timeOfDay + delta) % FULL_DAY_SECONDS
+    const phase = this.timeOfDay / FULL_DAY_SECONDS
+    const sunWave = Math.sin(phase * Math.PI * 2)
+    const sunHeight = THREE.MathUtils.clamp(sunWave, 0, 1)
+    const moonHeight = THREE.MathUtils.clamp(-sunWave, 0, 1)
+    const twilight = 1 - smoothBand(Math.abs(sunWave), 0.03, 0.35)
+    const day = smoothBand(sunHeight, 0.02, 0.45)
+    const night = smoothBand(moonHeight, 0.02, 0.45)
+
+    const palette = this.makePalette(day, twilight, night)
+    this.skyTexture.paint(palette)
+
+    this.fogColor.set(palette.fog)
+    if (this.sceneFog) this.sceneFog.color.copy(this.fogColor)
+    if (this.scene.background instanceof THREE.Color) this.scene.background.copy(this.fogColor)
+
+    this.hemi.color.copy(new THREE.Color(0x5d7ec8).lerp(new THREE.Color(SKY_COLOR), day))
+    this.hemi.groundColor.copy(new THREE.Color(0x334c3f).lerp(new THREE.Color(GROUND_COLOR), day))
+    this.hemi.intensity = THREE.MathUtils.lerp(0.42, 1.0, day) + twilight * 0.08
+
+    this.sun.intensity = THREE.MathUtils.lerp(0.08, 2.05, day)
+    this.sun.color.copy(new THREE.Color(0xff9a5e).lerp(new THREE.Color(0xfff4e0), Math.max(day, 0.15)))
+    this.moon.intensity = THREE.MathUtils.lerp(0.18, 0.72, night)
+
+    this.positionCelestials(phase)
   }
 
   /** The Treaty Flats are visible from the beginning, but their boss remains
@@ -78,6 +145,10 @@ export class World {
     }
   }
 
+  private get sceneFog(): THREE.Fog | null {
+    return this.scene.fog instanceof THREE.Fog ? this.scene.fog : null
+  }
+
   private addSky(scene: THREE.Scene): void {
     // A flat fallback colour behind everything (seen only if the dome below ever
     // fails to draw).
@@ -98,7 +169,7 @@ export class World {
     const sky = new THREE.Mesh(
       new THREE.SphereGeometry(500, 32, 16),
       new THREE.MeshBasicMaterial({
-        map: makeSkyGradient(),
+        map: this.skyTexture.texture,
         side: THREE.BackSide,
         fog: false,
         depthWrite: false,
@@ -109,7 +180,11 @@ export class World {
     scene.add(sky)
   }
 
-  private addLights(scene: THREE.Scene): void {
+  private addLights(scene: THREE.Scene): {
+    hemi: THREE.HemisphereLight
+    sun: THREE.DirectionalLight
+    moon: THREE.DirectionalLight
+  } {
     // HemisphereLight = soft, directionless ambient light: sky colour from
     // above, ground colour bounced from below. It fills shadows so nothing is
     // pure black, but it's too flat on its own to show an object's shape.
@@ -131,6 +206,69 @@ export class World {
     sun.shadow.camera.top = 70
     sun.shadow.camera.bottom = -70
     scene.add(sun)
+
+    const moon = new THREE.DirectionalLight(0x9fb8ff, 0.25)
+    moon.position.set(-8, 15, -6)
+    scene.add(moon)
+
+    return { hemi, sun, moon }
+  }
+
+  private addCelestials(scene: THREE.Scene): { sun: THREE.Sprite; moon: THREE.Sprite } {
+    const sun = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: makeSunTexture(),
+      transparent: true,
+      fog: false,
+      depthWrite: false,
+      toneMapped: false,
+    }))
+    sun.scale.set(9, 9, 1)
+
+    const moon = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: makeMoonTexture(),
+      transparent: true,
+      fog: false,
+      depthWrite: false,
+      toneMapped: false,
+    }))
+    moon.scale.set(7, 7, 1)
+
+    for (const body of [sun, moon]) {
+      body.renderOrder = -0.5
+      body.frustumCulled = false
+      scene.add(body)
+    }
+    return { sun, moon }
+  }
+
+  private positionCelestials(phase: number): void {
+    const angle = phase * Math.PI * 2
+    const x = Math.cos(angle) * CELESTIAL_DISTANCE
+    const y = Math.sin(angle) * CELESTIAL_DISTANCE
+    const z = 16
+    this.sun.position.set(x, y, z)
+    this.moon.position.set(-x, -y, -z)
+    this.sunBlock.position.copy(this.sun.position)
+    this.moonBlock.position.copy(this.moon.position)
+    this.sunBlock.visible = y > -8
+    this.moonBlock.visible = -y > -8
+  }
+
+  private makePalette(day: number, twilight: number, night: number): SkyPalette {
+    const top = new THREE.Color(0x18284d).lerp(new THREE.Color(0x3f86dd), day).lerp(new THREE.Color(0x6c5aa0), twilight * 0.45)
+    const horizon = new THREE.Color(0x28405f).lerp(new THREE.Color(SKY_COLOR), day).lerp(new THREE.Color(0xff9f73), twilight * 0.42)
+    const lower = new THREE.Color(0x415a72).lerp(new THREE.Color(0xc4e2ff), day).lerp(new THREE.Color(0xf7c184), twilight * 0.35)
+    const fog = new THREE.Color(0x31445a).lerp(new THREE.Color(SKY_COLOR), day).lerp(new THREE.Color(0xd89172), twilight * 0.28)
+    if (night > 0.65) {
+      horizon.lerp(new THREE.Color(0x354d76), (night - 0.65) / 0.35)
+      fog.lerp(new THREE.Color(0x394b63), (night - 0.65) / 0.35)
+    }
+    return {
+      top: top.getHex(),
+      horizon: horizon.getHex(),
+      lower: lower.getHex(),
+      fog: fog.getHex(),
+    }
   }
 
   private addGround(scene: THREE.Scene, terrainRng: Rng): void {
@@ -310,22 +448,77 @@ export class World {
 }
 
 /** Paint a vertical gradient onto a tiny canvas and hand it back as a texture for
- *  the sky dome: deep blue overhead (canvas top → dome top) easing through the
- *  fog colour at the horizon (canvas middle → dome equator) to a pale band below. */
-function makeSkyGradient(): THREE.CanvasTexture {
+ *  the sky dome: overhead colour (canvas top -> dome top) easing through the
+ *  fog colour at the horizon (canvas middle -> dome equator) to a pale band below. */
+function makeSkyGradient(): SkyTexture {
   const canvas = document.createElement('canvas')
   canvas.width = 2
   canvas.height = 256
   const ctx = canvas.getContext('2d')!
-  const grad = ctx.createLinearGradient(0, 0, 0, 256)
-  grad.addColorStop(0.0, '#3f86dd') // straight overhead — deeper blue
-  grad.addColorStop(0.5, '#8ec9ff') // the horizon band — matches the fog colour
-  grad.addColorStop(0.62, '#c4e2ff') // just below the horizon — pale (mostly hidden by the ground)
-  grad.addColorStop(1.0, '#e8f3ff')
-  ctx.fillStyle = grad
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
   const tex = new THREE.CanvasTexture(canvas)
   tex.colorSpace = THREE.SRGBColorSpace
+  const paint = (palette: SkyPalette): void => {
+    const grad = ctx.createLinearGradient(0, 0, 0, 256)
+    grad.addColorStop(0.0, colorCss(palette.top))
+    grad.addColorStop(0.5, colorCss(palette.horizon))
+    grad.addColorStop(0.62, colorCss(palette.lower))
+    grad.addColorStop(1.0, colorCss(palette.lower))
+    ctx.fillStyle = grad
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    tex.needsUpdate = true
+  }
+  paint({
+    top: 0x3f86dd,
+    horizon: SKY_COLOR,
+    lower: 0xc4e2ff,
+    fog: SKY_COLOR,
+  })
+  return { texture: tex, paint }
+}
+
+function smoothBand(value: number, low: number, high: number): number {
+  return THREE.MathUtils.smoothstep(value, low, high)
+}
+
+function colorCss(color: THREE.ColorRepresentation): string {
+  return `#${new THREE.Color(color).getHexString()}`
+}
+
+function makeSunTexture(): THREE.CanvasTexture {
+  return makePixelTexture((ctx) => {
+    ctx.fillStyle = '#ffdf55'
+    ctx.fillRect(2, 2, 12, 12)
+    ctx.fillStyle = '#ffe978'
+    ctx.fillRect(5, 5, 6, 6)
+  })
+}
+
+function makeMoonTexture(): THREE.CanvasTexture {
+  return makePixelTexture((ctx) => {
+    ctx.fillStyle = '#d8e2ff'
+    ctx.fillRect(3, 3, 10, 10)
+    ctx.fillRect(2, 5, 12, 6)
+    ctx.globalCompositeOperation = 'destination-out'
+    ctx.fillRect(8, 3, 5, 10)
+    ctx.fillRect(7, 5, 7, 6)
+    ctx.globalCompositeOperation = 'source-over'
+    ctx.fillStyle = '#eef3ff'
+    ctx.fillRect(4, 4, 3, 3)
+  })
+}
+
+function makePixelTexture(draw: (ctx: CanvasRenderingContext2D) => void): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas')
+  canvas.width = 16
+  canvas.height = 16
+  const ctx = canvas.getContext('2d')!
+  ctx.imageSmoothingEnabled = false
+  draw(ctx)
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  tex.magFilter = THREE.NearestFilter
+  tex.minFilter = THREE.NearestFilter
+  tex.needsUpdate = true
   return tex
 }
 
