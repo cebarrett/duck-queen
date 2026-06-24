@@ -68,6 +68,12 @@ export interface FrontierSlice {
   statuses: ('enemy' | 'claimed')[]
 }
 
+/** World-level state that is not part of deterministic generation. */
+export interface WorldSlice {
+  /** Seconds into the cosmetic day/night cycle. Optional in old v1 saves. */
+  timeOfDay?: number
+}
+
 /** The campaign flags. Structurally the Progress interface, but kept distinct so the
  *  save format is free to diverge from gameplay later. */
 export interface ProgressSlice {
@@ -95,6 +101,8 @@ export interface SaveData {
   reeds: PatchSlice
   flock: { subjects: SubjectSlice[] }
   nests: NestsSlice
+  /** Cosmetic world state, distinct from deterministic seed-generated layout. */
+  world?: WorldSlice
   /** Frontier territory ownership, indexed in Frontier.list order. */
   frontier: FrontierSlice
   progress: ProgressSlice

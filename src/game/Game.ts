@@ -327,6 +327,7 @@ export class Game {
       reeds: this.reeds.toSave(),
       flock: this.flock.toSave((nest) => this.nests.indexOf(nest)),
       nests: this.nests.toSave(),
+      world: this.world.toSave(),
       frontier: this.frontier.toSave(),
       progress: { ...this.progress },
       rewardedQuests: [...this.rewardedQuests],
@@ -345,6 +346,7 @@ export class Game {
 
     this.nests.restore(save.nests)
     this.flock.restore(save.flock, (i) => (i === null ? null : this.nests.all[i] ?? null))
+    this.world.restore(save.world)
 
     this.frontier.restore(save.frontier)
     this.geese.restore()

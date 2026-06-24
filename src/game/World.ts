@@ -5,6 +5,7 @@ import type { Rng } from './rng'
 import type { Collider } from './collision'
 import { TREATY_FLATS } from './Biomes'
 import { Wind } from './Wind'
+import type { WorldSlice } from './persistence/saveSchema'
 
 // A calm sky blue and a grassy green. Defined once so the sky, the fog, and the
 // hemisphere light can all share the same palette (keeps everything cohesive).
@@ -80,7 +81,21 @@ export class World {
    *  state or world-generation placement. Keeping the clock here gives later
    *  gameplay systems one world-time source to read from. */
   update(delta: number): void {
-    this.timeOfDay = (this.timeOfDay + delta) % FULL_DAY_SECONDS
+    this.timeOfDay = normalizeTimeOfDay(this.timeOfDay + delta)
+    this.paintTimeOfDay()
+  }
+
+  toSave(): WorldSlice {
+    return { timeOfDay: this.timeOfDay }
+  }
+
+  restore(slice?: WorldSlice): void {
+    if (typeof slice?.timeOfDay !== 'number' || !Number.isFinite(slice.timeOfDay)) return
+    this.timeOfDay = normalizeTimeOfDay(slice.timeOfDay)
+    this.paintTimeOfDay()
+  }
+
+  private paintTimeOfDay(): void {
     const phase = this.timeOfDay / FULL_DAY_SECONDS
     const sunWave = Math.sin(phase * Math.PI * 2)
     const sunHeight = THREE.MathUtils.clamp(sunWave, 0, 1)
@@ -478,6 +493,10 @@ function makeSkyGradient(): SkyTexture {
 
 function smoothBand(value: number, low: number, high: number): number {
   return THREE.MathUtils.smoothstep(value, low, high)
+}
+
+function normalizeTimeOfDay(time: number): number {
+  return ((time % FULL_DAY_SECONDS) + FULL_DAY_SECONDS) % FULL_DAY_SECONDS
 }
 
 function colorCss(color: THREE.ColorRepresentation): string {
