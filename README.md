@@ -146,7 +146,8 @@ store instead of local storage without touching the game itself.
   Honk-offs are little chorus showdowns now: the Queen flaps and puffs, nearby
   subjects peep/quack back, and the goose gapes, pumps its wings, and wobbles
   indignantly. Win and one flees, cowed for a while; lose and the whole helping
-  chorus scatters while the goose struts back to stealing your food.
+  chorus scatters while the goose struts back to stealing your food. Boss-style
+  geese, once bested, fly off into the distance and leave the marsh for good.
 - **Build nests and brood.** Spend 10 reeds to **build a nest** (**B**), then
   **seat a hen** on it (**E**). She'll settle in and lay eggs over time. An egg
   hatches into a duckling only once you've foraged **5 food** to feed it — and
@@ -163,9 +164,10 @@ store instead of local storage without touching the game itself.
   gander**. Those lieutenants already patrol their ponds before Lord Boundary falls;
   trespass too close and they'll chase the Queen off, but the ponds can't be
   reclaimed until the Treaty Flats hold. After that, lead a strong flock out and
-  **out-honk** each one to flip its pond back to you — the water clears to blue, the
-  minimap recolours, and the HUD tracks your progress (🪶 Frontier). Reclaim them all
-  and the swan has something to say about what comes next.
+  **out-honk** each one to flip its pond back to you — the defeated lieutenant flies
+  off for good, the water clears to blue, the minimap recolours, and the HUD tracks
+  your progress (🪶 Frontier). Reclaim them all and the swan has something to say
+  about what comes next.
 
 - **Follow the quest log.** Press **J** (or click the 📜 **Quests** button in the
   bottom-left) to open the quest log. It opens with a short **beginner chain** that

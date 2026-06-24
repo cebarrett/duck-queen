@@ -91,6 +91,9 @@ const FLEE_NECK_LIFT = -0.2 // head up and away from the Queen
 const COWED_TIME = 12 // after being beaten: won't forage or raid for this long
 const ROUT_RECHALLENGE = 2 // ...but she can re-challenge it this soon — press the rout to herd it farther
 const ROUT_NEST_RANGE = RAID_RADIUS // if a nest is within this when it's beaten, it flees away from the NEST too
+const DEPART_SPEED = 14 // defeated leaders leave the map decisively
+const DEPART_DISTANCE = 170
+const DEPART_ALTITUDE = 26
 
 // --- The Marsh Baron (boss goose) ------------------------------------------
 const BARON_COLOR = 0x3c3f45 // charcoal — far darker than the pale gaggle
@@ -103,7 +106,7 @@ const TERRITORY_ALERT_MARGIN = 7
 const TERRITORY_GIVE_UP_MARGIN = 14
 
 type GooseMovement = 'ordinary' | 'rooted' | 'territorial'
-type GooseState = 'pausing' | 'wandering' | 'foraging' | 'fleeing' | 'raiding' | 'chasing'
+type GooseState = 'pausing' | 'wandering' | 'foraging' | 'fleeing' | 'departing' | 'raiding' | 'chasing'
 
 interface GooseTerritory {
   readonly x: number
@@ -182,6 +185,7 @@ export class Goose {
   private cooldown = 0 // seconds until it can be drawn into another honk-off
   private cowed = 0 // seconds it stays rattled after a defeat (won't forage)
   private bold = 0 // seconds of smug confidence after it wins a honk-off
+  private gone = false
 
   private supporting = false // backing up a nearby goose's fight (not the primary fighter)
   private supportAimX = 0
@@ -244,7 +248,12 @@ export class Goose {
   /** Can the Queen start a honk-off with it right now? (Not already posturing,
    *  not in the brief cooldown after the last one, and not backing up another fight.) */
   get engageable(): boolean {
-    return !this.posturing && !this.supporting && this.cooldown <= 0
+    return !this.gone && this.state !== 'departing' && !this.posturing && !this.supporting && this.cooldown <= 0
+  }
+
+  /** Has this goose permanently left the marsh? */
+  get isGone(): boolean {
+    return this.gone
   }
 
   /** A bold goose has just won a honk-off and is acting like it owns the pond. */
@@ -270,6 +279,59 @@ export class Goose {
   stopTerritoryPatrol(): void {
     this.territoryPatrolActive = false
     this.territoryGuardActive = false
+  }
+
+  /** Send a defeated story goose off the map for good. */
+  flyAwayForever(): void {
+    if (this.gone) return
+    this.posturing = false
+    this.supporting = false
+    this.targetFood = null
+    this.targetNest = null
+    this.territoryGuardActive = false
+    this.territoryPatrolActive = false
+    this.cooldown = Number.POSITIVE_INFINITY
+    this.cowed = Number.POSITIVE_INFINITY
+    this.bold = 0
+    this.idleAction = 'none'
+
+    const pos = this.group.position
+    let dx = pos.x - this.aimX
+    let dz = pos.z - this.aimZ
+    if (Math.hypot(dx, dz) < 0.01) {
+      dx = pos.x - this.homeX
+      dz = pos.z - this.homeZ
+    }
+    if (Math.hypot(dx, dz) < 0.01) {
+      dx = -Math.sin(this.heading)
+      dz = -Math.cos(this.heading)
+    }
+    const d = Math.hypot(dx, dz) || 1
+    dx /= d
+    dz /= d
+
+    this.fleeStartX = pos.x
+    this.fleeStartZ = pos.z
+    this.targetX = pos.x + dx * DEPART_DISTANCE
+    this.targetZ = pos.z + dz * DEPART_DISTANCE
+    this.fleeDistance = Math.max(1, Math.hypot(this.targetX - this.fleeStartX, this.targetZ - this.fleeStartZ))
+    this.state = 'departing'
+    this.group.visible = true
+  }
+
+  /** Used when restoring a save where this goose had already been driven off. */
+  disappearForever(): void {
+    this.gone = true
+    this.group.visible = false
+    this.posturing = false
+    this.supporting = false
+    this.velX = 0
+    this.velZ = 0
+    this.state = 'pausing'
+    this.targetFood = null
+    this.targetNest = null
+    this.territoryGuardActive = false
+    this.territoryPatrolActive = false
   }
 
   /** Helper for honk-off owners that want bold geese to start from farther away. */
@@ -302,6 +364,11 @@ export class Goose {
       // the nest; it stays cowed (no foraging / raiding) but can be re-challenged
       // after only a short beat, so she can chase it down and herd it even farther.
       this.honk(this.honkPitch * 0.8)
+      if (this.boss) {
+        this.flyAwayForever()
+        return
+      }
+
       const pos = this.group.position
       let dx = pos.x - this.aimX // away from the Queen's last position
       let dz = pos.z - this.aimZ
@@ -371,6 +438,8 @@ export class Goose {
   }
 
   update(delta: number): void {
+    if (this.gone) return
+
     // While posturing, the honk-off takes over completely.
     if (this.posturing) {
       this.updatePosture(delta)
@@ -391,20 +460,22 @@ export class Goose {
     if (this.cowed > 0) this.cowed -= delta
     if (this.bold > 0) this.bold -= delta
 
-    // An occasional honk (the Baron's deep menace, more often).
-    const honkRate = this.boss ? this.bossHonkRate : HONK_RATE
-    if (Math.random() < honkRate * delta) this.honk(this.honkPitch, 'ambient')
+    if (this.state !== 'departing') {
+      // An occasional honk (the Baron's deep menace, more often).
+      const honkRate = this.boss ? this.bossHonkRate : HONK_RATE
+      if (Math.random() < honkRate * delta) this.honk(this.honkPitch, 'ambient')
 
-    this.updateTerritoryAwareness()
+      this.updateTerritoryAwareness()
 
-    // While calmly milling about, pick a target: a brooding hen takes priority —
-    // if one's nest is in range the goose stalks straight over (this is what makes
-    // geese actively menace your nests) — otherwise it eyes your plants. The Baron
-    // does none of this: he holds his ground and waits.
-    if (this.movement === 'ordinary' && (this.state === 'wandering' || this.state === 'pausing')) {
-      if (!this.tryRaid()) {
-        const forageRate = this.isBold ? BOLD_FORAGE_RATE : FORAGE_RATE
-        if (Math.random() < forageRate * delta) this.tryForage()
+      // While calmly milling about, pick a target: a brooding hen takes priority —
+      // if one's nest is in range the goose stalks straight over (this is what makes
+      // geese actively menace your nests) — otherwise it eyes your plants. The Baron
+      // does none of this: he holds his ground and waits.
+      if (this.movement === 'ordinary' && (this.state === 'wandering' || this.state === 'pausing')) {
+        if (!this.tryRaid()) {
+          const forageRate = this.isBold ? BOLD_FORAGE_RATE : FORAGE_RATE
+          if (Math.random() < forageRate * delta) this.tryForage()
+        }
       }
     }
 
@@ -421,6 +492,9 @@ export class Goose {
       case 'fleeing':
         this.flee(delta)
         break
+      case 'departing':
+        this.depart(delta)
+        break
       case 'wandering':
         this.seekTarget(delta)
         break
@@ -430,6 +504,7 @@ export class Goose {
         if (this.movement !== 'rooted' && this.timer <= 0) this.pickNewTarget()
         break
     }
+    if (this.gone) return
 
     // Apply movement.
     const pos = this.group.position
@@ -439,7 +514,7 @@ export class Goose {
     // Push out of any tree/rock it walked into (stepUp 0 = it doesn't climb).
     // Routed geese are airborne, so they clear obstacles instead of shuffling
     // around them on the ground.
-    if (this.state !== 'fleeing') {
+    if (this.state !== 'fleeing' && this.state !== 'departing') {
       const vel = { x: this.velX, z: this.velZ }
       resolveWalls(pos, vel, this.collideRadius, 0, this.collideHeight, 0, this.colliders)
       this.velX = vel.x
@@ -458,7 +533,7 @@ export class Goose {
   private applyPose(delta: number, speed: number): void {
     const pos = this.group.position
 
-    if (this.state === 'fleeing') {
+    if (this.state === 'fleeing' || this.state === 'departing') {
       this.flyPose(delta)
       return
     }
@@ -525,7 +600,12 @@ export class Goose {
 
     const traveled = Math.hypot(pos.x - this.fleeStartX, pos.z - this.fleeStartZ)
     const progress = Math.min(1, traveled / this.fleeDistance)
-    pos.y = Math.sin(progress * Math.PI) * FLEE_ALTITUDE
+    if (this.state === 'departing') {
+      pos.y = FLEE_ALTITUDE + progress * DEPART_ALTITUDE
+      this.group.scale.setScalar(this.baseScale * Math.max(0.25, 1 - progress * 0.55))
+    } else {
+      pos.y = Math.sin(progress * Math.PI) * FLEE_ALTITUDE
+    }
     this.group.rotation.z = Math.sin(this.walkPhase * 0.45) * FLEE_BANK
     this.neck.rotation.set(FLEE_NECK_LIFT, 0, 0)
 
@@ -677,6 +757,16 @@ export class Goose {
       this.group.rotation.z = 0
       this.state = 'pausing'
       this.timer = randRange(PAUSE_MIN, PAUSE_MAX)
+      return
+    }
+    this.ease(s.vx, s.vz, delta)
+  }
+
+  /** Leave the marsh permanently, climbing into the distance until hidden. */
+  private depart(delta: number): void {
+    const s = seekArrive(this.group.position, this.targetX, this.targetZ, DEPART_SPEED, 0, ARRIVE_STOP)
+    if (s.arrived) {
+      this.disappearForever()
       return
     }
     this.ease(s.vx, s.vz, delta)

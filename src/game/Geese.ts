@@ -326,18 +326,22 @@ export class Geese {
   /**
    * Re-derive goose state from an already-restored save. Bosses need nothing — the
    * Baron/Boundary fights read progress.baronDefeated / treatyDefeated live, so
-   * restoring Progress handles them. Lieutenants do hold their own state, so for each
-   * pond the restored Frontier marks 'claimed' we mirror the win: stand the lieutenant
-   * down (claimed + stop patrolling). We also pre-set the unlock-announce flags from
+   * restoring Progress handles them. Defeated boss-style geese are hidden on restore
+   * because their in-game defeat animation ends with them leaving the marsh for good.
+   * Lieutenants do hold their own state, so for each pond the restored Frontier marks
+   * 'claimed' we mirror the win. We also pre-set the unlock-announce flags from
    * progress so a restored late-game player isn't re-toasted the act intros on reload.
    */
   restore(): void {
     this.treatyUnlockAnnounced = this.progress.baronDefeated
     this.frontierUnlockAnnounced = this.progress.treatyDefeated
+    if (this.progress.baronDefeated) this.baron.disappearForever()
+    if (this.progress.treatyDefeated) this.treatyBoss.disappearForever()
     for (const lt of this.lieutenants) {
       if (lt.territory.status === 'claimed') {
         lt.claimed = true
         lt.goose.stopTerritoryPatrol()
+        lt.goose.disappearForever()
       }
     }
   }
@@ -355,6 +359,24 @@ export class Geese {
   }
 
   get minimapEnemies(): EnemyMarker[] {
+    const bosses: EnemyMarker[] = []
+    if (!this.baron.isGone) {
+      bosses.push({
+        x: this.baron.group.position.x,
+        z: this.baron.group.position.z,
+        boss: true,
+        defeated: this.progress.baronDefeated,
+      })
+    }
+    if (!this.treatyBoss.isGone) {
+      bosses.push({
+        x: this.treatyBoss.group.position.x,
+        z: this.treatyBoss.group.position.z,
+        boss: true,
+        defeated: this.progress.treatyDefeated,
+      })
+    }
+
     return [
       ...this.geese.map((goose) => ({
         x: goose.group.position.x,
@@ -362,19 +384,8 @@ export class Geese {
         boss: false,
         defeated: false,
       })),
-      {
-        x: this.baron.group.position.x,
-        z: this.baron.group.position.z,
-        boss: true,
-        defeated: this.progress.baronDefeated,
-      },
-      {
-        x: this.treatyBoss.group.position.x,
-        z: this.treatyBoss.group.position.z,
-        boss: true,
-        defeated: this.progress.treatyDefeated,
-      },
-      ...this.lieutenants.map((lt) => ({
+      ...bosses,
+      ...this.lieutenants.filter((lt) => !lt.goose.isGone).map((lt) => ({
         x: lt.goose.group.position.x,
         z: lt.goose.group.position.z,
         boss: false,
