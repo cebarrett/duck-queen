@@ -572,7 +572,7 @@ export class DuckSubject {
       // On land, standing still: do daft duck things (stretch, flap, peck, gaze...).
       pos.y = 0
       this.group.rotation.z = 0
-      this.updateIdle(delta)
+      this.updateIdle(delta, this.state === 'pausing')
     }
 
     if (ctx.honkOffTarget && this.supportsChorus) {
@@ -962,8 +962,10 @@ export class DuckSubject {
   }
 
   /** Standing around being a daft duck: now and then pick a fidget — stretch, flap,
-   *  peck the ground, gaze at the sky, or look about — play it out, then wait. */
-  private updateIdle(delta: number): void {
+   *  peck the ground, gaze at the sky, preen, or look about — play it out, then wait. */
+  private updateIdle(delta: number, canPreen: boolean): void {
+    if (!canPreen && this.idleAction === 'preen') this.resetFidget()
+
     if (this.idleAction === 'none') {
       this.head.rotation.set(0, 0, 0) // neutral while waiting
       this.leftWing.rotation.z = 0
@@ -971,8 +973,9 @@ export class DuckSubject {
       this.nextIdle -= delta
       if (this.nextIdle <= 0) {
         const r = Math.random()
-        this.idleAction =
-          r < 0.25 ? 'peck' : r < 0.44 ? 'look' : r < 0.61 ? 'flap' : r < 0.74 ? 'skyGaze' : r < 0.88 ? 'preen' : 'stretch'
+        this.idleAction = canPreen
+          ? r < 0.25 ? 'peck' : r < 0.44 ? 'look' : r < 0.61 ? 'flap' : r < 0.74 ? 'skyGaze' : r < 0.88 ? 'preen' : 'stretch'
+          : r < 0.29 ? 'peck' : r < 0.51 ? 'look' : r < 0.71 ? 'flap' : r < 0.86 ? 'skyGaze' : 'stretch'
         if (this.idleAction === 'preen') this.idleSide = Math.random() < 0.5 ? -1 : 1
         this.idleTime = 0
         this.nextIdle = randRange(IDLE_GAP_MIN, IDLE_GAP_MAX)
