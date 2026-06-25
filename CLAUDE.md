@@ -4,13 +4,18 @@ A cozy, blocky 3D browser game (Three.js + TypeScript + Vite) where you play a d
 Queen: rally a flock, forage, swim, and have non-violent honk-offs with rival geese.
 See [README.md](README.md) for how to run and the controls.
 
+This file is the repo's agent guide; some tools refer to the same role as
+`AGENTS.md`. Keep this guidance aligned with the README when the project's
+developer-facing conventions or player-facing behavior change.
+
 ## Conventions
 
 ### World generation is deterministic
 Anything that **places objects in the world** — scenery (trees/rocks), the pond, food
-plants, reeds, ducklings, geese — must take its randomness from the **seeded RNG in
-[`src/game/rng.ts`](src/game/rng.ts)**, never from `Math.random()`. `Game` picks one
-world seed and hands each system its own derived stream (`deriveRng(seed, '<name>')`).
+plants, reeds, ambient critter starting positions, ducklings, geese, swans, frontier
+ponds — must take its randomness from the **seeded RNG in [`src/game/rng.ts`](src/game/rng.ts)**,
+never from `Math.random()`. `Game` picks one world seed and hands each system its own
+derived stream (`deriveRng(seed, '<name>')`).
 
 **The same seed must always produce the exact same world layout.** (You can try a
 specific one with `?seed=123` in the URL.) When adding anything that spawns or scatters
@@ -19,6 +24,12 @@ objects, thread a seeded `Rng` into it and draw positions/sizes from that.
 Randomness that drives *behaviour during play* — a duck deciding to wander, a goose
 honking, foraging choices, idle fidget timing — is gameplay, not generation, and may
 freely use `Math.random()`.
+
+### Input and HUD text stay together
+`src/game/Input.ts` is the source of truth for keyboard, mouse, and WebXR controller
+actions. When adding or changing a player action, update the matching HUD/XR prompt
+text and the controls table in `README.md` in the same change. Dialogue and quest copy
+that names a key (for example Aldermere's **F** talk prompt) should stay in sync too.
 
 ### World collision is shared
 Collision against the scenery lives in **[`src/game/collision.ts`](src/game/collision.ts)**
@@ -41,6 +52,8 @@ colliders)`. Two knobs shape the feel:
 - **Audio**: voiced sounds (quack/peep/honk) load an optional `public/<name>.mp3` and
   fall back to a synth, via the shared `Sample` loader in [`Sound.ts`](src/game/Sound.ts).
 - **Verify with `npx tsc --noEmit`** after changes (the dev server doesn't type-check).
+  Run `npm run test:run` as well when touching pure logic (`rng.ts`, `collision.ts`,
+  `mathUtils.ts`, `quests.ts`, resource save/restore, persistence, or traits).
 - **Update `README.md` when making substantial changes**: if a change affects setup,
   controls, gameplay, features, architecture, or other user-facing behavior, update the
   README in the same change.

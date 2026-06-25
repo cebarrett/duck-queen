@@ -67,6 +67,7 @@ are verified by eye in the browser, not by tests.
 | **Click** | Capture the mouse · **Esc** releases it |
 | **Space** | Take off / hold to fly up · release to glide back down |
 | **Q** | Quack — rally nearby ducks to follow you (and your weapon in a honk-off) |
+| **F** | Talk to Aldermere the swan / advance dialogue |
 | **B** | Build a nest (costs 10 reeds) |
 | **E** | Seat a hen on a nearby empty nest |
 | **R** | Rouse a brooding hen off a nearby nest (she rejoins the flock; eggs stay) |
@@ -209,18 +210,22 @@ src/
   style.css
   game/
     Game.ts            # the conductor: renderer, scene, camera, render loop, wiring
+    Biomes.ts          # named campaign regions such as the Treaty Flats
     World.ts           # ground, day/night sky, fog, lights, scenery (+ colliders)
     Water.ts           # the pond (+ shoreline foam)
     Wind.ts            # gentle breeze that sways trees, reeds, grass and flora
     Clouds.ts          # blocky clouds drifting across the sky
     Flora.ts           # scattered grass tufts and flowers on the land
     Critters.ts        # ambient butterflies and dragonflies
+    Frontier.ts        # ownership state for the goose-held outlying ponds
     collision.ts       # shared wall/floor collision (Queen, subjects, geese)
     rng.ts             # seeded RNG for deterministic world generation
+    mathUtils.ts       # shared steering helpers
     Duck.ts            # the player: the duck Queen
     DuckController.ts  # the Queen's movement & feel (waddle / fly / swim), collision
     ThirdPersonCamera.ts # desktop orbit camera + Quest WebXR third-person rig
     Input.ts           # semantic keyboard/mouse/WebXR controller input
+    modelUtils.ts      # shared box/material helpers for blocky models
     duckModel.ts       # shared blocky-duck builder (Queen, ducklings, mallards)
     DuckSubject.ts     # a flock subject: wander / follow / forage / brood
     subjectKinds.ts    # the duckling / drake / hen kinds (look + voice)
@@ -228,18 +233,23 @@ src/
     gooseModel.ts      # blocky goose builder
     Goose.ts           # a rival goose: wander / forage / posture / flee / raid
     Geese.ts           # spawns geese, runs the honk-offs
+    Standoff.ts        # shared honk-off resolve meter and win/lose mechanics
     ResourcePatch.ts   # base for gatherable patches (Food, Reeds)
     Food.ts            # food plants the flock forages
     Reeds.ts           # shoreline reeds (the Queen only)
     nestModel.ts       # blocky nest builder
     Nests.ts           # nests the Queen builds; hens brood, geese raid
+    Progress.ts        # latched campaign/tutorial flags
+    quests.ts          # pure quest-log projection and rewards
+    Swan.ts            # Aldermere's movement and dialogue state machine
+    swanDialogue.ts    # Aldermere's story text
+    swanModel.ts       # blocky swan builder
     Sound.ts           # SFX (recorded files or synthesized)
     Splash.ts          # water ripple effect
     HUD.ts             # on-screen status (mode, flock, resources, nests)
     XRHud.ts           # in-headset canvas HUD/panels for WebXR
     RosterPanel.ts     # 🪶 royal flock roster window (named drake/hen/duckling subjects)
     SettingsMenu.ts    # ⚙️ corner menu (reset game progress)
-    mathUtils.ts       # shared steering helpers
     persistence/       # save/load: swappable storage backend + autosave
       saveSchema.ts        # the versioned save shape (plain data)
       StorageBackend.ts    # the swappable storage interface (local today, cloud later)
