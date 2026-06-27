@@ -107,9 +107,9 @@ the page to start fresh.
 
 Your progress is **saved automatically** to the browser's local storage, so your
 flock, foraged food and reeds, built nests (and the eggs in them), reclaimed
-frontier ponds, defeated bosses, and quest rewards all survive a page reload —
-the world picks up right where you left it. The game autosaves every so often and
-again whenever you leave or hide the tab.
+frontier ponds, defeated bosses, quest rewards, and the current time of day all
+survive a page reload — the world picks up right where you left it. The game
+autosaves every so often and again whenever you leave or hide the tab.
 
 To start over, use **⚙️ Settings → Reset game progress**, which clears the save and
 reloads into a brand-new game.

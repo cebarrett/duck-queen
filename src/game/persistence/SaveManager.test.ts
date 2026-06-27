@@ -26,6 +26,7 @@ function validSave(): SaveData {
     seed: 123,
     savedAt: 0,
     queen: { x: 1, z: 2, heading: 0.5 },
+    world: { timeOfDay: 270 },
     food: { total: 3, gathered: 3, items: [] },
     reeds: { total: 1, gathered: 0, items: [] },
     flock: { subjects: [] },
@@ -74,6 +75,7 @@ describe('SaveManager.load', () => {
     const loaded = await mgr.load()
     expect(loaded).not.toBeNull()
     expect(loaded!.seed).toBe(123)
+    expect(loaded!.world?.timeOfDay).toBe(270)
     expect(loaded!.progress.foragedFood).toBe(true)
     expect(loaded!.rewardedQuests).toEqual(['Forage'])
   })

@@ -323,6 +323,7 @@ export class Game {
       seed: this.seed,
       savedAt: Date.now(),
       queen: { x: q.x, z: q.z, heading: this.duck.group.rotation.y },
+      world: this.world.toSave(),
       food: this.food.toSave(),
       reeds: this.reeds.toSave(),
       flock: this.flock.toSave((nest) => this.nests.indexOf(nest)),
@@ -339,6 +340,7 @@ export class Game {
   private restore(save: SaveData): void {
     this.duck.group.position.set(save.queen.x, 0, save.queen.z) // y recomputes each frame
     this.duck.group.rotation.y = save.queen.heading
+    if (save.world) this.world.restore(save.world)
 
     this.food.restore(save.food)
     this.reeds.restore(save.reeds)

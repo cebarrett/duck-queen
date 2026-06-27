@@ -5,6 +5,7 @@ import type { Rng } from './rng'
 import type { Collider } from './collision'
 import { TREATY_FLATS } from './Biomes'
 import { Wind } from './Wind'
+import type { WorldSlice } from './persistence/saveSchema'
 
 // A calm sky blue and a grassy green. Defined once so the sky, the fog, and the
 // hemisphere light can all share the same palette (keeps everything cohesive).
@@ -105,6 +106,15 @@ export class World {
     this.moon.intensity = THREE.MathUtils.lerp(0.18, 0.72, night)
 
     this.positionCelestials(phase)
+  }
+
+  toSave(): WorldSlice {
+    return { timeOfDay: this.timeOfDay }
+  }
+
+  restore(slice: WorldSlice): void {
+    this.timeOfDay = normalizeTimeOfDay(slice.timeOfDay)
+    this.update(0)
   }
 
   /** The Treaty Flats are visible from the beginning, but their boss remains
@@ -478,6 +488,11 @@ function makeSkyGradient(): SkyTexture {
 
 function smoothBand(value: number, low: number, high: number): number {
   return THREE.MathUtils.smoothstep(value, low, high)
+}
+
+function normalizeTimeOfDay(value: number): number {
+  if (!Number.isFinite(value)) return DAY_SECONDS * 0.25
+  return ((value % FULL_DAY_SECONDS) + FULL_DAY_SECONDS) % FULL_DAY_SECONDS
 }
 
 function colorCss(color: THREE.ColorRepresentation): string {

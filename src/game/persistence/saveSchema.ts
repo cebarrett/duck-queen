@@ -68,6 +68,12 @@ export interface FrontierSlice {
   statuses: ('enemy' | 'claimed')[]
 }
 
+/** World-level visual state. World layout still comes entirely from the seed, but
+ *  the day/night clock is live session state that should survive reloads. */
+export interface WorldSlice {
+  timeOfDay: number
+}
+
 /** The campaign flags. Structurally the Progress interface, but kept distinct so the
  *  save format is free to diverge from gameplay later. */
 export interface ProgressSlice {
@@ -91,6 +97,8 @@ export interface SaveData {
   seed: number
   savedAt: number
   queen: { x: number; z: number; heading: number }
+  /** Optional so saves from before the world clock persisted still load. */
+  world?: WorldSlice
   food: PatchSlice
   reeds: PatchSlice
   flock: { subjects: SubjectSlice[] }
