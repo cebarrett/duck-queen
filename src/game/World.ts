@@ -4,6 +4,7 @@ import type { FrontierPond } from './Frontier'
 import type { Rng } from './rng'
 import type { Collider } from './collision'
 import { TREATY_FLATS } from './Biomes'
+import type { Terrain } from './terrain'
 import { Wind } from './Wind'
 import type { WorldSlice } from './persistence/saveSchema'
 
@@ -55,7 +56,14 @@ export class World {
   private readonly fogColor = new THREE.Color(SKY_COLOR)
   private timeOfDay = DAY_SECONDS * 0.25 // begin in a bright, welcoming morning
 
-  constructor(scene: THREE.Scene, rng: Rng, pondRng: Rng, terrainRng: Rng, private readonly wind: Wind) {
+  constructor(
+    scene: THREE.Scene,
+    rng: Rng,
+    pondRng: Rng,
+    private readonly terrain: Terrain,
+    tintRng: Rng,
+    private readonly wind: Wind,
+  ) {
     this.scene = scene
     this.skyTexture = makeSkyGradient()
     this.addSky(scene)
@@ -66,14 +74,29 @@ export class World {
     const celestials = this.addCelestials(scene)
     this.sunBlock = celestials.sun
     this.moonBlock = celestials.moon
-    this.addGround(scene, terrainRng)
-    // Scatter the extra ponds BEFORE the scenery so trees/rocks avoid them too.
+    // Lay out the water FIRST: ponds (and the spawn clearing + Treaty arena) are
+    // the regions that must stay level, so register them as flat zones before the
+    // hills are raised under everything else.
     this.addTreatyFlatsWater()
     this.addExtraPonds(pondRng)
     scene.add(this.pond.mesh)
+    this.registerFlatZones()
+    this.addGround(scene, tintRng)
     this.addTreatyFlatsDressing(scene, rng)
     this.addScenery(scene, rng)
     this.update(0)
+  }
+
+  /** Keep the playable, water-bearing and arena areas level so the flat water
+   *  discs aren't swallowed by a hill and the spawn clearing stays a calm, even
+   *  start. Everywhere else the terrain rolls. */
+  private registerFlatZones(): void {
+    // The spawn clearing, easing into the hills over a comfortable margin.
+    this.terrain.flatten(0, 0, 10, 16)
+    // Every pond — flat out a little past each shoreline so the bank rises gently.
+    for (const c of this.pond.patches) this.terrain.flatten(c.x, c.z, c.radius + 3, 6)
+    // The Treaty Flats live up to their name: a level arena for the boss.
+    this.terrain.flatten(TREATY_FLATS.x, TREATY_FLATS.z, TREATY_FLATS.radius, 8)
   }
 
   /** Day and night each last about three minutes. For now this is cosmetic: it
@@ -281,18 +304,17 @@ export class World {
     }
   }
 
-  private addGround(scene: THREE.Scene, terrainRng: Rng): void {
+  private addGround(scene: THREE.Scene, tintRng: Rng): void {
     // A plane is created lying in the X/Y plane (facing the camera). We rotate
     // it -90° around X so it lies flat in X/Z with "up" (+Y) as its normal —
-    // i.e. a floor. Math.PI/2 radians = 90°. We subdivide it (60×60) so we have
-    // vertices to tint.
-    const geometry = new THREE.PlaneGeometry(300, 300, 60, 60)
-    // Mottle the floor with smooth patches of slightly varied greens via vertex
-    // colours, so it reads as gentle terrain instead of one flat wash. The plane
-    // stays perfectly FLAT (no height displacement), so collision/floorHeightAt
-    // are untouched. Tints come from the seeded 'terrain' stream, so the mottling
-    // is identical for a given seed.
-    applyGroundTint(geometry, terrainRng)
+    // i.e. a floor. Math.PI/2 radians = 90°. We subdivide it finely (120×120 over
+    // 300 units → ~2.5u spacing) so the rolling hills displace smoothly.
+    const geometry = new THREE.PlaneGeometry(300, 300, 120, 120)
+    // Raise the floor into gentle hills from the seeded terrain, then mottle it
+    // with smooth patches of varied greens via vertex colours so it reads as land,
+    // not one flat wash. Both are deterministic per seed.
+    displaceToTerrain(geometry, this.terrain)
+    applyGroundTint(geometry, tintRng)
     // MeshStandardMaterial is a physically-based material: it RESPONDS to light
     // (unlike the cube's old MeshNormalMaterial). With no lights it'd be black —
     // that's the classic "why is everything black?" beginner footgun, which is
@@ -418,14 +440,19 @@ export class World {
       // Don't grow trees/rocks in the pond.
       if (this.pond.isWater(x, z)) continue
 
+      // Sit each piece on the hill under it: its base starts at the terrain
+      // height, and its colliders' y-ranges shift up with it so collision still
+      // lines up with where it's actually drawn.
+      const base = this.terrain.heightAt(x, z)
+
       if (rng() < 0.7) {
         // Tree = a trunk box with a leafy box on top; sizes varied a little so
         // they're not all identical.
         const trunkH = 2.5 + rng() * 3.5
         const leaf = 2 + rng() * 1.8
-        const leafCenterY = trunkH + leaf * 0.35
+        const leafCenterY = base + trunkH + leaf * 0.35
         const leafMat = leafMats[Math.abs(Math.round(x * 7.3 + z * 11.7)) % leafMats.length]
-        const trunk = boxMesh(trunkMat, 0.6, trunkH, 0.6, x, trunkH / 2, z)
+        const trunk = boxMesh(trunkMat, 0.6, trunkH, 0.6, x, base + trunkH / 2, z)
         trunk.castShadow = true
         trunk.receiveShadow = true
         scene.add(trunk)
@@ -436,7 +463,7 @@ export class World {
 
         // Two colliders: a thin trunk (so you can walk right up to it) and the
         // wider canopy up at leaf height (so you bonk it only while flying through).
-        this.colliders.push({ x, z, radius: 0.4, yMin: 0, yMax: trunkH })
+        this.colliders.push({ x, z, radius: 0.4, yMin: base, yMax: base + trunkH })
         this.colliders.push({
           x,
           z,
@@ -447,11 +474,11 @@ export class World {
       } else {
         // Rock = a squat block sitting low to the ground.
         const s = 1 + rng() * 2
-        const rock = boxMesh(rockMat, s, s * 0.7, s, x, s * 0.25, z)
+        const rock = boxMesh(rockMat, s, s * 0.7, s, x, base + s * 0.25, z)
         rock.castShadow = true
         rock.receiveShadow = true
         scene.add(rock)
-        this.colliders.push({ x, z, radius: s * 0.5, yMin: 0, yMax: s * 0.6 })
+        this.colliders.push({ x, z, radius: s * 0.5, yMin: base, yMax: base + s * 0.6 })
       }
     }
   }
@@ -535,6 +562,21 @@ function makePixelTexture(draw: (ctx: CanvasRenderingContext2D) => void): THREE.
   tex.minFilter = THREE.NearestFilter
   tex.needsUpdate = true
   return tex
+}
+
+/** Raise a (flat, X/Y) ground plane into the terrain's hills by pushing each
+ *  vertex out along its local +Z — which becomes world +Y (height) once the mesh
+ *  is rotated flat. The plane lies in X/Y, and rotating it -90° about X maps a
+ *  local vertex (x, y) to world (x, height, -y); so the world spot under it is
+ *  (x, -y), and that's where we sample the terrain. Normals are recomputed so the
+ *  hillsides catch the light. */
+function displaceToTerrain(geometry: THREE.PlaneGeometry, terrain: Terrain): void {
+  const pos = geometry.attributes.position
+  for (let v = 0; v < pos.count; v++) {
+    pos.setZ(v, terrain.heightAt(pos.getX(v), -pos.getY(v)))
+  }
+  pos.needsUpdate = true
+  geometry.computeVertexNormals()
 }
 
 /** Tint a (flat) ground plane's vertices with smooth patches of varied greens.

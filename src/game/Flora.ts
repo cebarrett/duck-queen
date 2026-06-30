@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { box } from './modelUtils'
 import type { Pond } from './Water'
+import type { Terrain } from './terrain'
 import type { Rng } from './rng'
 import { Wind } from './Wind'
 import { TREATY_FLATS } from './Biomes'
@@ -24,7 +25,7 @@ const FLOWER_STEM = 0x5a7d33
  * pond, the spawn circle, and the Treaty Flats so those stay legible.
  */
 export class Flora {
-  constructor(scene: THREE.Scene, pond: Pond, wind: Wind, rng: Rng) {
+  constructor(scene: THREE.Scene, pond: Pond, terrain: Terrain, wind: Wind, rng: Rng) {
     let placed = 0
     for (let guard = 0; placed < COUNT && guard < 4000; guard++) {
       const x = (rng() * 2 - 1) * SPREAD
@@ -35,7 +36,7 @@ export class Flora {
       if (Math.hypot(x - TREATY_FLATS.x, z - TREATY_FLATS.z) < TREATY_FLATS.radius + 2) continue
 
       const mesh = rng() < FLOWER_CHANCE ? makeFlower(rng) : makeTuft(rng)
-      mesh.position.set(x, 0, z)
+      mesh.position.set(x, terrain.heightAt(x, z), z) // grow up out of the hillside
       mesh.rotation.y = rng() * Math.PI * 2
       scene.add(mesh)
       // Origin at the base, so a z-lean bends it from the ground like real grass.

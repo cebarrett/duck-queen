@@ -20,6 +20,7 @@ import { Clouds } from './Clouds'
 import { Flora } from './Flora'
 import { Critters } from './Critters'
 import { Nests } from './Nests'
+import { Terrain } from './terrain'
 import { HUD, type MinimapSnapshot } from './HUD'
 import { XRHud } from './XRHud'
 import { SettingsMenu } from './SettingsMenu'
@@ -97,6 +98,7 @@ export class Game {
   private readonly settingsMenu = new SettingsMenu(() => { void this.resetGame() })
   private readonly rosterPanel = new RosterPanel()
   private readonly world: World
+  private readonly terrain: Terrain
   private readonly nests: Nests
   private readonly pond: Pond
   private readonly frontier: Frontier
@@ -151,13 +153,18 @@ export class Game {
 
     // --- Scene ------------------------------------------------------------
     this.scene = new THREE.Scene()
+    // The rolling terrain (hills) — one deterministic heightfield every system
+    // measures the ground from. Built before the World so the World can register
+    // its level zones (spawn, ponds, arena) and raise the ground to match.
+    this.terrain = new Terrain(deriveRng(seed, 'terrain'))
     // World adds the ground, sky, fog, lights, and scenery to the scene, and
     // exposes the scenery's colliders so the duck can bump into them.
     this.world = new World(
       this.scene,
       deriveRng(seed, 'scenery'),
       deriveRng(seed, 'ponds'),
-      deriveRng(seed, 'terrain'),
+      this.terrain,
+      deriveRng(seed, 'terrainTint'),
       this.wind,
     )
     this.pond = this.world.pond
@@ -166,8 +173,8 @@ export class Game {
     // its OWN seeded stream, so they can't shift the tree/pond/flock layouts.
     this.clouds = new Clouds(deriveRng(seed, 'clouds'))
     this.scene.add(this.clouds.group)
-    new Flora(this.scene, this.world.pond, this.wind, deriveRng(seed, 'flora'))
-    this.critters = new Critters(deriveRng(seed, 'critters'))
+    new Flora(this.scene, this.world.pond, this.terrain, this.wind, deriveRng(seed, 'flora'))
+    this.critters = new Critters(deriveRng(seed, 'critters'), this.terrain)
     this.scene.add(this.critters.group)
     // The frontier: ownership state for the outlying ponds (Act III). Built from the
     // contestable ponds World generated; Geese spawns a lieutenant to hold each.
@@ -196,11 +203,11 @@ export class Game {
     this.renderer.xr.addEventListener('sessionstart', this.onXRSessionStart)
     this.renderer.xr.addEventListener('sessionend', this.onXRSessionEnd)
     // Scatter edible plants for the flock to forage (land + pond).
-    this.food = new Food(this.scene, this.world.pond, deriveRng(seed, 'food'))
+    this.food = new Food(this.scene, this.world.pond, this.terrain, deriveRng(seed, 'food'))
     // Reeds grow on the shoreline — only the Queen gathers these.
-    this.reeds = new Reeds(this.scene, this.world.pond, deriveRng(seed, 'reeds'), this.wind)
+    this.reeds = new Reeds(this.scene, this.world.pond, this.terrain, deriveRng(seed, 'reeds'), this.wind)
     // Nests the Queen builds by spending reeds (they don't do anything yet).
-    this.nests = new Nests(this.scene)
+    this.nests = new Nests(this.scene, this.terrain)
 
     // Splash effects live on the water surface; a splash plays a sound + ripple.
     this.splashFx = new Splash(this.scene, this.world.pond.surfaceY)
@@ -210,6 +217,7 @@ export class Game {
       this.cameraRig,
       this.world.colliders,
       this.world.pond,
+      this.terrain,
       this.reeds,
       this.food,
       (x, z, strength) => {
@@ -226,6 +234,7 @@ export class Game {
       this.duck.group,
       this.sound,
       this.world.pond,
+      this.terrain,
       this.food,
       this.nests,
       this.world.colliders,
@@ -247,6 +256,7 @@ export class Game {
       this.sound,
       this.food,
       this.world.pond,
+      this.terrain,
       this.nests,
       this.input,
       this.duck.group,

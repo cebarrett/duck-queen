@@ -4,6 +4,7 @@ import type { CameraController } from './ThirdPersonCamera'
 import type { Duck } from './Duck'
 import { type Collider, resolveWalls, floorHeightAt } from './collision'
 import type { Pond } from './Water'
+import type { Terrain } from './terrain'
 import type { Reeds } from './Reeds'
 import type { Food } from './Food'
 import { faceHeading } from './mathUtils'
@@ -16,7 +17,9 @@ const MAX_SPEED = 6 // top waddle speed (units/second)
 const RESPONSIVENESS = 6 // how fast velocity chases the target; lower = heavier
 const WADDLE_BOB = 0.08 // how high she hops while waddling (units)
 const WADDLE_ROLL = 0.15 // how far she tilts side-to-side (radians)
-const LAND_SPEED = 4 // how fast she sinks back to the ground after flying
+const LAND_SPEED = 10 // how quickly she settles onto her floor on the ground — brisk
+//                      enough to hug rolling terrain as she walks up and down it,
+//                      while still smoothing the small pop of stepping onto a rock
 
 // --- Fly tuning: heavier (more glide/inertia) but still settles ------------
 const FLY_SPEED = 8.2 // top horizontal fly speed
@@ -117,6 +120,8 @@ export class DuckController {
     private readonly camera: CameraController,
     private readonly colliders: Collider[],
     private readonly pond: Pond,
+    // The rolling terrain — her floor when she's not on a rock or the water.
+    private readonly terrain: Terrain,
     // Reeds only the Queen can gather (the ducklings never touch these).
     private readonly reeds: Reeds,
     // Food can be gathered by either the Queen or her subjects.
@@ -202,7 +207,7 @@ export class DuckController {
     this.overWater = this.pond.isWater(pos.x, pos.z)
     this.groundHeight = this.overWater
       ? this.pond.floatLine
-      : floorHeightAt(pos.x, pos.z, this.altitude, DUCK_RADIUS, STEP_UP, this.colliders)
+      : floorHeightAt(pos.x, pos.z, this.altitude, DUCK_RADIUS, STEP_UP, this.colliders, this.terrain.heightAt(pos.x, pos.z))
     this.updateAltitude(delta)
 
     // --- The Queen gathers nearby resources on foot or while swimming (not from
@@ -318,12 +323,19 @@ export class DuckController {
 
   private updateMode(): void {
     // No toggle keys — her mode follows her situation:
-    //   above the floor OR pressing Space -> fly (Space launches her)
-    //   else over the pond               -> swim
-    //   else                             -> waddle
-    const airborne = this.altitude > this.groundHeight + GROUND_EPS
+    //   still up in the air OR pressing Space -> fly (Space launches her)
+    //   else over the pond                    -> swim
+    //   else                                  -> waddle
+    //
+    // "Still aloft" only counts when she's ALREADY flying and remains above her
+    // floor — i.e. she genuinely left the ground. Walking on rolling terrain, the
+    // hill slopes away under her feet and her altitude eases down to follow it; we
+    // must NOT read that lag as "airborne", or she'd flicker into flight (wings
+    // popping out) every time she walks downhill. Launching is still instant via
+    // Space (wantsUp).
+    const stillAloft = this.mode === 'fly' && this.altitude > this.groundHeight + GROUND_EPS
     const wantsUp = this.input.isFlyHeld && !this.isPanicking()
-    if (wantsUp || airborne) this.mode = 'fly'
+    if (wantsUp || stillAloft) this.mode = 'fly'
     else if (this.overWater) this.mode = 'swim'
     else this.mode = 'waddle'
   }

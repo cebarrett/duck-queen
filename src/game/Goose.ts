@@ -3,6 +3,7 @@ import { buildGoose, setGooseBillOpen } from './gooseModel'
 import { approachAngle, randRange, seekArrive, pointAround, faceHeading, easeFactor } from './mathUtils'
 import { type Collider, resolveWalls } from './collision'
 import type { Pond } from './Water'
+import type { Terrain } from './terrain'
 import type { Sound } from './Sound'
 import type { Food, FoodItem } from './Food'
 import type { Nest, Nests } from './Nests'
@@ -198,6 +199,7 @@ export class Goose {
     private readonly listener: THREE.Object3D,
     private readonly food: Food,
     private readonly pond: Pond,
+    private readonly terrain: Terrain,
     private readonly nests: Nests,
     private readonly colliders: readonly Collider[],
     rng: Rng,
@@ -554,16 +556,23 @@ export class Goose {
       // in rhythm. Wings stay folded.
       this.idleAction = 'none'
       this.walkPhase += delta * (WALK_FREQ + speed * WALK_SPEED_FREQ)
-      pos.y = Math.abs(Math.sin(this.walkPhase)) * WALK_BOB
+      pos.y = this.groundY() + Math.abs(Math.sin(this.walkPhase)) * WALK_BOB
       this.group.rotation.z = Math.sin(this.walkPhase) * WALK_ROLL
       this.neck.rotation.set(WALK_HEAD_BOB * (0.5 + 0.5 * Math.sin(this.walkPhase)), 0, 0)
       this.leftWing.rotation.z = 0
       this.rightWing.rotation.z = 0
     } else {
-      pos.y = 0
+      pos.y = this.groundY()
       this.group.rotation.z = 0
       this.updateIdle(delta)
     }
+  }
+
+  /** The hill height under the goose's feet — every land pose bobs around this so
+   *  it rides the rolling terrain instead of standing at a flat y=0. (On water it
+   *  floats at SWIM_FLOAT_Y instead.) */
+  private groundY(): number {
+    return this.terrain.heightAt(this.group.position.x, this.group.position.z)
   }
 
   /** A bold goose reads as smug: high neck, showy stride, and cocked wings. */
@@ -572,7 +581,7 @@ export class Goose {
     this.walkPhase += delta * (WALK_FREQ + Math.max(speed, 1) * 1.25)
 
     const strut = 0.5 + 0.5 * Math.sin(this.walkPhase)
-    this.group.position.y = Math.abs(Math.sin(this.walkPhase)) * BOLD_WALK_BOB
+    this.group.position.y = this.groundY() + Math.abs(Math.sin(this.walkPhase)) * BOLD_WALK_BOB
     this.group.rotation.z = Math.sin(this.walkPhase) * BOLD_WALK_ROLL
     this.neck.rotation.set(BOLD_HEAD_LIFT + WALK_HEAD_BOB * strut * 0.4, Math.sin(this.walkPhase * 0.5) * 0.18, 0)
     this.leftWing.rotation.z = -0.18 - strut * 0.08
@@ -600,11 +609,12 @@ export class Goose {
 
     const traveled = Math.hypot(pos.x - this.fleeStartX, pos.z - this.fleeStartZ)
     const progress = Math.min(1, traveled / this.fleeDistance)
+    const groundY = this.groundY()
     if (this.state === 'departing') {
-      pos.y = FLEE_ALTITUDE + progress * DEPART_ALTITUDE
+      pos.y = groundY + FLEE_ALTITUDE + progress * DEPART_ALTITUDE
       this.group.scale.setScalar(this.baseScale * Math.max(0.25, 1 - progress * 0.55))
     } else {
-      pos.y = Math.sin(progress * Math.PI) * FLEE_ALTITUDE
+      pos.y = groundY + Math.sin(progress * Math.PI) * FLEE_ALTITUDE
     }
     this.group.rotation.z = Math.sin(this.walkPhase * 0.45) * FLEE_BANK
     this.neck.rotation.set(FLEE_NECK_LIFT, 0, 0)
@@ -694,7 +704,7 @@ export class Goose {
     this.walkPhase += delta * POSTURE_FLAP_SPEED * 0.55
     const beat = Math.max(0, Math.sin(this.walkPhase))
     const bob = Math.abs(Math.sin(this.walkPhase)) * POSTURE_BOB * 0.5
-    pos.y = this.pond.isWater(pos.x, pos.z) ? SWIM_FLOAT_Y + bob * 0.4 : bob
+    pos.y = this.pond.isWater(pos.x, pos.z) ? SWIM_FLOAT_Y + bob * 0.4 : this.groundY() + bob
     this.group.rotation.y = this.heading
     this.group.rotation.z = Math.sin(this.walkPhase * 0.55) * POSTURE_SWAY * 0.4
     this.neck.rotation.set(
@@ -732,7 +742,7 @@ export class Goose {
     const beat = Math.max(0, Math.sin(this.walkPhase))
     const honkBoost = this.billTimer > 0 ? this.billTimer / this.billDuration : 0
     const bob = Math.abs(Math.sin(this.walkPhase)) * POSTURE_BOB + honkBoost * 0.04
-    pos.y = this.pond.isWater(pos.x, pos.z) ? SWIM_FLOAT_Y + bob * 0.45 : bob
+    pos.y = this.pond.isWater(pos.x, pos.z) ? SWIM_FLOAT_Y + bob * 0.45 : this.groundY() + bob
     this.group.rotation.y = this.heading
     this.group.rotation.z = Math.sin(this.walkPhase * 0.55) * POSTURE_SWAY
     this.neck.rotation.set(
@@ -753,7 +763,7 @@ export class Goose {
     if (s.arrived) {
       this.velX = 0
       this.velZ = 0
-      this.group.position.y = this.pond.isWater(this.group.position.x, this.group.position.z) ? SWIM_FLOAT_Y : 0
+      this.group.position.y = this.pond.isWater(this.group.position.x, this.group.position.z) ? SWIM_FLOAT_Y : this.groundY()
       this.group.rotation.z = 0
       this.state = 'pausing'
       this.timer = randRange(PAUSE_MIN, PAUSE_MAX)

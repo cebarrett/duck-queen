@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { box } from './modelUtils'
 import type { Rng } from './rng'
+import type { Terrain } from './terrain'
 
 // A few drifting critters — butterflies and dragonflies — flit over the world to
 // make it feel alive. They're pure ambience: they fly, ignore everything, and
@@ -50,7 +51,7 @@ interface Critter {
   rightWing: THREE.Group
   kind: Kind
   heading: number // radians, current travel direction in the XZ plane
-  baseY: number
+  baseY: number // cruise height ABOVE the terrain (so they clear the hills)
   bobPhase: number
   flapPhase: number
 }
@@ -66,14 +67,14 @@ export class Critters {
   readonly group = new THREE.Group()
   private readonly critters: Critter[] = []
 
-  constructor(rng: Rng) {
+  constructor(rng: Rng, private readonly terrain: Terrain) {
     for (let i = 0; i < COUNT; i++) {
       const kind = rng() < 0.6 ? BUTTERFLY : DRAGONFLY
       const { group, leftWing, rightWing } = makeCritter(kind, rng)
       const x = (rng() * 2 - 1) * SPREAD
       const z = (rng() * 2 - 1) * SPREAD
       const baseY = MIN_Y + rng() * (MAX_Y - MIN_Y)
-      group.position.set(x, baseY, z)
+      group.position.set(x, terrain.heightAt(x, z) + baseY, z)
       const heading = rng() * Math.PI * 2
       group.rotation.y = heading
       this.group.add(group)
@@ -107,9 +108,9 @@ export class Critters {
       // with the heading direction (cos h, sin h) in the XZ plane).
       c.group.rotation.y = Math.atan2(-Math.cos(c.heading), -Math.sin(c.heading))
 
-      // Gentle vertical bob.
+      // Gentle vertical bob, riding at cruise height above whatever hill is below.
       c.bobPhase += delta * 2.5
-      pos.y = c.baseY + Math.sin(c.bobPhase) * 0.18
+      pos.y = this.terrain.heightAt(pos.x, pos.z) + c.baseY + Math.sin(c.bobPhase) * 0.18
 
       // Flap the wings (mirrored pivots).
       c.flapPhase += delta * c.kind.flapSpeed
