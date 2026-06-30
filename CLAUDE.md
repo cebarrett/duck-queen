@@ -11,11 +11,20 @@ developer-facing conventions or player-facing behavior change.
 ## Conventions
 
 ### World generation is deterministic
-Anything that **places objects in the world** — scenery (trees/rocks), the pond, food
-plants, reeds, ambient critter starting positions, ducklings, geese, swans, frontier
-ponds — must take its randomness from the **seeded RNG in [`src/game/rng.ts`](src/game/rng.ts)**,
+Anything that **places objects in the world** — the terrain's hills, scenery (trees/rocks),
+the pond, food plants, reeds, ambient critter starting positions, ducklings, geese, swans,
+frontier ponds — must take its randomness from the **seeded RNG in [`src/game/rng.ts`](src/game/rng.ts)**,
 never from `Math.random()`. `Game` picks one world seed and hands each system its own
 derived stream (`deriveRng(seed, '<name>')`).
+
+The ground isn't flat: [`src/game/terrain.ts`](src/game/terrain.ts) is a deterministic
+rolling-hills heightfield, built once from the `'terrain'` stream. It's the single source
+of truth for "how high is the ground here?" via `heightAt(x, z)` — the ground mesh is
+displaced by it, the Queen's floor (`floorHeightAt`) starts from it, and every grounded
+object (scenery, food, flora, reeds, nests, the Queen, ducklings, geese) sits on it.
+**Anything you add that rests on the ground must offset its `y` by `terrain.heightAt(x, z)`**,
+or it'll float/sink on a hillside. The spawn clearing, every pond, and the Treaty Flats
+arena are registered as flat zones (`terrain.flatten(...)`) so they stay level.
 
 **The same seed must always produce the exact same world layout.** (You can try a
 specific one with `?seed=123` in the URL.) When adding anything that spawns or scatters
@@ -34,8 +43,9 @@ that names a key (for example Aldermere's **F** talk prompt) should stay in sync
 ### World collision is shared
 Collision against the scenery lives in **[`src/game/collision.ts`](src/game/collision.ts)**
 as two pure functions — `resolveWalls(...)` (push a body out of obstacle sides + slide
-its velocity) and `floorHeightAt(...)` (the surface height under it). The Queen, the
-ducklings, and the geese all use them; don't re-implement the math per creature.
+its velocity) and `floorHeightAt(...)` (the surface height under it, measured up from the
+terrain's `groundBase` height). The Queen, the ducklings, and the geese all use them;
+don't re-implement the math per creature.
 
 To give a **new ground creature** collision: pass it `World`'s `colliders` array, and
 after you apply its movement call `resolveWalls(pos, vel, radius, feet, height, stepUp,

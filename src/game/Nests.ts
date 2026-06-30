@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { buildNest, addEgg, MAX_EGGS } from './nestModel'
 import type { DuckSubject } from './DuckSubject'
+import type { Terrain } from './terrain'
 import type { NestSlice, NestsSlice } from './persistence/saveSchema'
 
 const HATCH_TIME = 18 // seconds of brooding to incubate one egg into a duckling
@@ -31,9 +32,10 @@ export class Nest {
   constructor(
     readonly x: number,
     readonly z: number,
+    groundY = 0,
   ) {
     this.group = buildNest()
-    this.group.position.set(x, 0, z)
+    this.group.position.set(x, groundY, z) // sit on the hill the Queen built it on
     this.group.rotation.y = Math.random() * Math.PI * 2 // player-driven placement, not seeded
   }
 
@@ -109,7 +111,10 @@ export class Nest {
 export class Nests {
   readonly all: Nest[] = []
 
-  constructor(private readonly scene: THREE.Scene) {}
+  constructor(
+    private readonly scene: THREE.Scene,
+    private readonly terrain: Terrain,
+  ) {}
 
   /** How many nests stand in the world. */
   get count(): number {
@@ -123,9 +128,9 @@ export class Nests {
     return n
   }
 
-  /** Build a fresh, empty nest on the ground at (x, z). */
+  /** Build a fresh, empty nest on the ground at (x, z), sat on the terrain there. */
   build(x: number, z: number): Nest {
-    const nest = new Nest(x, z)
+    const nest = new Nest(x, z, this.terrain.heightAt(x, z))
     this.scene.add(nest.group)
     this.all.push(nest)
     return nest

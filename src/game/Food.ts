@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { box } from './modelUtils'
 import type { Pond } from './Water'
+import type { Terrain } from './terrain'
 import { ResourcePatch, type Collectible } from './ResourcePatch'
 import type { Rng } from './rng'
 
@@ -25,7 +26,12 @@ export type FoodItem = Collectible
  * the pond. The flock's followers gather these (see DuckSubject).
  */
 export class Food extends ResourcePatch {
-  constructor(scene: THREE.Scene, private readonly pond: Pond, private readonly rng: Rng) {
+  constructor(
+    scene: THREE.Scene,
+    private readonly pond: Pond,
+    private readonly terrain: Terrain,
+    private readonly rng: Rng,
+  ) {
     super(scene, REGROW_TIME)
     this.scatterLand()
     this.scatterWater()
@@ -38,7 +44,7 @@ export class Food extends ResourcePatch {
       const z = (this.rng() * 2 - 1) * LAND_SPREAD
       if (Math.hypot(x, z) < 8) continue // keep the spawn point clear
       if (this.pond.isWater(x, z)) continue // land plants don't go in the pond
-      this.plant(makeLandPlant(), x, 0, z)
+      this.plant(makeLandPlant(), x, this.terrain.heightAt(x, z), z) // sit on the hill
       placed++
     }
   }

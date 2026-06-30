@@ -8,9 +8,9 @@ non-violent **honk-offs** before they raid your nests.
 Built with **[Three.js](https://threejs.org/) + TypeScript + [Vite](https://vitejs.dev/)**.
 Everything is made of blocky boxes — that's the intended cozy, voxel-y art style.
 The world is alive around you: a gradient sky with a gentle day/night cycle,
-drifting clouds, mottled ground scattered with grass tufts and flowers, trees
-and reeds that sway in a gentle breeze, foam-fringed ponds, and butterflies and
-dragonflies flitting about.
+drifting clouds, gently rolling green hills scattered with grass tufts and
+flowers, trees and reeds that sway in a gentle breeze, foam-fringed ponds nestled
+in level hollows, and butterflies and dragonflies flitting about.
 
 ## Running it locally
 
@@ -184,9 +184,9 @@ store instead of local storage without touching the game itself.
 
 ## World seed
 
-The world (scenery, pond, food, reeds, scattered mallard pairs, geese) is
-generated from a single seed, so the **same seed always produces the same
-layout**. Your save remembers its own seed, so a reload restores the same world.
+The world (the rolling terrain, scenery, pond, food, reeds, scattered mallard
+pairs, geese) is generated from a single seed, so the **same seed always produces
+the same layout** — the same hills in the same places. Your save remembers its own seed, so a reload restores the same world.
 Add `?seed=123` to the URL to explore a different one — an explicit `?seed=`
 **starts a fresh game in that world** and ignores your save (handy for poking at
 layouts), while removing it again returns to your saved game.
@@ -212,6 +212,7 @@ src/
     Game.ts            # the conductor: renderer, scene, camera, render loop, wiring
     Biomes.ts          # named campaign regions such as the Treaty Flats
     World.ts           # ground, day/night sky, fog, lights, scenery (+ colliders)
+    terrain.ts         # deterministic rolling-hills heightfield (the ground's shape)
     Water.ts           # the pond (+ shoreline foam)
     Wind.ts            # gentle breeze that sways trees, reeds, grass and flora
     Clouds.ts          # blocky clouds drifting across the sky

@@ -4,6 +4,7 @@ import { type SubjectKind, type DucklingTrait, SUBJECT_KINDS, subjectName, subje
 import { approachAngle, randRange, seekArrive, pointAround, faceHeading, easeFactor } from './mathUtils'
 import { type Collider, resolveWalls } from './collision'
 import type { Pond } from './Water'
+import type { Terrain } from './terrain'
 import type { DuckMode } from './DuckController'
 import type { Food, FoodItem } from './Food'
 import type { Nest } from './Nests'
@@ -222,6 +223,7 @@ export class DuckSubject {
     z: number,
     readonly kind: SubjectKind,
     private readonly pond: Pond,
+    private readonly terrain: Terrain,
     private readonly food: Food,
     private readonly sound: Sound,
     private readonly listener: THREE.Object3D,
@@ -545,13 +547,16 @@ export class DuckSubject {
     // --- Face travel direction + a little waddle ---------------------------
     const speed = Math.hypot(this.velX, this.velZ)
     this.heading = faceHeading(this.heading, this.velX, this.velZ, TURN_SPEED, delta)
+    // The hill height under it: every land pose bobs around this so it rides the
+    // terrain instead of sinking through a slope. (On the water it floats instead.)
+    const groundY = this.terrain.heightAt(pos.x, pos.z)
     if (this.state === 'worming') {
-      this.applyWormPose(delta)
+      this.applyWormPose(delta, groundY)
     } else if (this.state === 'nesting' && this.sitting) {
       // Settled on the nest: a calm breathing bob, no waddle hop or sway.
       this.resetFidget()
       this.bobPhase += delta * 1.5
-      pos.y = Math.sin(this.bobPhase) * SIT_BOB
+      pos.y = groundY + Math.sin(this.bobPhase) * SIT_BOB
       this.group.rotation.z = 0
     } else if (this.pond.isWater(pos.x, pos.z)) {
       // Over the pond: float like the Queen — settle at the (scaled) waterline
@@ -566,11 +571,11 @@ export class DuckSubject {
       this.resetFidget()
       const moveFactor = Math.min(speed / WANDER_SPEED, 1)
       this.bobPhase += delta * (6 + speed * 2)
-      pos.y = Math.abs(Math.sin(this.bobPhase)) * BOB_HEIGHT * moveFactor
+      pos.y = groundY + Math.abs(Math.sin(this.bobPhase)) * BOB_HEIGHT * moveFactor
       this.group.rotation.z = Math.sin(this.bobPhase) * ROLL * moveFactor
     } else {
       // On land, standing still: do daft duck things (stretch, flap, peck, gaze...).
-      pos.y = 0
+      pos.y = groundY
       this.group.rotation.z = 0
       this.updateIdle(delta, this.state === 'pausing')
     }
@@ -866,7 +871,7 @@ export class DuckSubject {
     }
   }
 
-  private applyWormPose(delta: number): void {
+  private applyWormPose(delta: number, groundY: number): void {
     const progress = Math.min(1, this.wormTimer / WORM_POP_TIME)
     const popped = this.wormRewarded
     const tug = Math.max(0, Math.sin(this.wormTimer * WORM_TUG_SPEED))
@@ -874,7 +879,7 @@ export class DuckSubject {
 
     this.idleAction = 'none'
     this.bobPhase += delta * 5
-    this.group.position.y = popped ? Math.sin(this.bobPhase) * 0.03 : tug * 0.025
+    this.group.position.y = groundY + (popped ? Math.sin(this.bobPhase) * 0.03 : tug * 0.025)
     this.group.rotation.z = popped ? Math.sin(this.bobPhase * 0.7) * 0.05 : Math.sin(this.wormTimer * WORM_TUG_SPEED) * 0.08
     this.head.rotation.set(WORM_HEAD_DIP * (1 - proud) + 0.35 * proud, Math.sin(this.wormTimer * 8) * 0.1 * (1 - proud), 0)
     this.leftWing.rotation.z = -0.18 - tug * 0.1

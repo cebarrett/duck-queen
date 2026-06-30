@@ -6,6 +6,7 @@ import type { Food } from './Food'
 import type { Input } from './Input'
 import type { Flock } from './Flock'
 import type { Pond } from './Water'
+import type { Terrain } from './terrain'
 import type { Nests } from './Nests'
 import type { Frontier, Territory } from './Frontier'
 import type { Collider } from './collision'
@@ -152,6 +153,7 @@ export class Geese {
     private readonly sound: Sound,
     food: Food,
     pond: Pond,
+    terrain: Terrain,
     private readonly nests: Nests,
     input: Input,
     private readonly queen: THREE.Object3D,
@@ -169,12 +171,12 @@ export class Geese {
     for (let i = 0; i < GOOSE_COUNT; i++) {
       const angle = rng() * Math.PI * 2
       const radius = rng() * AREA_RADIUS
-      const goose = new Goose(Math.cos(angle) * radius, AREA_CENTER_Z + Math.sin(angle) * radius, sound, this.queen, food, pond, this.nests, colliders, rng)
+      const goose = new Goose(Math.cos(angle) * radius, AREA_CENTER_Z + Math.sin(angle) * radius, sound, this.queen, food, pond, terrain, this.nests, colliders, rng)
       this.geese.push(goose)
       scene.add(goose.group)
     }
 
-    this.baron = new Goose(BARON_X, BARON_Z, sound, this.queen, food, pond, this.nests, colliders, rng, true)
+    this.baron = new Goose(BARON_X, BARON_Z, sound, this.queen, food, pond, terrain, this.nests, colliders, rng, true)
     scene.add(this.baron.group)
     addMarshDressing(scene, BARON_X, BARON_Z, rng)
 
@@ -185,6 +187,7 @@ export class Geese {
       this.queen,
       food,
       pond,
+      terrain,
       this.nests,
       colliders,
       rng,
@@ -198,7 +201,7 @@ export class Geese {
       const angle = frontierRng() * Math.PI * 2
       const lx = circle.x + Math.cos(angle) * (circle.radius + 2)
       const lz = circle.z + Math.sin(angle) * (circle.radius + 2)
-      const goose = new Goose(lx, lz, sound, this.queen, food, pond, this.nests, colliders, frontierRng, true, {
+      const goose = new Goose(lx, lz, sound, this.queen, food, pond, terrain, this.nests, colliders, frontierRng, true, {
         bodyColor: LIEUTENANT_COLOR,
         scale: LIEUTENANT_SCALE,
         crest: false,
@@ -214,7 +217,7 @@ export class Geese {
     for (let i = 0; i < ROAMING_GOOSE_COUNT; i++) {
       const spot = this.pickRoamingGooseSpot(pond, colliders, rng)
       if (!spot) break
-      const goose = new Goose(spot.x, spot.z, sound, this.queen, food, pond, this.nests, colliders, rng)
+      const goose = new Goose(spot.x, spot.z, sound, this.queen, food, pond, terrain, this.nests, colliders, rng)
       this.geese.push(goose)
       scene.add(goose.group)
     }

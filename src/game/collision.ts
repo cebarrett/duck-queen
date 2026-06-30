@@ -73,9 +73,15 @@ export function resolveWalls(
 
 /**
  * The height of the floor under a body at (x, z): the highest obstacle-top it's
- * standing over whose surface is at most `stepUp` above its feet, or 0 (the
- * ground) if none. The stepUp limit means a rock it's descended onto / can step
+ * standing over whose surface is at most `stepUp` above its feet, or the bare
+ * ground if none. The stepUp limit means a rock it's descended onto / can step
  * up to supports it, while a tall treetop far overhead doesn't yank it upward.
+ *
+ * `groundBase` is the height of the ground itself under (x, z) — 0 on the old
+ * flat world, or the rolling terrain height once there are hills. Obstacle tops
+ * (yMax) are absolute world heights (scenery is placed sitting ON the terrain),
+ * so the only change hills need is to start the search from the terrain instead
+ * of from 0.
  */
 export function floorHeightAt(
   x: number,
@@ -84,8 +90,9 @@ export function floorHeightAt(
   radius: number,
   stepUp: number,
   colliders: readonly Collider[],
+  groundBase = 0,
 ): number {
-  let support = 0 // the ground is always there at y = 0
+  let support = groundBase // the ground is always under you, flat or hilly
   for (const c of colliders) {
     const dx = x - c.x
     const dz = z - c.z

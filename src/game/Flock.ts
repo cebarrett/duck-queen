@@ -5,6 +5,7 @@ import type { SubjectKind, DucklingTrait } from './subjectKinds'
 import type { Input } from './Input'
 import type { Sound } from './Sound'
 import type { Pond, PondCircle } from './Water'
+import type { Terrain } from './terrain'
 import type { Food } from './Food'
 import type { Nest, Nests } from './Nests'
 import type { Collider } from './collision'
@@ -79,6 +80,7 @@ export class Flock {
     private readonly queen: THREE.Object3D,
     private readonly sound: Sound,
     private readonly pond: Pond,
+    private readonly terrain: Terrain,
     private readonly food: Food,
     private readonly nests: Nests,
     private readonly colliders: readonly Collider[],
@@ -89,8 +91,8 @@ export class Flock {
   ) {
     const spots = this.pickStartingPairSpots(rng)
     for (const spot of spots) {
-      const drake = new DuckSubject(spot.drake.x, spot.drake.z, 'drake', pond, food, this.sound, this.queen, colliders, rng)
-      const hen = new DuckSubject(spot.hen.x, spot.hen.z, 'hen', pond, food, this.sound, this.queen, colliders, rng)
+      const drake = new DuckSubject(spot.drake.x, spot.drake.z, 'drake', pond, this.terrain, food, this.sound, this.queen, colliders, rng)
+      const hen = new DuckSubject(spot.hen.x, spot.hen.z, 'hen', pond, this.terrain, food, this.sound, this.queen, colliders, rng)
       this.members.push(drake, hen)
       scene.add(drake.group)
       scene.add(hen.group)
@@ -140,7 +142,7 @@ export class Flock {
     this.members.length = 0
 
     for (const s of slice.subjects) {
-      const subject = new DuckSubject(s.x, s.z, s.kind, this.pond, this.food, this.sound, this.queen, this.colliders, Math.random, s.trait ?? null, s.appearanceSeed)
+      const subject = new DuckSubject(s.x, s.z, s.kind, this.pond, this.terrain, this.food, this.sound, this.queen, this.colliders, Math.random, s.trait ?? null, s.appearanceSeed)
       subject.restore(s)
       this.members.push(subject)
       this.scene.add(subject.group)
@@ -270,7 +272,7 @@ export class Flock {
    *  Queen — hers from birth. Hatching is gameplay, so the newborn draws its voice
    *  and heading from Math.random, NOT the seeded world rng. */
   hatchAt(x: number, z: number): void {
-    const duckling = new DuckSubject(x, z, 'duckling', this.pond, this.food, this.sound, this.queen, this.colliders, Math.random)
+    const duckling = new DuckSubject(x, z, 'duckling', this.pond, this.terrain, this.food, this.sound, this.queen, this.colliders, Math.random)
     duckling.recruit() // it's the Queen's already — start it following her
     this.members.push(duckling)
     this.scene.add(duckling.group)
@@ -288,7 +290,7 @@ export class Flock {
     const kind: SubjectKind = Math.random() < 0.5 ? 'drake' : 'hen'
     const pos = duckling.group.position
     // The grown duck carries the quirk it had as a duckling.
-    const adult = new DuckSubject(pos.x, pos.z, kind, this.pond, this.food, this.sound, this.queen, this.colliders, Math.random, duckling.trait)
+    const adult = new DuckSubject(pos.x, pos.z, kind, this.pond, this.terrain, this.food, this.sound, this.queen, this.colliders, Math.random, duckling.trait)
     adult.recruit()
 
     const idx = this.members.indexOf(duckling)
