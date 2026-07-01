@@ -8,6 +8,12 @@
  * enough that the displaced ground lights cleanly and creatures glide up and
  * down it without stair-steps.
  *
+ * On top of those gentle swells sit a handful of distinct HILLS — localized
+ * cosine-bell mounds placed away from spawn. Most are modest knolls, but a rare
+ * one is a grand landmark peak that towers over the flock. Their bells have zero
+ * slope at crest and foot, so even the tall ones are smooth, walkable, and read
+ * as real hills rather than spikes.
+ *
  * `heightAt(x, z)` is the single source of truth for "how high is the ground
  * here?": the ground mesh is displaced by it, the Queen's shared floor
  * (`floorHeightAt`) starts from it, scenery sits on it, and every ground creature
@@ -31,6 +37,14 @@ interface Wave {
   amp: number
 }
 
+/** A lone hill: a cosine-bell mound of height `amp`, fading to 0 at `radius`. */
+interface Peak {
+  x: number
+  z: number
+  radius: number
+  amp: number
+}
+
 /** A region kept flat: level out to `radius`, then ease back to full hills over
  *  the next `falloff` units. */
 interface FlatZone {
@@ -41,16 +55,33 @@ interface FlatZone {
 }
 
 const OCTAVES = 5
-// The biggest swell's amplitude (units). Each finer octave is gentler. Kept
-// modest so the hills are cozy and walkable, never cliffs.
-const BASE_AMPLITUDE = 1.5
+// The biggest swell's amplitude (units). Each finer octave is gentler. Bumped up
+// from a flatter past so the rolling ground has real relief — still cozy and
+// walkable, never cliffs.
+const BASE_AMPLITUDE = 2.6
 const AMPLITUDE_FALLOFF = 0.6 // each octave is 60% as tall as the last
 const BASE_WAVELENGTH = 85 // the broadest swell spans ~85 units…
 const WAVELENGTH_FALLOFF = 0.6 // …and finer octaves get shorter
 const MIN_WAVELENGTH = 20 // but never so short they alias on the ground grid
 
+// Distinct landmark hills scattered on top of the swells. Most are modest
+// knolls; occasionally one is a grand peak that towers over the flock.
+const PEAK_COUNT = 7
+const PEAK_MIN_DIST = 55 // keep their crests clear of the spawn clearing…
+const PEAK_MAX_DIST = 135 // …but inside the scenery spread (ground is 300 wide)
+const KNOLL_AMP_MIN = 3.5
+const KNOLL_AMP_MAX = 6
+const KNOLL_RADIUS_MIN = 20
+const KNOLL_RADIUS_MAX = 34
+const GRAND_CHANCE = 0.22 // ~1-in-5 hills is a towering landmark instead
+const GRAND_AMP_MIN = 9
+const GRAND_AMP_MAX = 15
+const GRAND_RADIUS_MIN = 38
+const GRAND_RADIUS_MAX = 58
+
 export class Terrain {
   private readonly waves: Wave[] = []
+  private readonly peaks: Peak[] = []
   private readonly flats: FlatZone[] = []
 
   constructor(rng: Rng) {
@@ -68,6 +99,22 @@ export class Terrain {
         amp: BASE_AMPLITUDE * AMPLITUDE_FALLOFF ** i * rngRange(rng, 0.85, 1.15),
       })
     }
+
+    for (let i = 0; i < PEAK_COUNT; i++) {
+      const angle = rng() * Math.PI * 2
+      const dist = rngRange(rng, PEAK_MIN_DIST, PEAK_MAX_DIST)
+      const grand = rng() < GRAND_CHANCE
+      this.peaks.push({
+        x: Math.cos(angle) * dist,
+        z: Math.sin(angle) * dist,
+        amp: grand
+          ? rngRange(rng, GRAND_AMP_MIN, GRAND_AMP_MAX)
+          : rngRange(rng, KNOLL_AMP_MIN, KNOLL_AMP_MAX),
+        radius: grand
+          ? rngRange(rng, GRAND_RADIUS_MIN, GRAND_RADIUS_MAX)
+          : rngRange(rng, KNOLL_RADIUS_MIN, KNOLL_RADIUS_MAX),
+      })
+    }
   }
 
   /** Keep a disc of the world level: flat out to `radius`, easing back to full
@@ -82,6 +129,13 @@ export class Terrain {
     let h = 0
     for (const w of this.waves) {
       h += w.amp * Math.sin((w.dirX * x + w.dirZ * z) * w.freq + w.phase)
+    }
+    for (const p of this.peaks) {
+      const d = Math.hypot(x - p.x, z - p.z)
+      if (d >= p.radius) continue
+      // Cosine bell: full height at the crest, easing to 0 at the foot with zero
+      // slope at both ends, so even tall hills stay smooth and walkable.
+      h += p.amp * 0.5 * (1 + Math.cos((d / p.radius) * Math.PI))
     }
     return h * this.flatFactor(x, z)
   }

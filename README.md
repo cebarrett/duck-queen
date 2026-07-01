@@ -8,9 +8,10 @@ non-violent **honk-offs** before they raid your nests.
 Built with **[Three.js](https://threejs.org/) + TypeScript + [Vite](https://vitejs.dev/)**.
 Everything is made of blocky boxes — that's the intended cozy, voxel-y art style.
 The world is alive around you: a gradient sky with a gentle day/night cycle,
-drifting clouds, gently rolling green hills scattered with grass tufts and
-flowers, trees and reeds that sway in a gentle breeze, foam-fringed ponds nestled
-in level hollows, and butterflies and dragonflies flitting about.
+drifting clouds, rolling green hills — with the occasional towering landmark peak
+— scattered with grass tufts and flowers, trees and reeds that sway in a gentle
+breeze, foam-fringed ponds nestled in level hollows, and butterflies and
+dragonflies flitting about.
 
 ## Running it locally
 
