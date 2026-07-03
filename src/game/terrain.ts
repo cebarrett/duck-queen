@@ -8,6 +8,10 @@
  * enough that the displaced ground lights cleanly and creatures glide up and
  * down it without stair-steps.
  *
+ * The biome map can plug in a smooth per-position amplitude multiplier (the
+ * optional `relief` callback), so its regions shape the land: hills swell in the
+ * Stony Tors and flatten to bog in the Old Fen, easing across region borders.
+ *
  * On top of those gentle swells sit a handful of distinct HILLS — localized
  * cosine-bell mounds placed away from spawn. Most are modest knolls, but a rare
  * one is a grand landmark peak that towers over the flock. Their bells have zero
@@ -84,7 +88,12 @@ export class Terrain {
   private readonly peaks: Peak[] = []
   private readonly flats: FlatZone[] = []
 
-  constructor(rng: Rng) {
+  /**
+   * @param relief optional per-position amplitude multiplier — the biome map
+   *   plugs in here so its regions shape the land (the tors' hills swell, the
+   *   fen lies low). It must be smooth and deterministic, like the waves.
+   */
+  constructor(rng: Rng, private readonly relief?: (x: number, z: number) => number) {
     for (let i = 0; i < OCTAVES; i++) {
       const angle = rng() * Math.PI * 2
       const wavelength = Math.max(
@@ -137,6 +146,7 @@ export class Terrain {
       // slope at both ends, so even tall hills stay smooth and walkable.
       h += p.amp * 0.5 * (1 + Math.cos((d / p.radius) * Math.PI))
     }
+    if (this.relief) h *= this.relief(x, z)
     return h * this.flatFactor(x, z)
   }
 

@@ -11,7 +11,10 @@ The world is alive around you: a gradient sky with a gentle day/night cycle,
 drifting clouds, rolling green hills — with the occasional towering landmark peak
 — scattered with grass tufts and flowers, trees and reeds that sway in a gentle
 breeze, foam-fringed ponds nestled in level hollows, and butterflies and
-dragonflies flitting about.
+dragonflies flitting about. And the country isn't all one meadow: wander far
+enough and you cross into distinct **biomes** — a pale birch grove, an open
+golden prairie, rugged stony tors, a boggy old fen dotted with tiny swimmable
+pools, and an ever-autumn amberwood (see below).
 
 ## Running it locally
 
@@ -172,6 +175,22 @@ store instead of local storage without touching the game itself.
   your progress (🪶 Frontier). Reclaim them all and the swan has something to say
   about what comes next.
 
+- **Explore the biomes.** The land around the home meadow is split into named
+  regions, each with its own terrain, ground colour, trees, and undergrowth —
+  the HUD toasts the region's name as you cross its border, and the minimap
+  washes each region in its colour:
+  - 🌼 **the Queen's Meadow** — home: rolling green hills, leafy oaks, wildflowers.
+  - 🌳 **the Birchwood** — a dense pale grove of white-barked birches over ferns
+    and snowdrops.
+  - 🌾 **the Golden Prairie** — wide-open dry grassland: tall wheatgrass, scrub,
+    and the odd grand lone oak on gentler ground.
+  - 🪨 **the Stony Tors** — rugged, swollen hills studded with pines, boulders and
+    stacked cairns, with purple heather underfoot.
+  - 🍄 **the Old Fen** — low, near-flat bogland of leaning dead snags, tussocks and
+    red toadstools — dotted with tiny pools you (and your flock) can actually
+    swim, fringed with harvestable reeds.
+  - 🍂 **the Amberwood** — perpetual autumn: flame-coloured canopies over fallen
+    leaf-mats and brown mushrooms.
 - **Follow the quest log.** Press **J** (or click the 📜 **Quests** button in the
   bottom-left) to open the quest log. It opens with a short **beginner chain** that
   teaches the basics one step at a time — **meet Aldermere the swan**, **forage for
@@ -185,9 +204,10 @@ store instead of local storage without touching the game itself.
 
 ## World seed
 
-The world (the rolling terrain, scenery, pond, food, reeds, scattered mallard
-pairs, geese) is generated from a single seed, so the **same seed always produces
-the same layout** — the same hills in the same places. Your save remembers its own seed, so a reload restores the same world.
+The world (the biome regions, rolling terrain, scenery, pond, food, reeds,
+scattered mallard pairs, geese) is generated from a single seed, so the **same
+seed always produces the same layout** — the same hills and the same biomes in
+the same places. Your save remembers its own seed, so a reload restores the same world.
 Add `?seed=123` to the URL to explore a different one — an explicit `?seed=`
 **starts a fresh game in that world** and ignores your save (handy for poking at
 layouts), while removing it again returns to your saved game.
@@ -211,13 +231,13 @@ src/
   style.css
   game/
     Game.ts            # the conductor: renderer, scene, camera, render loop, wiring
-    Biomes.ts          # named campaign regions such as the Treaty Flats
-    World.ts           # ground, day/night sky, fog, lights, scenery (+ colliders)
-    terrain.ts         # deterministic rolling-hills heightfield (the ground's shape)
-    Water.ts           # the pond (+ shoreline foam)
+    Biomes.ts          # the seeded biome map (meadow/birchwood/prairie/tors/fen/amberwood) + Treaty Flats
+    World.ts           # ground, day/night sky, fog, lights, biome scenery (+ colliders)
+    terrain.ts         # deterministic rolling-hills heightfield (the ground's shape, biome relief)
+    Water.ts           # the ponds and fen pools (+ shoreline foam)
     Wind.ts            # gentle breeze that sways trees, reeds, grass and flora
     Clouds.ts          # blocky clouds drifting across the sky
-    Flora.ts           # scattered grass tufts and flowers on the land
+    Flora.ts           # scattered biome undergrowth (grass, ferns, wheat, heather, toadstools)
     Critters.ts        # ambient butterflies and dragonflies
     Frontier.ts        # ownership state for the goose-held outlying ponds
     collision.ts       # shared wall/floor collision (Queen, subjects, geese)

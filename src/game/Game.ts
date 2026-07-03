@@ -26,6 +26,7 @@ import { XRHud } from './XRHud'
 import { SettingsMenu } from './SettingsMenu'
 import { RosterPanel } from './RosterPanel'
 import { deriveRng } from './rng'
+import { BiomeMap, BIOME_DEFS, type BiomeKind } from './Biomes'
 import { makeProgress } from './Progress'
 import { SaveManager } from './persistence/SaveManager'
 import { SAVE_VERSION, type SaveData } from './persistence/saveSchema'
@@ -99,6 +100,14 @@ export class Game {
   private readonly rosterPanel = new RosterPanel()
   private readonly world: World
   private readonly terrain: Terrain
+  private readonly biomes: BiomeMap
+  /** Static biome washes for the minimap, built once from the biome sites. */
+  private readonly minimapBiomes: readonly { x: number; z: number; radius: number; color: string }[]
+  // Border-crossing toasts: the region the Queen is in, plus a dwell timer so
+  // walking along a wiggly border doesn't spam "entering…" messages.
+  private currentBiome: BiomeKind = 'meadow'
+  private pendingBiome: BiomeKind | null = null
+  private pendingBiomeTime = 0
   private readonly nests: Nests
   private readonly pond: Pond
   private readonly frontier: Frontier
@@ -153,10 +162,14 @@ export class Game {
 
     // --- Scene ------------------------------------------------------------
     this.scene = new THREE.Scene()
+    // The biome map — the named regions (meadow, birchwood, prairie, tors, fen,
+    // amberwood) that vary the terrain, ground colour, scenery and flora. Built
+    // first so the terrain can shape its hills per region.
+    this.biomes = new BiomeMap(deriveRng(seed, 'biomes'))
     // The rolling terrain (hills) — one deterministic heightfield every system
     // measures the ground from. Built before the World so the World can register
     // its level zones (spawn, ponds, arena) and raise the ground to match.
-    this.terrain = new Terrain(deriveRng(seed, 'terrain'))
+    this.terrain = new Terrain(deriveRng(seed, 'terrain'), (x, z) => this.biomes.reliefAt(x, z))
     // World adds the ground, sky, fog, lights, and scenery to the scene, and
     // exposes the scenery's colliders so the duck can bump into them.
     this.world = new World(
@@ -166,14 +179,19 @@ export class Game {
       this.terrain,
       deriveRng(seed, 'terrainTint'),
       this.wind,
+      this.biomes,
     )
+    this.minimapBiomes = [
+      { x: 0, z: 0, radius: 40, color: BIOME_DEFS.meadow.mapColor },
+      ...this.biomes.sites.map((s) => ({ x: s.x, z: s.z, radius: 34, color: BIOME_DEFS[s.kind].mapColor })),
+    ]
     this.pond = this.world.pond
     // Ambient scenery that doesn't affect gameplay: drifting clouds, scattered
     // grass/flowers, and a few flitting critters. Each draws its placement from
     // its OWN seeded stream, so they can't shift the tree/pond/flock layouts.
     this.clouds = new Clouds(deriveRng(seed, 'clouds'))
     this.scene.add(this.clouds.group)
-    new Flora(this.scene, this.world.pond, this.terrain, this.wind, deriveRng(seed, 'flora'))
+    new Flora(this.scene, this.world.pond, this.terrain, this.wind, deriveRng(seed, 'flora'), this.biomes)
     this.critters = new Critters(deriveRng(seed, 'critters'), this.terrain)
     this.scene.add(this.critters.group)
     // The frontier: ownership state for the outlying ponds (Act III). Built from the
@@ -292,6 +310,11 @@ export class Game {
     // nests, claims, progress). Then arm autosave so play is captured going forward.
     if (save && save.seed === seed) this.restore(save)
     this.saves.begin(() => this.snapshot())
+
+    // Start the border tracker in whatever region the Queen woke up in (spawn,
+    // or wherever the save put her) — no "entering…" toast for standing still.
+    const qp = this.duck.group.position
+    this.currentBiome = this.biomes.kindAt(qp.x, qp.z)
 
     // Ensure only one modal can be open at a time: each panel's onBeforeToggle
     // closes the other two before the toggle completes.
@@ -425,6 +448,7 @@ export class Game {
     this.critters.update(delta) // flutter the butterflies and dragonflies
     this.hud.update(delta)
     this.cameraRig.update(delta)
+    this.updateBiomeToast(delta)
     this.handleNestBuild()
     this.seatOrRouseConsumed = false
     this.handleNestSeat()
@@ -477,10 +501,37 @@ export class Game {
     this.saves.tick(delta)
   }
 
+  /**
+   * Toast the region's name when the Queen crosses a biome border. A new region
+   * must hold for a short dwell before it announces itself, so skirting a wiggly
+   * border (or flying over a sliver of one) doesn't spam messages.
+   */
+  private updateBiomeToast(delta: number): void {
+    const q = this.duck.group.position
+    const kind = this.biomes.kindAt(q.x, q.z)
+    if (kind === this.currentBiome) {
+      this.pendingBiome = null
+      return
+    }
+    if (kind !== this.pendingBiome) {
+      this.pendingBiome = kind
+      this.pendingBiomeTime = 0
+      return
+    }
+    this.pendingBiomeTime += delta
+    if (this.pendingBiomeTime >= 1.5) {
+      this.currentBiome = kind
+      this.pendingBiome = null
+      const def = BIOME_DEFS[kind]
+      this.showMessage(`${def.emoji} Entering ${def.title}`)
+    }
+  }
+
   private updateMinimap(): void {
     const q = this.duck.group.position
     const snapshot: MinimapSnapshot = {
       queen: { x: q.x, z: q.z, heading: this.duck.group.rotation.y },
+      biomes: this.minimapBiomes,
       ponds: this.pond.patches,
       food: this.food.available,
       reeds: this.reeds.available,

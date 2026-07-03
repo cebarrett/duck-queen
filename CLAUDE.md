@@ -26,6 +26,14 @@ object (scenery, food, flora, reeds, nests, the Queen, ducklings, geese) sits on
 or it'll float/sink on a hillside. The spawn clearing, every pond, and the Treaty Flats
 arena are registered as flat zones (`terrain.flatten(...)`) so they stay level.
 
+The world is split into **biomes**: [`src/game/Biomes.ts`](src/game/Biomes.ts) holds the
+seeded `BiomeMap` (its regions come from the `'biomes'` stream) — the home meadow around
+spawn plus wilder regions (birchwood, prairie, tors, fen, amberwood). It shapes the
+terrain (each biome's `relief` multiplier plugs into the heightfield), the ground tint,
+the tree/rock styles in `World`, and the undergrowth in `Flora`. **New scattered content
+should usually be biome-aware**: ask `biomes.kindAt(x, z)` which region a spot is in and
+vary its style/density accordingly, still drawing all randomness from a seeded stream.
+
 **The same seed must always produce the exact same world layout.** (You can try a
 specific one with `?seed=123` in the URL.) When adding anything that spawns or scatters
 objects, thread a seeded `Rng` into it and draw positions/sizes from that.

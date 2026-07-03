@@ -48,6 +48,16 @@ describe('Terrain', () => {
     expect(t.heightAt(far, 60)).toBeCloseTo(new Terrain(mulberry32(7)).heightAt(far, 60))
   })
 
+  it('applies the biome relief multiplier to its hills', () => {
+    const plain = new Terrain(mulberry32(11))
+    const doubled = new Terrain(mulberry32(11), () => 2)
+    const flattened = new Terrain(mulberry32(11), () => 0)
+    for (const [x, z] of [[15, 8], [-30, 44], [70, -12]]) {
+      expect(doubled.heightAt(x, z)).toBeCloseTo(plain.heightAt(x, z) * 2)
+      expect(flattened.heightAt(x, z)).toBeCloseTo(0)
+    }
+  })
+
   it('is continuous across a flat-zone edge (no sudden step)', () => {
     const t = new Terrain(mulberry32(7))
     t.flatten(0, 0, 10, 12)
