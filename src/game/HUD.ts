@@ -31,8 +31,14 @@ interface MinimapTerritory extends MinimapCircle {
   claimed: boolean
 }
 
+interface MinimapBiome extends MinimapCircle {
+  color: string
+}
+
 export interface MinimapSnapshot {
   queen: MinimapPoint & { heading: number }
+  /** Soft translucent washes marking each biome region (static per world). */
+  biomes: readonly MinimapBiome[]
   ponds: readonly MinimapCircle[]
   food: readonly MinimapPoint[]
   reeds: readonly MinimapPoint[]
@@ -474,6 +480,19 @@ export class HUD {
     ctx.clearRect(0, 0, size, size)
     ctx.fillStyle = MAP_BG
     ctx.fillRect(0, 0, size, size)
+
+    // Biome washes first, under everything: a soft colour per region so the map
+    // reads as country — gold prairie, dark fen, sage tors, amber woods.
+    for (const biome of snapshot.biomes) {
+      const p = toMap(biome)
+      const r = biome.radius * scale
+      if (p.x + r < 0 || p.x - r > size || p.y + r < 0 || p.y - r > size) continue
+      ctx.beginPath()
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2)
+      ctx.fillStyle = biome.color
+      ctx.fill()
+    }
+
     this.drawMapGrid(ctx, size, mid)
 
     for (const pond of snapshot.ponds) {

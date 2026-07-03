@@ -1,12 +1,13 @@
 import * as THREE from 'three'
 import { Pond } from './Water'
 import type { FrontierPond } from './Frontier'
-import type { Rng } from './rng'
+import { rngRange, type Rng } from './rng'
 import type { Collider } from './collision'
-import { TREATY_FLATS } from './Biomes'
+import { TREATY_FLATS, BIOME_DEFS, type BiomeKind, type BiomeMap } from './Biomes'
 import type { Terrain } from './terrain'
 import { Wind } from './Wind'
 import type { WorldSlice } from './persistence/saveSchema'
+import { box } from './modelUtils'
 
 // A calm sky blue and a grassy green. Defined once so the sky, the fog, and the
 // hemisphere light can all share the same palette (keeps everything cohesive).
@@ -63,6 +64,7 @@ export class World {
     private readonly terrain: Terrain,
     tintRng: Rng,
     private readonly wind: Wind,
+    private readonly biomes: BiomeMap,
   ) {
     this.scene = scene
     this.skyTexture = makeSkyGradient()
@@ -76,9 +78,11 @@ export class World {
     this.moonBlock = celestials.moon
     // Lay out the water FIRST: ponds (and the spawn clearing + Treaty arena) are
     // the regions that must stay level, so register them as flat zones before the
-    // hills are raised under everything else.
+    // hills are raised under everything else. The fen pools draw from the same
+    // pond stream AFTER the frontier ponds, so those keep their per-seed layout.
     this.addTreatyFlatsWater()
     this.addExtraPonds(pondRng)
+    this.addFenPools(pondRng)
     scene.add(this.pond.mesh)
     this.registerFlatZones()
     this.addGround(scene, tintRng)
@@ -175,6 +179,31 @@ export class World {
       const tint = this.pond.addContestedCircle(x, z, radius)
       this.frontierPonds.push({ pond: { x, z, radius }, tint })
       made++
+    }
+  }
+
+  /**
+   * The Old Fen is dotted with tiny pools — real, swimmable water, so the fen
+   * plays differently: the Queen and her flock can paddle puddle to puddle, and
+   * the reeds fringe them like any other shoreline. A couple are placed near
+   * each fen region's heart, from the same seeded pond stream (drawn after the
+   * frontier ponds so those layouts are untouched per seed).
+   */
+  private addFenPools(rng: Rng): void {
+    const POOLS_PER_FEN = 2
+    for (const site of this.biomes.sites) {
+      if (site.kind !== 'fen') continue
+      let made = 0
+      for (let guard = 0; made < POOLS_PER_FEN && guard < 40; guard++) {
+        const x = site.x + (rng() * 2 - 1) * 16
+        const z = site.z + (rng() * 2 - 1) * 16
+        const radius = rngRange(rng, 2.5, 4)
+        if (Math.hypot(x, z) < 20) continue // never crowd the spawn clearing
+        if (Math.hypot(x - TREATY_FLATS.x, z - TREATY_FLATS.z) < TREATY_FLATS.radius + 4) continue
+        if (this.pond.overlaps(x, z, radius + 4)) continue
+        this.pond.addCircle(x, z, radius)
+        made++
+      }
     }
   }
 
@@ -310,11 +339,12 @@ export class World {
     // i.e. a floor. Math.PI/2 radians = 90°. We subdivide it finely (120×120 over
     // 300 units → ~2.5u spacing) so the rolling hills displace smoothly.
     const geometry = new THREE.PlaneGeometry(300, 300, 120, 120)
-    // Raise the floor into gentle hills from the seeded terrain, then mottle it
-    // with smooth patches of varied greens via vertex colours so it reads as land,
-    // not one flat wash. Both are deterministic per seed.
+    // Raise the floor into gentle hills from the seeded terrain, then paint it
+    // with smooth patches of each biome's ground palette via vertex colours —
+    // meadow greens easing into prairie gold, fen mud, tor sage, amber russet.
+    // Both are deterministic per seed.
     displaceToTerrain(geometry, this.terrain)
-    applyGroundTint(geometry, tintRng)
+    applyGroundTint(geometry, tintRng, this.biomes)
     // MeshStandardMaterial is a physically-based material: it RESPONDS to light
     // (unlike the cube's old MeshNormalMaterial). With no lights it'd be black —
     // that's the classic "why is everything black?" beginner footgun, which is
@@ -407,81 +437,243 @@ export class World {
    * Scatter blocky trees and rocks so you can judge height, distance, and speed
    * — a flat plane gives your eye nothing to measure against. Tall trees double
    * as altitude markers when you're flying.
+   *
+   * WHAT grows at a spot — and how likely anything is to grow there at all —
+   * comes from the biome map: oaks in the meadow, dense pale birches in the
+   * Birchwood, pines and boulders on the Stony Tors, dead snags in the Old Fen,
+   * flame-coloured canopies in the Amberwood, lone oaks and scrub out on the
+   * open prairie.
    */
   private addScenery(scene: THREE.Scene, rng: Rng): void {
     // `rng` is seeded from the one world seed (see rng.ts / Game), so the scenery
     // layout is identical for a given seed.
-
-    // Share ONE material per type instead of making a fresh one for every
-    // object. Identical materials can be reused, and it keeps the GPU happy once
-    // there are lots of objects — a good habit to start now.
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x8a5a2b })
-    const leafMats = [
-      new THREE.MeshStandardMaterial({ color: 0x3f7d34 }),
-      new THREE.MeshStandardMaterial({ color: 0x4a8c2f }),
-      new THREE.MeshStandardMaterial({ color: 0x355e2a }),
-      new THREE.MeshStandardMaterial({ color: 0x527a35 }),
-      new THREE.MeshStandardMaterial({ color: 0x2e6b28 }),
-    ]
-    const rockMat = new THREE.MeshStandardMaterial({ color: 0x8b929c })
-
-    const COUNT = 70
+    const ATTEMPTS = 170
     const SPREAD = 120 // half-width of the area we scatter over (ground is 300)
 
-    for (let i = 0; i < COUNT; i++) {
+    for (let i = 0; i < ATTEMPTS; i++) {
       // A random spot in a square. rng() returns 0..1, so (rng()*2-1) is -1..1.
       const x = (rng() * 2 - 1) * SPREAD
       const z = (rng() * 2 - 1) * SPREAD
 
       // Keep a clear circle around the spawn point so nothing lands on the Queen.
       if (Math.hypot(x, z) < 10) continue
-      // Keep the Treaty Flats legible as a distinct biome and playable boss arena.
+      // Keep the Treaty Flats legible as a distinct region and playable boss arena.
       if (Math.hypot(x - TREATY_FLATS.x, z - TREATY_FLATS.z) < TREATY_FLATS.radius + 4) continue
-      // Don't grow trees/rocks in the pond.
+      // Don't grow trees/rocks in the water.
       if (this.pond.isWater(x, z)) continue
+
+      // Sparse biomes (the open prairie) leave most spots empty; woods take most.
+      const def = BIOME_DEFS[this.biomes.kindAt(x, z)]
+      if (rng() >= def.sceneryDensity) continue
 
       // Sit each piece on the hill under it: its base starts at the terrain
       // height, and its colliders' y-ranges shift up with it so collision still
       // lines up with where it's actually drawn.
       const base = this.terrain.heightAt(x, z)
 
-      if (rng() < 0.7) {
-        // Tree = a trunk box with a leafy box on top; sizes varied a little so
-        // they're not all identical.
-        const trunkH = 2.5 + rng() * 3.5
-        const leaf = 2 + rng() * 1.8
-        const leafCenterY = base + trunkH + leaf * 0.35
-        const leafMat = leafMats[Math.abs(Math.round(x * 7.3 + z * 11.7)) % leafMats.length]
-        const trunk = boxMesh(trunkMat, 0.6, trunkH, 0.6, x, base + trunkH / 2, z)
-        trunk.castShadow = true
-        trunk.receiveShadow = true
-        scene.add(trunk)
-        const canopy = boxMesh(leafMat, leaf, leaf, leaf, x, leafCenterY, z)
-        canopy.castShadow = true
-        scene.add(canopy)
-        this.wind.register(canopy, 0.03, Wind.phaseFor(x, z)) // leaves stir gently in the breeze
-
-        // Two colliders: a thin trunk (so you can walk right up to it) and the
-        // wider canopy up at leaf height (so you bonk it only while flying through).
-        this.colliders.push({ x, z, radius: 0.4, yMin: base, yMax: base + trunkH })
-        this.colliders.push({
-          x,
-          z,
-          radius: leaf * 0.45,
-          yMin: leafCenterY - leaf / 2,
-          yMax: leafCenterY + leaf / 2,
-        })
-      } else {
-        // Rock = a squat block sitting low to the ground.
-        const s = 1 + rng() * 2
-        const rock = boxMesh(rockMat, s, s * 0.7, s, x, base + s * 0.25, z)
-        rock.castShadow = true
-        rock.receiveShadow = true
-        scene.add(rock)
-        this.colliders.push({ x, z, radius: s * 0.5, yMin: base, yMax: base + s * 0.6 })
-      }
+      if (rng() < def.treeChance) this.spawnTree(scene, def.kind, x, z, base, rng)
+      else this.spawnRock(scene, def.kind, x, z, base, rng)
     }
   }
+
+  /** Grow this biome's kind of tree at (x, z), sitting on terrain height `base`. */
+  private spawnTree(scene: THREE.Scene, kind: BiomeKind, x: number, z: number, base: number, rng: Rng): void {
+    switch (kind) {
+      case 'birchwood':
+        this.spawnBirch(scene, x, z, base, rng)
+        break
+      case 'tors':
+        this.spawnPine(scene, x, z, base, rng)
+        break
+      case 'fen':
+        this.spawnSnag(scene, x, z, base, rng)
+        break
+      case 'prairie':
+        // The open prairie is mostly scrub, with the odd grand lone oak.
+        if (rng() < 0.6) this.spawnScrub(scene, x, z, base, rng)
+        else this.spawnLeafyTree(scene, x, z, base, rng, PRAIRIE_CANOPY, { grand: true })
+        break
+      case 'amberwood':
+        this.spawnLeafyTree(scene, x, z, base, rng, AMBER_CANOPY, { leafLitter: true })
+        break
+      default:
+        this.spawnLeafyTree(scene, x, z, base, rng, MEADOW_CANOPY)
+    }
+  }
+
+  /** The classic tree — a trunk box with a leafy cube on top. The canopy palette
+   *  varies by biome (meadow greens, amber flame); `grand` grows the prairie's
+   *  lone oaks bigger, `leafLitter` drops an autumn leaf-mat at the foot. */
+  private spawnLeafyTree(
+    scene: THREE.Scene,
+    x: number,
+    z: number,
+    base: number,
+    rng: Rng,
+    canopyColors: readonly number[],
+    opts?: { grand?: boolean; leafLitter?: boolean },
+  ): void {
+    const trunkH = opts?.grand ? 3.5 + rng() * 2 : 2.5 + rng() * 3.5
+    const leaf = opts?.grand ? 2.8 + rng() * 1.4 : 2 + rng() * 1.8
+    const leafCenterY = base + trunkH + leaf * 0.35
+    const color = canopyColors[Math.abs(Math.round(x * 7.3 + z * 11.7)) % canopyColors.length]
+    scene.add(box(0.6, trunkH, 0.6, TRUNK_BROWN, [x, base + trunkH / 2, z]))
+    const canopy = box(leaf, leaf, leaf, color, [x, leafCenterY, z])
+    scene.add(canopy)
+    this.wind.register(canopy, 0.03, Wind.phaseFor(x, z)) // leaves stir gently in the breeze
+
+    // Two colliders: a thin trunk (so you can walk right up to it) and the
+    // wider canopy up at leaf height (so you bonk it only while flying through).
+    this.colliders.push({ x, z, radius: 0.4, yMin: base, yMax: base + trunkH })
+    this.colliders.push({
+      x,
+      z,
+      radius: leaf * 0.45,
+      yMin: leafCenterY - leaf / 2,
+      yMax: leafCenterY + leaf / 2,
+    })
+
+    if (opts?.leafLitter) {
+      // A mat of fallen leaves under the canopy — pure decoration, no collider.
+      const w = 1.4 + rng() * 1.2
+      const litter = box(w, 0.08, w, LEAF_LITTER, [x, base + 0.05, z])
+      litter.rotation.y = rng() * Math.PI
+      litter.castShadow = false
+      scene.add(litter)
+    }
+  }
+
+  /** A pale birch: slim white trunk with dark bark ticks, a light double canopy. */
+  private spawnBirch(scene: THREE.Scene, x: number, z: number, base: number, rng: Rng): void {
+    const trunkH = 3.5 + rng() * 2
+    const leaf = 1.6 + rng() * 1.2
+    scene.add(box(0.45, trunkH, 0.45, BIRCH_BARK, [x, base + trunkH / 2, z]))
+    // Two dark ticks so the trunk reads as birch, not plain white.
+    scene.add(box(0.5, 0.16, 0.5, BIRCH_TICK, [x, base + trunkH * 0.3, z]))
+    scene.add(box(0.5, 0.16, 0.5, BIRCH_TICK, [x, base + trunkH * 0.62, z]))
+
+    const color = BIRCH_CANOPY[Math.abs(Math.round(x * 7.3 + z * 11.7)) % BIRCH_CANOPY.length]
+    const canopyY = base + trunkH + leaf * 0.28
+    const canopy = box(leaf, leaf * 0.8, leaf, color, [x, canopyY, z])
+    scene.add(canopy)
+    const crown = box(leaf * 0.55, leaf * 0.45, leaf * 0.55, color, [x, canopyY + leaf * 0.55, z])
+    scene.add(crown)
+    this.wind.register(canopy, 0.035, Wind.phaseFor(x, z))
+    this.wind.register(crown, 0.045, Wind.phaseFor(x, z) + 0.6)
+
+    this.colliders.push({ x, z, radius: 0.3, yMin: base, yMax: base + trunkH })
+    this.colliders.push({
+      x,
+      z,
+      radius: leaf * 0.45,
+      yMin: canopyY - leaf * 0.4,
+      yMax: canopyY + leaf * 0.85,
+    })
+  }
+
+  /** A tor pine: short trunk with three stacked, shrinking dark tiers. */
+  private spawnPine(scene: THREE.Scene, x: number, z: number, base: number, rng: Rng): void {
+    const trunkH = 1.6 + rng() * 1.2
+    const w0 = 2.1 + rng()
+    const color = PINE_GREENS[Math.abs(Math.round(x * 7.3 + z * 11.7)) % PINE_GREENS.length]
+    scene.add(box(0.5, trunkH, 0.5, PINE_TRUNK, [x, base + trunkH / 2, z]))
+
+    let y = base + trunkH + 0.35
+    let w = w0
+    let top: THREE.Mesh | null = null
+    for (let tier = 0; tier < 3; tier++) {
+      top = box(w, 0.85, w, color, [x, y, z])
+      scene.add(top)
+      y += 0.72
+      w *= 0.68
+    }
+    if (top) this.wind.register(top, 0.04, Wind.phaseFor(x, z)) // only the crown sways
+
+    this.colliders.push({ x, z, radius: 0.35, yMin: base, yMax: base + trunkH })
+    this.colliders.push({ x, z, radius: w0 * 0.42, yMin: base + trunkH, yMax: y })
+  }
+
+  /** A fen snag: a leaning dead trunk with a stub branch, sometimes moss-capped. */
+  private spawnSnag(scene: THREE.Scene, x: number, z: number, base: number, rng: Rng): void {
+    const trunkH = 1.8 + rng() * 1.4
+    const w = 0.5 + rng() * 0.2
+    const trunk = box(w, trunkH, w, SNAG_WOOD, [x, base + trunkH / 2, z])
+    trunk.rotation.z = (rng() - 0.5) * 0.16 // dead wood leans
+    trunk.rotation.y = rng() * Math.PI
+    scene.add(trunk)
+
+    const branch = box(0.8, 0.16, 0.16, SNAG_WOOD, [x + 0.45, base + trunkH * 0.72, z])
+    branch.rotation.z = 0.35
+    scene.add(branch)
+
+    if (rng() < 0.5) {
+      scene.add(box(w + 0.18, 0.16, w + 0.18, SNAG_MOSS, [x, base + trunkH + 0.06, z]))
+    }
+    this.colliders.push({ x, z, radius: 0.4, yMin: base, yMax: base + trunkH })
+  }
+
+  /** A prairie scrub bush: a squat dry-green clump, low enough to hop onto. */
+  private spawnScrub(scene: THREE.Scene, x: number, z: number, base: number, rng: Rng): void {
+    const s = 0.9 + rng() * 0.6
+    const bush = box(s, s * 0.6, s, SCRUB_GREEN, [x, base + s * 0.3, z])
+    bush.rotation.y = rng() * Math.PI
+    scene.add(bush)
+    const side = box(s * 0.6, s * 0.4, s * 0.6, SCRUB_DRY, [x + s * 0.45, base + s * 0.2, z])
+    scene.add(side)
+    this.wind.register(bush, 0.02, Wind.phaseFor(x, z))
+    this.colliders.push({ x, z, radius: s * 0.5, yMin: base, yMax: base + s * 0.6 })
+  }
+
+  /** A rock in this biome's stone: squat everywhere, but on the Stony Tors they
+   *  run bigger and sometimes stack into a little cairn — the tors themselves. */
+  private spawnRock(scene: THREE.Scene, kind: BiomeKind, x: number, z: number, base: number, rng: Rng): void {
+    const color = ROCK_COLORS[kind]
+    const big = kind === 'tors'
+    const s = (big ? 1.3 : 1) + rng() * (big ? 2.2 : 2)
+    const rock = box(s, s * 0.7, s, color, [x, base + s * 0.25, z])
+    rock.rotation.y = rng() * Math.PI
+    scene.add(rock)
+    this.colliders.push({ x, z, radius: s * 0.5, yMin: base, yMax: base + s * 0.6 })
+
+    if (big && rng() < 0.45) {
+      const s2 = s * 0.55
+      const cap = box(s2, s2 * 0.8, s2, color, [x, base + s * 0.7 + s2 * 0.3, z])
+      cap.rotation.y = rng() * 0.8
+      scene.add(cap)
+      this.colliders.push({
+        x,
+        z,
+        radius: s2 * 0.5,
+        yMin: base + s * 0.6,
+        yMax: base + s * 0.7 + s2 * 0.7,
+      })
+    }
+  }
+}
+
+// --- Biome scenery palettes ----------------------------------------------------
+// One material per colour is shared automatically via modelUtils' box() cache.
+const TRUNK_BROWN = 0x8a5a2b
+const MEADOW_CANOPY = [0x3f7d34, 0x4a8c2f, 0x355e2a, 0x527a35, 0x2e6b28] as const
+const AMBER_CANOPY = [0xc9642f, 0xd98a33, 0xb44f2a, 0xd9a441] as const
+const PRAIRIE_CANOPY = [0x6f8f3a, 0x7d9a41, 0x8aa03f] as const
+const BIRCH_CANOPY = [0x9ac86a, 0xa8d178, 0x8bbf5e] as const
+const BIRCH_BARK = 0xe8e4d4
+const BIRCH_TICK = 0x4b463c
+const PINE_GREENS = [0x2c6136, 0x2f6b40, 0x28573a] as const
+const PINE_TRUNK = 0x6e4a26
+const SNAG_WOOD = 0x584a35
+const SNAG_MOSS = 0x6f7d40
+const SCRUB_GREEN = 0x8f9a44
+const SCRUB_DRY = 0x7d8b3c
+const LEAF_LITTER = 0xa65f26
+const ROCK_COLORS: Record<BiomeKind, number> = {
+  meadow: 0x8b929c,
+  birchwood: 0x8b929c,
+  prairie: 0xa89a76,
+  tors: 0x9aa2ac,
+  fen: 0x707c62,
+  amberwood: 0x8d8071,
 }
 
 /** Paint a vertical gradient onto a tiny canvas and hand it back as a texture for
@@ -579,18 +771,33 @@ function displaceToTerrain(geometry: THREE.PlaneGeometry, terrain: Terrain): voi
   geometry.computeVertexNormals()
 }
 
-/** Tint a (flat) ground plane's vertices with smooth patches of varied greens.
- *  Builds a coarse grid of random tints from the seeded rng and bilinearly
- *  blends them per vertex, so the colour drifts in soft patches rather than
- *  per-vertex static. */
-function applyGroundTint(geometry: THREE.PlaneGeometry, rng: Rng): void {
-  const GREENS = [0x7fae4c, 0x8ec25a, 0x9bbf65].map((c) => new THREE.Color(c))
-  const G = 12 // coarse tint grid (G+1 nodes per side)
+/** Tint a (flat) ground plane's vertices with smooth patches of each biome's
+ *  ground palette. Builds a coarse grid of tints — each node samples the biome
+ *  blend under it, picking a palette entry per contributing biome and mixing by
+ *  weight — and bilinearly blends them per vertex, so the colour drifts in soft
+ *  patches AND crossfades where regions meet. */
+function applyGroundTint(geometry: THREE.PlaneGeometry, rng: Rng, biomes: BiomeMap): void {
+  const G = 16 // coarse tint grid (G+1 nodes per side)
   const grid: THREE.Color[] = []
-  for (let i = 0; i < (G + 1) * (G + 1); i++) {
-    const base = GREENS[Math.floor(rng() * GREENS.length)].clone()
-    base.multiplyScalar(0.92 + rng() * 0.12) // small brightness jitter so even same-green nodes differ
-    grid.push(base)
+  const swatch = new THREE.Color()
+  for (let iy = 0; iy <= G; iy++) {
+    for (let ix = 0; ix <= G; ix++) {
+      // The node's spot in the world: plane local (x, y) → world (x, -y) once
+      // the mesh is rotated flat (same mapping as displaceToTerrain).
+      const worldX = -150 + (ix / G) * 300
+      const worldZ = -(-150 + (iy / G) * 300)
+      const pick = rng() // one shared palette-index draw, reused across the blend
+      const jitter = 0.92 + rng() * 0.12 // small brightness jitter so even same-colour nodes differ
+      const node = new THREE.Color(0, 0, 0)
+      biomes.eachWeight(worldX, worldZ, (kind, weight) => {
+        const palette = BIOME_DEFS[kind].ground
+        swatch.setHex(palette[Math.floor(pick * palette.length)])
+        node.r += swatch.r * weight
+        node.g += swatch.g * weight
+        node.b += swatch.b * weight
+      })
+      grid.push(node.multiplyScalar(jitter))
+    }
   }
 
   const pos = geometry.attributes.position
