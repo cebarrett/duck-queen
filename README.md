@@ -201,6 +201,10 @@ store instead of local storage without touching the game itself.
   quests you haven't reached yet are shown but kept under wraps until then. None can
   be cancelled. Every quest pays out a small **reward** of 🌿 food and/or 🌾 reeds the
   first time you complete it — the log shows what each one gives.
+  You don't have to keep the log open to remember what you're doing: a small
+  **📜 Quests in progress** card under the minimap always lists the quests you're
+  currently on (up to three, earliest first, with their live counts), and hides itself
+  once there's nothing left to do.
 
 ## World seed
 

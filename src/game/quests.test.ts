@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest'
-import { questViews, formatReward, type QuestCounts, FLOCK_GOAL, REEDS_GOAL } from './quests'
+import {
+  questViews,
+  formatReward,
+  activeQuests,
+  TRACKER_LIMIT,
+  type QuestCounts,
+  FLOCK_GOAL,
+  REEDS_GOAL,
+} from './quests'
 import { makeProgress, type Progress } from './Progress'
 
 // The quest log is a pure projection of campaign state. These tests pin down both
@@ -144,6 +152,43 @@ describe('questViews main story', () => {
     progress.treatyDefeated = true
     progress.questGivenFrontier = true
     expect(story(progress, 0, 0)[2].state).toBe('active')
+  })
+})
+
+describe('activeQuests (the HUD tracker)', () => {
+  it('lists only the in-progress quests, in campaign order', () => {
+    const progress = makeProgress()
+    progress.metSwan = true // swan complete, forage active
+    progress.questGivenBaron = true // Act I active too
+    const active = activeQuests(questViews(progress, NO_COUNTS, 0, 4))
+    expect(active.map((q) => q.title)).toEqual(['Forage for food', 'Break the Marsh Baron'])
+  })
+
+  it('never exceeds the tracker limit, since both chains are sequential', () => {
+    // Busiest the log can get: one beginner step running alongside one act (each
+    // chain gates its own next step), so the tracker's cap is never actually hit.
+    const progress = makeProgress()
+    progress.questGivenBaron = true
+    progress.baronDefeated = true
+    progress.questGivenTreaty = true
+    progress.treatyDefeated = true
+    progress.questGivenFrontier = true
+    const active = activeQuests(questViews(progress, NO_COUNTS, 0, 4))
+    expect(active.length).toBeLessThanOrEqual(TRACKER_LIMIT)
+    // The earliest quest — the beginner chain's first step — leads.
+    expect(active.map((q) => q.title)).toEqual(['Meet Aldermere the swan', 'Take the Frontier Ponds'])
+  })
+
+  it('is empty once every quest is done', () => {
+    const progress = makeProgress()
+    progress.metSwan = true
+    progress.foragedFood = true
+    progress.gatheredReeds = true
+    progress.builtNest = true
+    progress.ralliedFlock = true
+    progress.baronDefeated = true
+    progress.treatyDefeated = true
+    expect(activeQuests(questViews(progress, NO_COUNTS, 4, 4))).toEqual([])
   })
 })
 

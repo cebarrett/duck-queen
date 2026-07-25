@@ -45,6 +45,19 @@ export function formatReward(reward: QuestReward): string {
   return parts.join(' · ')
 }
 
+/** How many quests the always-visible HUD tracker lists at once; the rest are only
+ *  in the full quest log (J). */
+export const TRACKER_LIMIT = 3
+
+/** The quests the player should be working on right now, in campaign order. The log
+ *  is authored earliest-first (the beginner chain, then Acts I–III), so
+ *  "earliest / easiest first" needs no scoring — the natural order of `questViews`
+ *  is it. Both chains gate themselves, so today this returns at most two; the
+ *  tracker still caps at `TRACKER_LIMIT` so parallel quests can't overflow it. */
+export function activeQuests(views: readonly QuestView[]): QuestView[] {
+  return views.filter((q) => q.state === 'active')
+}
+
 /** Beginner-quest goals. Single source of truth — Game imports these to know when
  *  to latch the matching `Progress` flag, and they're woven into the quest copy
  *  below. REEDS_GOAL equals the nest cost on purpose: finishing it leaves exactly

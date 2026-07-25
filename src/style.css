@@ -50,6 +50,60 @@ canvas {
   user-select: none;
 }
 
+/* The quest tracker: a slim card tucked under the minimap listing the quests the
+   player is working on. Always visible (the full log is behind J); JS hides it when
+   nothing is active. */
+#quest-tracker {
+  position: fixed;
+  top: 306px; /* just below the 282px minimap at top: 12px */
+  right: 14px;
+  width: 282px; /* match the minimap so the right column lines up */
+  background: rgba(16, 20, 27, 0.82);
+  border: 2px solid rgba(238, 241, 245, 0.85);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: #f3f6f9;
+  font-size: 14px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  user-select: none;
+  display: none;
+}
+
+.quest-tracker-header {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  color: #cfe0f5;
+  opacity: 0.85;
+  margin-bottom: 6px;
+}
+
+.quest-tracker-item + .quest-tracker-item {
+  margin-top: 8px;
+}
+
+.quest-tracker-title {
+  font-weight: 700;
+  line-height: 1.3;
+  color: #ffd84a;
+}
+
+.quest-tracker-progress {
+  font-size: 12px;
+  font-weight: 700;
+  color: #cfe0f5;
+  margin-top: 2px;
+}
+
+.quest-tracker-more {
+  font-size: 12px;
+  font-weight: 700;
+  opacity: 0.6;
+  margin-top: 8px;
+}
+
 @media (max-width: 700px) {
   #hud {
     top: 10px;
@@ -65,5 +119,13 @@ canvas {
     right: 10px;
     width: min(260px, calc(100vw - 20px));
     height: min(260px, calc(100vw - 20px));
+  }
+
+  /* Follow the minimap down to its narrow-screen slot and match its width. */
+  #quest-tracker {
+    top: calc(102px + min(260px, 100vw - 20px));
+    right: 10px;
+    width: min(260px, calc(100vw - 20px));
+    font-size: 13px;
   }
 }

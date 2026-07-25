@@ -1,5 +1,5 @@
 import type { DuckMode } from './DuckController'
-import { formatReward, type QuestView } from './quests'
+import { activeQuests, formatReward, TRACKER_LIMIT, type QuestView } from './quests'
 
 interface MinimapPoint {
   x: number
@@ -103,6 +103,13 @@ export class HUD {
   private questLogOpen = false
   private lastQuestHtml = ''
   private readonly questWheelHandler = (event: WheelEvent): void => this.handleQuestWheel(event)
+
+  // The quest tracker: a small always-on card under the minimap listing the
+  // quests currently in progress, so the player never has to open the log to
+  // remember what they're doing.
+  private readonly questTracker: HTMLElement
+  private readonly questTrackerList: HTMLElement
+  private lastTrackerHtml = ''
 
   /** Called before the quest log opens or closes — used by Game to dismiss other modals. */
   onBeforeToggle?: () => void
@@ -227,6 +234,21 @@ export class HUD {
     this.questPanel = panel
     this.questEntries = entries
     window.addEventListener('wheel', this.questWheelHandler, { capture: true, passive: false })
+
+    // The quest tracker: styled from style.css (like #minimap, which it sits under)
+    // so its placement can shift on narrow screens. Hidden until there's something
+    // to track; clicks fall through it to the canvas.
+    const tracker = document.createElement('div')
+    tracker.id = 'quest-tracker'
+    const trackerHeader = document.createElement('div')
+    trackerHeader.textContent = '📜 Quests in progress'
+    trackerHeader.className = 'quest-tracker-header'
+    const trackerList = document.createElement('div')
+    tracker.appendChild(trackerHeader)
+    tracker.appendChild(trackerList)
+    document.body.appendChild(tracker)
+    this.questTracker = tracker
+    this.questTrackerList = trackerList
   }
 
   private handleQuestWheel(event: WheelEvent): void {
@@ -315,6 +337,34 @@ export class HUD {
       this.questEntries.innerHTML = html
       this.lastQuestHtml = html
     }
+
+    this.renderQuestTracker(views)
+  }
+
+  /** Fill the always-visible tracker card with the quests in progress — the first
+   *  few in campaign order, plus a note counting any beyond that. Diffed like the
+   *  rest of the HUD, and hidden entirely when nothing is active. */
+  private renderQuestTracker(views: readonly QuestView[]): void {
+    const active = activeQuests(views)
+    const shown = active.slice(0, TRACKER_LIMIT)
+    const extra = active.length - shown.length
+
+    const html =
+      shown
+        .map(
+          (q) =>
+            '<div class="quest-tracker-item">' +
+            `<div class="quest-tracker-title">▸ ${q.title}</div>` +
+            (q.progress ? `<div class="quest-tracker-progress">🪶 ${q.progress}</div>` : '') +
+            '</div>',
+        )
+        .join('') + (extra > 0 ? `<div class="quest-tracker-more">+${extra} more · press J</div>` : '')
+
+    if (html === this.lastTrackerHtml) return
+    // Our own copy strings and integers only — nothing untrusted in innerHTML.
+    this.questTrackerList.innerHTML = html
+    this.lastTrackerHtml = html
+    this.questTracker.style.display = shown.length > 0 ? 'block' : 'none'
   }
 
   /** Show/hide the honk-off banner and set the resolve meter (0..1). `label` and
